@@ -1,0 +1,76 @@
+name: Lexicon Scan Engine CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # ── Unit tests (fast, Surefire) ──────────────────────────────────────────
+      - name: Run unit tests
+        run: mvn -B -ntp test
+        shell: bash
+
+      # ── Integration tests (Failsafe) ─────────────────────────────────────────
+      # Runs identically on all three OSes: local Spark (local[2]), JSON message
+      # fixtures from the classpath, and Hyperscan databases compiled in-memory
+      # at test run time via HdbTestFixtures — no cloud credentials, no GCS,
+      # no BigQuery emulator, and no platform-specific binary .hdb files needed.
+      - name: Run integration tests
+        run: mvn -B -ntp verify -DskipUnitTests=false
+        shell: bash
+
+      # ── Coverage report artifact ─────────────────────────────────────────────
+      - name: Upload JaCoCo coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-${{ matrix.os }}
+          path: target/site/jacoco/
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          retention-days: 14
+
+  # ── Aggregate status check for branch protection rules ─────────────────────
+  ci-status:
+    name: CI Status
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check build matrix result
+        run: |
+          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
+            echo "One or more platform builds failed."
+            exit 1
+          fi
+          echo "All platform builds passed."

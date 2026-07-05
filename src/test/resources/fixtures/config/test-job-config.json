@@ -1,0 +1,24 @@
+{
+  "bqProject": "test-project",
+  "bqDataset": "test_spectre_audit",
+  "viewName": "v_lexicon_scan_engine_input_test",
+  "inputTables": {
+    "languageFeatureDecision": "test-project.test_spectre_audit.language-feature-decision",
+    "featureMaster": "test-project.test_spectre_audit.feature-master"
+  },
+  "outputTables": {
+    "lexiconHitSummary": "test-project.test_spectre_audit.lexicon-hit-summary",
+    "lexiconHitRestricted": "test-project.test_spectre_audit.lexicon-hit-restricted",
+    "featureHitSummary": "test-project.test_spectre_audit.feature-hit-summary",
+    "pipelineStageAudit": "test-project.test_spectre_audit.pipeline_stage_audit",
+    "pipelineRecordAudit": "test-project.test_spectre_audit.pipeline_record_audit"
+  },
+  "hdbGcsBucket": "test-hdb-bucket",
+  "hdbGcsPrefix": "hyperscan-databases",
+  "msgGcsBucket": "test-msg-bucket",
+  "msgGcsPrefix": "messages",
+  "sparkConf": {
+    "spark.sql.shuffle.partitions": "4",
+    "spark.default.parallelism": "4"
+  }
+}

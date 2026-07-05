@@ -1,0 +1,22 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  application:
+    name: lexicon-scan-engine
+
+spark:
+  app:
+    name: LexiconScanEngine
+  sql:
+    shuffle:
+      partitions: 200
+  default:
+    parallelism: 200
+
+logging:
+  level:
+    root: INFO
+    com.db.macs3.ecomms.spectre: DEBUG
+    org.apache.spark: WARN
+    org.apache.hadoop: WARN

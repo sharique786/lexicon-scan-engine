@@ -1,0 +1,55 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  application:
+    name: lexicon-scan-engine-test
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Spark configuration for JUnit and integration tests — local[*] mode, no
+# Dataproc cluster or GCP credentials required. Works identically on Windows,
+# macOS, Linux, and GitHub Actions runners.
+# ──────────────────────────────────────────────────────────────────────────────
+spark:
+  master: "local[2]"
+  sql:
+    shuffle:
+      partitions: 4
+  default:
+    parallelism: 4
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Test-only application properties.
+#
+# Per requirement 4e: input/output BQ/view table names for test runs are
+# defined here rather than requiring a live BigQuery connection or a real
+# GCS-hosted JobConfig JSON file. Integration tests construct a JobConfig
+# programmatically from these values (see IntegrationTestSupport), and the
+# JSON fixture at src/test/resources/fixtures/config/test-job-config.json
+# mirrors the same values for tests that prefer to load JobConfig via the
+# normal JobConfigReader/Jackson path against a local file.
+# ──────────────────────────────────────────────────────────────────────────────
+app:
+  lexicon:
+    test:
+      bq-project: "test-project"
+      bq-dataset: "test_spectre_audit"
+      view-name: "v_lexicon_scan_engine_input_test"
+      input-tables:
+        language-feature-decision: "test-project.test_spectre_audit.language-feature-decision"
+        feature-master: "test-project.test_spectre_audit.feature-master"
+      output-tables:
+        lexicon-hit-summary: "test-project.test_spectre_audit.lexicon-hit-summary"
+        lexicon-hit-restricted: "test-project.test_spectre_audit.lexicon-hit-restricted"
+        feature-hit-summary: "test-project.test_spectre_audit.feature-hit-summary"
+        pipeline-stage-audit: "test-project.test_spectre_audit.pipeline_stage_audit"
+        pipeline-record-audit: "test-project.test_spectre_audit.pipeline_record_audit"
+      # Message source for JsonMessageReader — classpath fixture directory.
+      message-source: "classpath:fixtures/messages"
+      # Local fixture directory standing in for the GCS .hdb/manifest bucket+prefix.
+      hdb-fixture-dir: "fixtures/hdb"
+
+logging:
+  level:
+    root: WARN
+    com.db.macs3.ecomms.spectre: DEBUG
