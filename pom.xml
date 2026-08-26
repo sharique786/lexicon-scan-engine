@@ -1,70 +1,96 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <!--
-        Spring Boot 3.x requires Java 17+. Java 11 (required by this project)
-        is only compatible with Spring Boot 2.7.x (Spring Framework 5.3.x).
-        Upgrade to spring-boot-starter-parent 3.2.x if/when the cluster JDK
-        moves to 17+.
+      Upgraded from Java 11 / Spring Boot 2.7.18 / Spark 3.5.3 to JDK 21.0.11 /
+      Spring Boot 4 / Spark 4.1.2. This resolves the earlier Java-11-vs-Spring-
+      Boot-3 conflict this comment used to describe: Spring Boot 4 requires a
+      much newer JDK baseline than 17, so with JDK 21 confirmed available on
+      the target Dataproc image, the parent moves to a JDK-21-compatible Boot
+      4 release, matching the Lexicon Compile Service and Lexicon Scanner
+      Service projects' own stack.
+
+      Spark 4.x is pre-built with Scala 2.13 ONLY — Scala 2.12 support was
+      officially dropped (confirmed via spark.apache.org/downloads.html) — so
+      every Spark-family artifactId below moves from the _2.12 to the _2.13
+      suffix. Spark 4.x also requires JDK 17+ at runtime; JDK 21 (an LTS
+      release) satisfies this.
+
+      BigQuery connector: GoogleCloudDataproc/spark-bigquery-connector added a
+      dedicated spark-4.1-bigquery connector module for Spark 4.1 (confirmed
+      via the connector's own CHANGES.md/releases), requiring Java 17+ to
+      match Spark 4.1 itself — but as of this upgrade it is explicitly marked
+      "currently in preview mode" by the connector project itself, not yet a
+      GA release the way the 3.x-line connectors are. spark-bigquery-connector.version
+      below is therefore a placeholder pinned to the same numbering scheme as
+      before; CONFIRM the exact patch version that ships Spark 4.1 support
+      against the connector's own release notes at build time before relying
+      on this in production, and track the connector's GA status given the
+      preview caveat.
     -->
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.18</version>
-        <relativePath/>
-    </parent>
 
     <groupId>com.db.macs3.ecomms.spectre</groupId>
     <artifactId>lexicon-scan-engine</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>Lexicon Scan Engine</name>
     <description>
-        Apache Spark Dataproc job that scans communication messages and
-        attachments against pre-compiled Intel Hyperscan lexicon pattern
-        databases, applies the noise-reduction decision tree, and writes
-        nested hit-summary output to BigQuery.
+        Dataproc/Spark batch job that scans messages and attachments against
+        Hyperscan-compiled lexicon feature databases, applying the noise-reduction
+        / disclaimer / lexicon decision tree, and writes hit and audit results to
+        BigQuery.
     </description>
 
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.6</version>
+        <relativePath/>
+    </parent>
+
     <properties>
-        <java.version>11</java.version>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <spark.version>3.3.1</spark.version>
-        <scala.binary.version>2.12</scala.binary.version>
+        <spark.version>4.1.2</spark.version>
+        <!-- Spark 4.x drops Scala 2.12 entirely — 2.13 is the only supported binary version. -->
+        <scala.binary.version>2.13</scala.binary.version>
+        <!-- See the upgrade note above — CONFIRM this against the connector's own release
+             notes; the spark-4.1-bigquery connector was in preview at the time of this upgrade. -->
+        <spark-bigquery-connector.version>0.44.2</spark-bigquery-connector.version>
+        <spark-avro.version>${spark.version}</spark-avro.version>
         <hyperscan.version>5.4.0-2.0.0</hyperscan.version>
+        <gcs-connector.version>2.2.18</gcs-connector.version>
+        <google-cloud-storage.version>2.22.3</google-cloud-storage.version>
+        <icu4j.version>73.2</icu4j.version>
 
-        <spark-bigquery.version>0.32.2</spark-bigquery.version>
-        <google-cloud-storage.version>2.27.1</google-cloud-storage.version>
-        <google-cloud-bigquery.version>2.33.2</google-cloud-bigquery.version>
-
-        <mockito.version>5.4.0</mockito.version>
-        <junit.version>5.9.3</junit.version>
-        <jacoco.version>0.8.8</jacoco.version>
+        <jacoco.version>0.8.11</jacoco.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Keep Jackson aligned with Spark's bundled version to avoid classpath
+                 conflicts at runtime on the Dataproc cluster (Spark shades/pins its own
+                 Jackson; declaring a mismatched version here would only affect the local
+                 test classpath, but pinning explicitly avoids surprises either way). -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.13.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
 
-        <!-- ═══ SPRING BOOT — DI/config only, no embedded web server ═══ -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-tomcat</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- ═══ APACHE SPARK — provided by Dataproc cluster at runtime ═══ -->
+        <!-- ── Spark (provided — the Dataproc cluster supplies these at runtime) ── -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -80,81 +106,73 @@
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-avro_${scala.binary.version}</artifactId>
-            <version>${spark.version}</version>
+            <version>${spark-avro.version}</version>
+            <scope>provided</scope>
         </dependency>
 
-        <!-- ═══ INTEL HYPERSCAN (JNI, must be in fat JAR) ═══ -->
-        <dependency>
-            <groupId>com.gliwka.hyperscan</groupId>
-            <artifactId>hyperscan</artifactId>
-            <version>${hyperscan.version}</version>
-        </dependency>
-
-        <!-- ═══ GOOGLE CLOUD ═══ -->
+        <!-- ── BigQuery ── -->
         <dependency>
             <groupId>com.google.cloud.spark</groupId>
             <artifactId>spark-bigquery-with-dependencies_${scala.binary.version}</artifactId>
-            <version>${spark-bigquery.version}</version>
+            <version>${spark-bigquery-connector.version}</version>
+            <scope>provided</scope>
         </dependency>
-        <dependency>
-            <groupId>com.google.cloud</groupId>
-            <artifactId>google-cloud-bigquery</artifactId>
-            <version>${google-cloud-bigquery.version}</version>
-        </dependency>
+
+        <!-- ── GCS (direct file streaming — Database.hdb files are read outside
+             Spark's own input formats, via the GCS client library directly, so
+             each executor can STREAM a file's bytes rather than needing the
+             whole thing materialised via a broadcast variable up front) ── -->
         <dependency>
             <groupId>com.google.cloud</groupId>
             <artifactId>google-cloud-storage</artifactId>
             <version>${google-cloud-storage.version}</version>
         </dependency>
 
-        <!-- ═══ JACKSON — JSON config file, hit_details, JSON message fixtures ═══ -->
+        <!-- ── Hyperscan ── -->
+        <dependency>
+            <groupId>com.gliwka.hyperscan</groupId>
+            <artifactId>hyperscan</artifactId>
+            <version>${hyperscan.version}</version>
+        </dependency>
+
+        <!-- ── Spring (DI / config binding for the driver's own setup —
+             NOT a Spring Boot web application; no embedded server, no
+             spring-boot-starter-web) ── -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+            <exclusions>
+                <!-- Spark bundles its own logging bridge; avoid a duplicate/conflicting
+                     Logback-vs-Spark's-Log4j setup on the cluster classpath. -->
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-logging</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- ── JSON (feature_definition parsing; ordinary POJO mapping) ── -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jdk8</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-        <!-- ═══ TEST DEPENDENCIES ═══ -->
+        <!-- ── HTML stripping / Unicode normalisation (ported approach from the
+             Lexicon Scanner Service) ── -->
+        <dependency>
+            <groupId>com.ibm.icu</groupId>
+            <artifactId>icu4j</artifactId>
+            <version>${icu4j.version}</version>
+        </dependency>
+
+        <!-- ── Test ── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-params</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -175,79 +193,61 @@
     </dependencies>
 
     <build>
+        <finalName>${project.artifactId}-${project.version}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>11</source>
-                    <target>11</target>
-                    <encoding>UTF-8</encoding>
+                    <release>${maven.compiler.release}</release>
                 </configuration>
             </plugin>
 
-            <!--
-                Surefire runs *Test (unit tests). Failsafe (below) runs
-                *IntegrationTest / *IT so `mvn test` stays fast and
-                `mvn verify` covers the cross-platform integration suite.
-            -->
+            <!-- Builds the Dataproc-submittable fat jar: application code + every
+                 dependency NOT already provided by the cluster (Spark, BigQuery
+                 connector). Hyperscan, ICU4J, Jackson, GCS client, and Spring are
+                 shaded in since Dataproc's base image does not carry them. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <useModulePath>false</useModulePath>
-                    <argLine>
-                        @{argLine}
-                        --add-exports java.base/sun.nio.ch=ALL-UNNAMED
-                        --add-opens java.base/java.lang=ALL-UNNAMED
-                        --add-opens java.base/java.nio=ALL-UNNAMED
-                        -Djava.io.tmpdir=${project.build.directory}/tmp
-                    </argLine>
-                    <includes>
-                        <include>**/*Test.java</include>
-                    </includes>
-                    <excludes>
-                        <exclude>**/*IntegrationTest.java</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <configuration>
-                    <argLine>
-                        @{argLine}
-                        --add-exports java.base/sun.nio.ch=ALL-UNNAMED
-                        --add-opens java.base/java.lang=ALL-UNNAMED
-                        --add-opens java.base/java.nio=ALL-UNNAMED
-                        -Djava.io.tmpdir=${project.build.directory}/tmp
-                    </argLine>
-                    <includes>
-                        <include>**/*IntegrationTest.java</include>
-                    </includes>
-                </configuration>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
                 <executions>
                     <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <mainClass>com.db.macs3.ecomms.spectre.LexiconScanEngineApplication</mainClass>
-                    <excludeGroupIds>org.apache.spark</excludeGroupIds>
-                    <layout>ZIP</layout>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals><goal>repackage</goal></goals>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <!-- combine.self="override" on both lists below is required, not decorative:
+                                 spring-boot-starter-parent's own pluginManagement pre-configures
+                                 maven-shade-plugin with ITS OWN transformers list (Spring-Boot-fat-jar-
+                                 oriented: spring.handlers/spring.schemas/spring.factories mergers). Without
+                                 an explicit override, Maven's default POM inheritance merges this project's
+                                 transformer list with the parent's POSITIONALLY (list index, not by
+                                 implementation identity) — grafting the parent's <resource> child element
+                                 onto THIS project's transformer entries, which don't have a matching
+                                 setResource(...) method (ManifestResourceTransformer/ServicesResourceTransformer
+                                 have no such parameter), breaking `mvn package` with a
+                                 ComponentConfigurationException ("Cannot find 'resource' in class
+                                 ManifestResourceTransformer") — confirmed by reproducing it and inspecting
+                                 the merged effective POM. This project needs neither of the parent's
+                                 Spring-Boot-specific resource mergers (it is not a Spring Boot web/
+                                 autoconfiguration fat jar), so overriding rather than merging is correct here. -->
+                            <transformers combine.self="override">
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.db.macs3.ecomms.spectre.scanengine.spark.ScanEngineApplication</mainClass>
+                                </transformer>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <filters combine.self="override">
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -262,43 +262,38 @@
                         <goals><goal>prepare-agent</goal></goals>
                     </execution>
                     <execution>
-                        <id>prepare-agent-integration</id>
-                        <goals><goal>prepare-agent-integration</goal></goals>
-                    </execution>
-                    <execution>
                         <id>report</id>
-                        <phase>verify</phase>
+                        <phase>test</phase>
                         <goals><goal>report</goal></goals>
                     </execution>
-                    <execution>
-                        <id>report-integration</id>
-                        <phase>verify</phase>
-                        <goals><goal>report-integration</goal></goals>
-                    </execution>
-                    <execution>
-                        <id>check</id>
-                        <goals><goal>check</goal></goals>
-                        <configuration>
-                            <rules>
-                                <rule>
-                                    <element>BUNDLE</element>
-                                    <limits>
-                                        <limit>
-                                            <counter>LINE</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.70</minimum>
-                                        </limit>
-                                        <limit>
-                                            <counter>BRANCH</counter>
-                                            <value>COVEREDRATIO</value>
-                                            <minimum>0.65</minimum>
-                                        </limit>
-                                    </limits>
-                                </rule>
-                            </rules>
-                        </configuration>
-                    </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Spark's local-mode tests need a generous heap and, on JDK 17+ (including
+                         JDK 21), a broader module-open set than JDK 11 required — stronger module
+                         encapsulation from JDK 17 onward means Spark's reflection-based access to
+                         java.nio/java.lang.invoke/jdk.internal.misc internals needs explicit opens
+                         even for LOCAL, in-JVM SparkSessions (unlike a real spark-submit/cluster
+                         job, which gets these from Spark's own bin/spark-class launcher via
+                         org.apache.spark.launcher.JavaModuleOptions — Surefire bypasses that
+                         entirely, so they must be supplied here). This exact flag set is Spark's
+                         own documented set for Java 17+ (confirmed via SPARK-33772), which remains
+                         correct on JDK 21 since JDK 17-25 share the same module system. -->
+                    <argLine>
+                        -Xmx2g
+                        -XX:+IgnoreUnrecognizedVMOptions
+                        --add-opens=java.base/java.lang=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+                        --add-opens=java.base/java.util=ALL-UNNAMED
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
+                        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+                        --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED
+                    </argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

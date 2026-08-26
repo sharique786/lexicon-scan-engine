@@ -1,22 +1,21 @@
-spring:
-  main:
-    web-application-type: none
-    banner-mode: off
-  application:
-    name: lexicon-scan-engine
-
-spark:
-  app:
-    name: LexiconScanEngine
-  sql:
-    shuffle:
-      partitions: 200
-  default:
-    parallelism: 200
+# Lexicon Scan Engine — production configuration.
+#
+# Values here are DEFAULTS; per requirement 4.b, the actual per-environment
+# values (bucket names, etc.) are expected to be supplied at Dataproc submit
+# time as Spark driver system properties (e.g.
+# --properties spark.driver.extraJavaOptions=-Dscan-engine.environment-bucket=...),
+# which Spring Boot's standard property-source precedence lets override
+# whatever is set here without editing/rebuilding the jar.
+scan-engine:
+  live-message-bucket: ${SCAN_ENGINE_LIVE_MESSAGE_BUCKET:}
+  test-message-bucket: ${SCAN_ENGINE_TEST_MESSAGE_BUCKET:}
+  environment-bucket: ${SCAN_ENGINE_ENVIRONMENT_BUCKET:}
+  max-cached-databases-per-partition: 20
+  created-by: lexicon-scan-engine
+  stage-name: lexicon-scan-engine
+  bq-table-config-path: ${SCAN_ENGINE_BQ_TABLE_CONFIG_PATH:}
 
 logging:
   level:
-    root: INFO
-    com.db.macs3.ecomms.spectre: DEBUG
+    com.db.macs3.ecomms.spectre.scanengine: INFO
     org.apache.spark: WARN
-    org.apache.hadoop: WARN
