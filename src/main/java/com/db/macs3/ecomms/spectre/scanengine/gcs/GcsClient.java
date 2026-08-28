@@ -1,6 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.gcs;
 
-import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanDatabaseLoader;
+import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanBundleLoader;
 import com.google.cloud.ReadChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
@@ -21,8 +21,8 @@ import java.util.regex.Pattern;
 /**
  * Thin wrapper over the real {@code com.google.cloud.storage} client,
  * implementing the small functional interfaces {@code HyperscanPathResolver}
- * and {@code HyperscanDatabaseLoader} depend on ({@link HyperscanPathResolver.GcsDirectoryLister},
- * {@link HyperscanDatabaseLoader.GcsByteStreamer}) so those classes' own
+ * and {@code HyperscanBundleLoader} depend on ({@link HyperscanPathResolver.GcsDirectoryLister},
+ * {@link HyperscanBundleLoader.GcsByteStreamer}) so those classes' own
  * logic stays testable without a live GCS connection — this class is the one
  * place that actually talks to GCS.
  *
@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
  *
  * <p>{@link Serializable} — a {@code GcsClient} instance is constructed and
  * used from within executor-side {@code mapPartitions} closures (via
- * {@link HyperscanDatabaseLoader}), so it must survive Spark's task
+ * {@link HyperscanBundleLoader}), so it must survive Spark's task
  * serialization. The underlying {@link Storage} client itself is created
  * lazily ({@code transient} + null-check-and-construct) rather than eagerly
  * held as a serialized field, since a live client handle is not meaningfully
@@ -100,9 +100,9 @@ public final class GcsClient implements Serializable {
     }
 
     /**
-     * {@link HyperscanDatabaseLoader.GcsByteStreamer} implementation —
+     * {@link HyperscanBundleLoader.GcsByteStreamer} implementation —
      * streams an object's bytes rather than fully buffering it into memory
-     * first, matching {@code HyperscanDatabaseLoader}'s own memory-bounding
+     * first, matching {@code HyperscanBundleLoader}'s own memory-bounding
      * design (see that class's Javadoc).
      */
     public InputStream openStream(String gsUri) throws IOException {

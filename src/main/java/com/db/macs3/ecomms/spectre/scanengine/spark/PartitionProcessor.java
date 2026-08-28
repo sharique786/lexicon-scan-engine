@@ -6,8 +6,7 @@ import com.db.macs3.ecomms.spectre.scanengine.decision.DecisionTreeEvaluator;
 import com.db.macs3.ecomms.spectre.scanengine.decision.FeatureGroupingService;
 import com.db.macs3.ecomms.spectre.scanengine.decision.FeatureScanOrchestrator;
 import com.db.macs3.ecomms.spectre.scanengine.gcs.GcsClient;
-import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanDatabaseLoader;
-import com.db.macs3.ecomms.spectre.scanengine.hyperscan.TermMetadataLoader;
+import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.scanengine.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.scanengine.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.FeatureHitSummaryRow;
@@ -32,28 +31,27 @@ import java.util.Map;
  * (message + its view rows) input into {@link MessageProcessingResult}s.
  *
  * <h2>Why {@code mapPartitions}, not {@code map}</h2>
- * <p>Loading a Hyperscan database (and its accompanying term metadata — see
- * {@link TermMetadataLoader}) is expensive (native library calls, a GCS
- * round-trip on a cache miss — see {@code HyperscanDatabaseLoader}).
- * {@code mapPartitions} runs its function body once PER PARTITION, with the
- * function itself controlling how many input rows it consumes from the
- * supplied iterator — this is what lets exactly ONE
- * {@link HyperscanDatabaseLoader} and ONE {@link TermMetadataLoader} (each
- * with its own cache) be constructed per partition and reused across every
- * message in it, rather than being rebuilt (and their caches thrown away)
- * for every single message the way a plain {@code map} closure would if it
- * tried to do the same lazy-init pattern per element.
+ * <p>Loading a Hyperscan database and its accompanying term metadata — both
+ * now extracted from the same GCS zip bundle, see {@link HyperscanBundleLoader}
+ * class Javadoc — is expensive (native library calls, a GCS round-trip and a
+ * zip extraction on a cache miss). {@code mapPartitions} runs its function
+ * body once PER PARTITION, with the function itself controlling how many
+ * input rows it consumes from the supplied iterator — this is what lets
+ * exactly ONE {@link HyperscanBundleLoader} (with its own cache) be
+ * constructed per partition and reused across every message in it, rather
+ * than being rebuilt (and its cache thrown away) for every single message
+ * the way a plain {@code map} closure would if it tried to do the same
+ * lazy-init pattern per element.
  *
  * <h2>Driver load</h2>
  * <p>This class's {@link #call} runs entirely on an executor, once per
  * partition. It never calls back to the driver and never triggers a Spark
- * action — {@link GcsClient}, {@link HyperscanDatabaseLoader},
- * {@link TermMetadataLoader}, and every scanned message stay local to the
- * executor JVM processing that partition. Only the two small
- * {@code feature -> path} maps (one for {@code .hdb} files, one for
- * term-metadata JSON files — see {@code HyperscanPathResolver}) are supplied
- * from the driver, via Spark broadcast variables (see
- * {@code ScanEngineJobRunner}), not recomputed per partition.
+ * action — {@link GcsClient}, {@link HyperscanBundleLoader}, and every
+ * scanned message stay local to the executor JVM processing that partition.
+ * Only the one small {@code feature -> zip path} map (see
+ * {@code HyperscanPathResolver#buildZipPath}) is supplied from the driver,
+ * via a Spark broadcast variable (see {@code ScanEngineJobRunner}), not
+ * recomputed per partition.
  *
  * <p>Not independently executable-verified in this project's development
  * sandbox — see {@code GcsClient} class Javadoc.
@@ -62,42 +60,33 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
 
     private static final Logger log = LoggerFactory.getLogger(PartitionProcessor.class);
 
-    private final org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToPathBroadcast;
-    private final org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToMetadataPathBroadcast;
+    private final org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast;
     private final Long maxAttachmentSizeBytes;
     private final int maxCachedDatabasesPerPartition;
 
     /**
-     * @param featureToPathBroadcast          a Spark {@link org.apache.spark.broadcast.Broadcast} of the
-     *                                          feature → {@code .hdb} path map — genuinely broadcast (sent
-     *                                          once per executor JVM, not re-serialized per task) — see
-     *                                          {@code ScanEngineJobRunner} for construction
-     * @param featureToMetadataPathBroadcast   the same, for the feature → term-metadata JSON path map —
-     *                                          see {@link TermMetadataLoader} class Javadoc for why this
-     *                                          second broadcast now exists
+     * @param featureToZipPathBroadcast   a Spark {@link org.apache.spark.broadcast.Broadcast} of the
+     *                                     feature → {@code .zip} bundle path map — genuinely broadcast
+     *                                     (sent once per executor JVM, not re-serialized per task) — see
+     *                                     {@code ScanEngineJobRunner} for construction
      */
-    public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToPathBroadcast,
-                               org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToMetadataPathBroadcast,
+    public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
                                Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition) {
-        this.featureToPathBroadcast = featureToPathBroadcast;
-        this.featureToMetadataPathBroadcast = featureToMetadataPathBroadcast;
+        this.featureToZipPathBroadcast = featureToZipPathBroadcast;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
         this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
     }
 
     @Override
     public Iterator<MessageProcessingResult> call(Iterator<Row> partitionRows) {
-        // Constructed ONCE per partition — see class Javadoc. Both broadcast .value() calls read
+        // Constructed ONCE per partition — see class Javadoc. The broadcast .value() call reads
         // the executor-local copy Spark already delivered via its broadcast mechanism — this does
         // not re-fetch or re-serialize anything per partition/task.
         GcsClient gcsClient = new GcsClient();
-        try (HyperscanDatabaseLoader databaseLoader = new HyperscanDatabaseLoader(
-                featureToPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
-             TermMetadataLoader metadataLoader = new TermMetadataLoader(
-                     featureToMetadataPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition)) {
+        try (HyperscanBundleLoader bundleLoader = new HyperscanBundleLoader(
+                featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition)) {
 
-            FeatureScanOrchestrator orchestrator =
-                    new FeatureScanOrchestrator(databaseLoader, metadataLoader, maxAttachmentSizeBytes);
+            FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes);
             List<MessageProcessingResult> results = new ArrayList<>();
 
             while (partitionRows.hasNext()) {

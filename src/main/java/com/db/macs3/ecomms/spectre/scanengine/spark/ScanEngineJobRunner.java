@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
  *   <li>Read + union the view across every {@code dataset_details} entry, filtered
  *       (requirement 1.c) — stays a distributed {@code Dataset}</li>
  *   <li>Collect the (small) set of DISTINCT features referenced, resolve each to its
- *       {@code .hdb} path, and broadcast that small map — see class Javadoc "Driver load"</li>
+ *       {@code .zip} bundle path, and broadcast that small map — see class Javadoc "Driver load"</li>
  *   <li>Read + union AVRO messages across every {@code dataset_details} entry
  *       (requirement 1.c/8.d), restricted by the view's own {@code message_id} set
  *       (requirement 1.e)</li>
@@ -64,7 +64,7 @@ import java.util.stream.Collectors;
  *       few extra columns {@code PartitionProcessor} needs that are not in either
  *       source (pipeline_exec_id, created_by, output-facing dataset_partition_value)</li>
  *   <li>{@code mapPartitions} via {@link PartitionProcessor} — the only place Hyperscan
- *       databases are loaded, one {@link com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanDatabaseLoader}
+ *       databases are loaded, one {@link com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanBundleLoader}
  *       per partition</li>
  *   <li>Split the per-message results into per-table {@code Dataset}s and write each
  *       (requirement 3.b); write the {@code lexicon-hit-restricted} CSV mirror
@@ -151,7 +151,7 @@ public class ScanEngineJobRunner {
         }
         Dataset<Row> viewRows = FeatureDecisionViewReader.unionAll(spark, perDatasetView).cache();
 
-        // 3. Resolve every DISTINCT feature referenced to its .hdb path, and broadcast the
+        // 3. Resolve every DISTINCT feature referenced to its .zip bundle path, and broadcast the
         //    resulting small (feature -> path) map — see class Javadoc "Driver load". The
         //    distinct-feature list itself is bounded by feature count, not message count,
         //    so collecting it to the driver is safe.
@@ -162,21 +162,17 @@ public class ScanEngineJobRunner {
                 .map(fd -> fd.body().feature())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        Map<String, String> featureToPath = new HashMap<>();
-        Map<String, String> featureToMetadataPath = new HashMap<>();
+        Map<String, String> featureToZipPath = new HashMap<>();
         for (String feature : distinctFeatures) {
-            featureToPath.put(feature, HyperscanPathResolver.buildHdbPath(hyperscanBasePath, feature));
-            featureToMetadataPath.put(feature, HyperscanPathResolver.buildTermMetadataPath(hyperscanBasePath, feature));
+            featureToZipPath.put(feature, HyperscanPathResolver.buildZipPath(hyperscanBasePath, feature));
         }
         // Broadcast via JavaSparkContext (not the raw Scala SparkContext, which requires an
         // implicit ClassTag that Java code cannot supply naturally) — the standard Java-side
-        // way to create a Broadcast. Two separate broadcasts (rather than one combined map) so
-        // HyperscanDatabaseLoader and TermMetadataLoader each stay independently constructible
-        // and testable with their own, single-purpose map — see TermMetadataLoader class
-        // Javadoc for why the second one now exists.
+        // way to create a Broadcast. ONE broadcast now — the Compile Service writes one zip
+        // bundle per feature (containing both the .hdb and the term-metadata JSON), so
+        // HyperscanBundleLoader needs only one feature -> path map — see that class Javadoc.
         JavaSparkContext javaSparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
-        Broadcast<Map<String, String>> broadcastFeatureToPath = javaSparkContext.broadcast(featureToPath);
-        Broadcast<Map<String, String>> broadcastFeatureToMetadataPath = javaSparkContext.broadcast(featureToMetadataPath);
+        Broadcast<Map<String, String>> broadcastFeatureToZipPath = javaSparkContext.broadcast(featureToZipPath);
 
         // 4. Read + union AVRO messages, restricted to the view's own message_id set.
         Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
@@ -200,7 +196,7 @@ public class ScanEngineJobRunner {
 
         // 6. mapPartitions — the only place Hyperscan databases are loaded.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
-                new PartitionProcessor(broadcastFeatureToPath, broadcastFeatureToMetadataPath,
+                new PartitionProcessor(broadcastFeatureToZipPath,
                         properties.getMaxAttachmentSizeBytes(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).cache();

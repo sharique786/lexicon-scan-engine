@@ -20,7 +20,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  * driver) therefore runs ONLY on the driver: reading configuration,
  * resolving paths, orchestrating reads/writes, and building the Spark
  * {@code Dataset} pipeline. Classes that must also run inside executor-side
- * closures ({@code HyperscanDatabaseLoader}, {@code FeatureScanOrchestrator},
+ * closures ({@code HyperscanBundleLoader}, {@code FeatureScanOrchestrator},
  * {@code DecisionTreeEvaluator}, {@code FeatureGroupingService},
  * {@code OutputRowBuilder}, and the various static utility classes) are
  * deliberately plain, Spring-independent Java — they must be constructible

@@ -47,7 +47,7 @@ public class ScanEngineProperties {
     @Value("${SPECTRE_MAX_ATTACHMENT_SIZE_BYTES:#{null}}")
     private Long maxAttachmentSizeBytes;
 
-    /** Bounds each Spark partition's cached-Hyperscan-database count — see {@code HyperscanDatabaseLoader}. */
+    /** Bounds each Spark partition's cached-bundle count (database + term metadata together) — see {@code HyperscanBundleLoader}. */
     private int maxCachedDatabasesPerPartition = 20;
 
     /** The identity written to every output/audit row's {@code created_by} column. */

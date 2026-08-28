@@ -30,9 +30,9 @@ class HyperscanPathResolverTest {
             return List.of("2026-08-16_10-00-00_101");
         };
         String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
-        HyperscanPathResolver.buildHdbPath(basePath, "feature-a");
-        HyperscanPathResolver.buildHdbPath(basePath, "feature-b");
-        HyperscanPathResolver.buildHdbPath(basePath, "feature-c");
+        HyperscanPathResolver.buildZipPath(basePath, "feature-a");
+        HyperscanPathResolver.buildZipPath(basePath, "feature-b");
+        HyperscanPathResolver.buildZipPath(basePath, "feature-c");
         assertThat(listCalls).hasSize(1);
     }
 
@@ -55,18 +55,18 @@ class HyperscanPathResolverTest {
     }
 
     @Test
-    @DisplayName("buildHdbPath produces the correct .hdb filename")
-    void buildsHdbPath() {
-        String hdbPath = HyperscanPathResolver.buildHdbPath(
+    @DisplayName("buildZipPath produces the correct .zip filename")
+    void buildsZipPath() {
+        String zipPath = HyperscanPathResolver.buildZipPath(
                 "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/", "lexicon_market_cond-1");
-        assertThat(hdbPath).isEqualTo(
-                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/lexicon_market_cond-1.hdb");
+        assertThat(zipPath).isEqualTo(
+                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/lexicon_market_cond-1.zip");
     }
 
     @Test
-    @DisplayName("buildHdbPath rejects a basePath without a trailing slash")
+    @DisplayName("buildZipPath rejects a basePath without a trailing slash")
     void rejectsMalformedBasePath() {
-        assertThatThrownBy(() -> HyperscanPathResolver.buildHdbPath("gs://bucket/no-trailing-slash", "feature-1"))
+        assertThatThrownBy(() -> HyperscanPathResolver.buildZipPath("gs://bucket/no-trailing-slash", "feature-1"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

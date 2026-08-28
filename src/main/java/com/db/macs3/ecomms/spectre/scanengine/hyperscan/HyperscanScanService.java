@@ -74,7 +74,7 @@ public final class HyperscanScanService {
      *
      * @param originalText     the text to scan, in its original (possibly HTML-bearing) form —
      *                          HTML is stripped internally before scanning; see {@link HtmlStrippingService}
-     * @param database          a loaded Hyperscan database — see {@code HyperscanDatabaseLoader}
+     * @param database          a loaded Hyperscan database — see {@code HyperscanBundleLoader}
      * @param area                which part of the message {@code originalText} is
      * @param attachmentId       required (non-null) iff {@code area == ATTACHMENT}; null otherwise
      * @return raw matches found, empty if {@code originalText} is blank or nothing matched

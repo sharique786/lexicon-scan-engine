@@ -10,6 +10,10 @@ package com.db.macs3.ecomms.spectre.scanengine.hyperscan;
  * message that needs it.
  */
 public final class HyperscanFileLoadException extends RuntimeException {
+    public HyperscanFileLoadException(String message) {
+        super(message);
+    }
+
     public HyperscanFileLoadException(String message, Throwable cause) {
         super(message, cause);
     }

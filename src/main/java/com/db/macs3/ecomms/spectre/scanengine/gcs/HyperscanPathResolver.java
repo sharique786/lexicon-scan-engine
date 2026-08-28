@@ -6,12 +6,22 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Resolves the Hyperscan {@code .hdb} file GCS path template:
- * {@code gs://<environment_bkt>/policy_test/<YYYY-MM-DD_HH-MM-SS_<policy_engine_id>>/lex-hyperscan/<feature>.hdb}
+ * Resolves the Lexicon Compile Service's per-feature zip bundle GCS path
+ * template:
+ * {@code gs://<environment_bkt>/policy_test/<YYYY-MM-DD_HH-MM-SS_<policy_engine_id>>/lex-hyperscan/<feature>.zip}
  *
  * <p>Confirmed: the {@code policy_test} segment is used regardless of
  * trigger type (live or test), and the timestamp segment is resolved via a
  * GCS wildcard listing rather than being supplied as a runtime parameter.
+ *
+ * <h2>One zip per feature, not two separate files</h2>
+ * <p>The Compile Service used to write two separate files per feature to
+ * this folder — {@code <feature>.hdb} and {@code <feature>-compile-results.json}
+ * — resolved via two separate path-builder methods. It now writes ONE
+ * {@code <feature>.zip} containing both as entries — see
+ * {@code HyperscanBundleLoader} for how that zip is downloaded once and both
+ * entries extracted from it, and {@code TermIdBuilder#hdbFileName}/
+ * {@code #termMetadataFileName} for the two entries' expected names inside it.
  *
  * <h2>One listing call per job run, not one per feature</h2>
  * <p>The wildcard timestamp segment is the SAME for every feature a given
@@ -79,31 +89,13 @@ public final class HyperscanPathResolver {
     /**
      * @param basePath    from {@link #resolveBasePath} — must end with {@code /}
      * @param feature      {@code feature_definition.body.feature}, verbatim
-     * @return the full {@code .hdb} path for {@code feature}
+     * @return the full zip bundle path for {@code feature} — see class Javadoc
      */
-    public static String buildHdbPath(String basePath, String feature) {
+    public static String buildZipPath(String basePath, String feature) {
         if (basePath == null || !basePath.endsWith("/")) {
             throw new IllegalArgumentException("basePath must end with '/', got: " + basePath);
         }
-        return basePath + TermIdBuilder.hdbFileName(feature);
-    }
-
-    /**
-     * @param basePath from {@link #resolveBasePath} — must end with {@code /}
-     * @param feature   {@code feature_definition.body.feature}, verbatim
-     * @return the full term-metadata JSON path for {@code feature} — see
-     *          {@code TermMetadataLoader} class Javadoc for why this is now
-     *          resolved and loaded alongside the {@code .hdb} file, matching
-     *          the Lexicon Compile Service's own {@code <ruleName>-compile-results.json}
-     *          naming convention for the JSON it writes alongside every
-     *          {@code /compile/bundle} database (where {@code ruleName} is
-     *          this same {@code feature} value).
-     */
-    public static String buildTermMetadataPath(String basePath, String feature) {
-        if (basePath == null || !basePath.endsWith("/")) {
-            throw new IllegalArgumentException("basePath must end with '/', got: " + basePath);
-        }
-        return basePath + TermIdBuilder.termMetadataFileName(feature);
+        return basePath + TermIdBuilder.zipFileName(feature);
     }
 
     /** Thrown when no hyperscan compile folder can be resolved — see requirement 3.a. */

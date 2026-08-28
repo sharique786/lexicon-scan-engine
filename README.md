@@ -44,6 +44,13 @@ to BigQuery.
   resolved correctly against the Lexicon Compile Service's *current* id
   scheme — see [Hyperscan file processing](#hyperscan-file-processing-and-not-and-decomposed-terms)
   below for the full explanation and the bug this fixes.
+- **NEAR/FOLLOWEDBY proximity operator support**, for terms the Compile
+  Service decomposes into multiple QUIET Hyperscan leaves plus a
+  `resolvedPatterns` description of the operator/distance structure — the
+  real word-distance condition is verified in Java against the message text,
+  since Hyperscan's own QUIET-leaf combination can only prove "all leaves
+  present somewhere," never their order or distance. See
+  [Hyperscan file processing](#hyperscan-file-processing-and-not-and-decomposed-terms).
 - **HTML-aware match positioning** — tags and collapsed whitespace never
   shift a reported match's position relative to the original message text.
 - **Attachment size limiting** — attachments over a configurable byte
@@ -66,9 +73,8 @@ BQ view (vw_src_msg_lexicon_decision_mapping)     AVRO messages (GCS)
                                 │  join on message_id
                                 ▼
                     mapPartitions(PartitionProcessor)
-              (one HyperscanDatabaseLoader + ONE TermMetadataLoader +
-               one FeatureScanOrchestrator per partition — see
-               "Memory-safety design" below)
+              (one HyperscanBundleLoader + one FeatureScanOrchestrator
+               per partition — see "Memory-safety design" below)
                                 │
                 for each message: FeatureGroupingService.groupAndOrder()
                               → DecisionTreeEvaluator.evaluate()
@@ -90,18 +96,17 @@ BQ view (vw_src_msg_lexicon_decision_mapping)     AVRO messages (GCS)
 
 1. **Resolve the Hyperscan base path** — exactly ONE GCS listing call for
    the whole job run (`HyperscanPathResolver.resolveBasePath`), finding the
-   compile folder's wildcard timestamp segment. Every feature's `.hdb` and
-   term-metadata JSON path is then built by plain string concatenation, no
-   further GCS listing needed — see [Input path formation](#input-path-formation).
+   compile folder's wildcard timestamp segment. Every feature's `.zip`
+   bundle path is then built by plain string concatenation, no further GCS
+   listing needed — see [Input path formation](#input-path-formation).
 2. **Read + union the BQ view** across every `dataset_details` entry,
    filtered by dataset partition / feature partition / process id
    (`FeatureDecisionViewReader.readFiltered` + `unionAll`), cached since it
    is read twice (once for distinct features, once for the message join).
-3. **Resolve every DISTINCT feature referenced** to its `.hdb` path AND its
-   term-metadata JSON path, and broadcast BOTH small maps from the driver.
-   The distinct-feature list is bounded by feature count (typically tens to
-   low hundreds), never by message count — safe to `collectAsList()` to the
-   driver.
+3. **Resolve every DISTINCT feature referenced** to its `.zip` bundle path,
+   and broadcast that one small map from the driver. The distinct-feature
+   list is bounded by feature count (typically tens to low hundreds), never
+   by message count — safe to `collectAsList()` to the driver.
 4. **Read + union AVRO messages** across every `dataset_details` entry,
    restricted to the view's own distinct `message_id` set — never a
    full-bucket AVRO scan.
@@ -110,8 +115,9 @@ BQ view (vw_src_msg_lexicon_decision_mapping)     AVRO messages (GCS)
    (`pipeline_exec_id`, `created_by`, the output-facing dataset partition
    value).
 6. **`mapPartitions(PartitionProcessor)`** — the only place Hyperscan
-   databases and term metadata are loaded. For each message: group and
-   order its feature rows, evaluate the decision tree (which calls into
+   databases and term metadata are loaded (from the SAME zip bundle, see
+   `HyperscanBundleLoader`). For each message: group and order its feature
+   rows, evaluate the decision tree (which calls into
    `FeatureScanOrchestrator` per feature), build the three per-message
    output rows.
 7. **Split results into successes/failures**, write each output table via
@@ -237,22 +243,31 @@ consequence:
   formula *is* the matched expression's own text for a combination match —
   a separate, independently-discovered display bug fixed by the same change.
 
-### The fix: `TermExpressionMetadata`, loaded alongside the `.hdb`
+### The fix: `TermExpressionMetadata`, extracted alongside the `.hdb`
 
-The Compile Service's `/compile/bundle` endpoint writes a
-`<feature>-compile-results.json` file alongside every `<feature>.hdb` —
-the same `CompileResponse`/`TermCompilationResult` JSON shape `/compile`
-returns, including the `requiredExpressionIds`/`excludedExpressionIds`
-fields an AND NOT term now needs. This engine reads and indexes that file:
+The Compile Service's `/compile/bundle` endpoint writes one
+`<feature>.zip` bundle per feature, containing both `<feature>.hdb` and
+`<feature>-compile-results.json` as entries (see
+[Input path formation](#input-path-formation) for how this project reads
+that zip) — the JSON entry is the same `CompileResponse`/
+`TermCompilationResult` shape `/compile` returns, including the
+`requiredExpressionIds`/`excludedExpressionIds` fields an AND NOT term now
+needs. This engine reads and indexes that JSON:
 
 ```
 TermExpressionMetadata.parse(feature, json)
   → for every PASS term:
       - non-AND-NOT: hyperscanExpressionId becomes its one requiredExpressionIds entry
       - AND NOT: requiredExpressionIds / excludedExpressionIds read directly
-  → indexed: ANY expression id (required OR excluded, one OR many) → TermEntry
-             (termNumber, termRegexPattern, requiresExclusionCheck,
-              requiredExpressionIds, excludedExpressionIds)
+        (verbatim, possibly absent, for a resolvedPatterns-shaped AND NOT term —
+         see "A second schema change" below)
+      - resolvedPatterns (if present) parsed + zipped into a resolvedPatternTree
+  → indexed TWO ways: byExpressionId (ANY expression id, one OR many → TermEntry —
+             what FeatureScanOrchestrator's by-id discovery loop uses) AND
+             byTermNumber (EVERY term, including one with no expression id at all —
+             see mandatoryPerAreaTerms())
+    TermEntry(termNumber, termRegexPattern, requiresExclusionCheck,
+              requiredExpressionIds, excludedExpressionIds, resolvedPatternTree)
 ```
 
 `FeatureScanOrchestrator.resolveAndEvaluate()` then, for one message:
@@ -280,9 +295,11 @@ TermExpressionMetadata.parse(feature, json)
 4. `term_id` is built from the term's own number
    (`TermIdBuilder.build(feature, entry.termNumber())`) — always correct
    now, regardless of which raw expression id actually fired.
-5. `term_regex_pattern` prefers the metadata's own pattern text (the
-   Compile Service's `translatedPattern`, joined) over the raw match's
-   `Expression` text, fixing the unreadable-combination-formula display bug.
+5. `term_regex_pattern` prefers the metadata's own pattern text over the raw
+   match's `Expression` text, fixing the unreadable-combination-formula
+   display bug — the verbatim `resolvedPatterns` string (preserving the
+   NEAR/FOLLOWEDBY operator and distance) for a term that has one, else the
+   Compile Service's `translatedPattern`/`regexPattern` leaves joined.
 
 ### What's unaffected, and why
 
@@ -292,20 +309,102 @@ provably safe, since a positive sub-expression's truth value is only ever
 true after it genuinely matches, never before; there is no "not yet
 reached" ambiguity for a formula with no negation in it at all.
 
-### Optimization: why a SECOND loader/broadcast, not one combined structure
+### A second schema change: NEAR/FOLLOWEDBY proximity, and QUIET leaves that Hyperscan itself can never report individually
 
-`TermMetadataLoader` mirrors `HyperscanDatabaseLoader`'s exact per-partition,
-lazy-load, LRU-cached pattern, kept as an independent class (and an
-independent broadcast — see [Input path formation](#input-path-formation))
-rather than folding term metadata into the same map or the same loader, for
-two concrete reasons: metadata objects are small (plain id lists) and cheap
-to keep cached generously, whereas `.hdb` databases are the memory-heavy
-resource this whole design is built around bounding — conflating the two
-caches' eviction behavior under one bound would make the `.hdb` cache's own
-sizing harder to reason about; and each loader stays independently
-constructible and testable with its own, single-purpose map, rather than a
-combined structure both `HyperscanDatabaseLoader` and `TermMetadataLoader`
-would need to agree on the shape of.
+The Compile Service changed its `compile-results.json` schema again,
+specifically for terms using `NEAR{n}`/`FOLLOWEDBY{n}` proximity operators
+(and, potentially, AND NOT terms too — see the open question below). A
+complex term can now be split ("Pattern Too Large") into multiple decomposed
+`regexPattern` leaves (renamed from `translatedPattern`), each compiled with
+Hyperscan's `QUIET` flag — confirmed against a real compiled `.hdb` dump.
+**QUIET means Hyperscan's own match callback NEVER reports an individual
+leaf's matches** — only the wrapping native `COMBINATION` expression (the
+term's `hyperscanExpressionId`) fires, and firing only proves "every leaf
+matched somewhere in this one scan buffer." No order or word-distance
+information for the leaves is ever recoverable from Hyperscan itself for
+these terms — a real, confirmed constraint, not an assumption.
+
+Two new JSON fields carry what Hyperscan can no longer prove on its own:
+
+```
+resolvedPatterns  — e.g. "manipulate NEAR{5} (?:price|spread|stock)" — the
+                    leaves' regex text joined by the literal operator/distance
+                    text, and, for an AND NOT term, an " AND NOT (...) " wrapper
+patternMapping    — e.g. "(7&8)" — the ordered Hyperscan expression ids for
+                    each regexPattern leaf, in the same order (the exact
+                    formula also compiled as the native COMBINATION
+                    expression's own pattern text in the .hdb)
+```
+
+**The fix — a hybrid, per-area evaluation, never merged across areas:**
+`TermExpressionMetadata.parse()` parses a non-blank `resolvedPatterns`
+string's SHAPE (leaf count, operator+distance sequence, AND NOT split point)
+via `ResolvedPatternTree.build()` — deliberately WITHOUT slicing leaf regex
+text out of the string itself (the naive approach the reference
+`ResolvedPatternMatcher` class takes, and its own Javadoc admits is unsafe
+if a leaf's regex text happens to contain the literal substring
+`" NEAR{5} "`) — then zips that shape against the structured `regexPattern`
+list positionally. `FeatureScanOrchestrator.resolveAndEvaluate()` then, for
+any term with a parsed tree:
+
+1. Uses the term's `hyperscanExpressionId` (when present — absent for AND
+   NOT, which still can't safely use native COMBINATION, per the fix above)
+   as a cheap, coarse pre-filter, both globally and per scanned area: if it
+   never fired in an area, that area cannot possibly satisfy the condition,
+   skip it entirely.
+2. When the pre-filter passes (or unconditionally for AND NOT, which has no
+   such pre-filter available), compiles each `regexPattern` leaf as a real
+   `java.util.regex.Pattern` and runs a word-distance backtracking search
+   (`ResolvedPatternAreaEvaluator`, adapted from the reference
+   `ResolvedPatternMatcher`) directly against **that same area's own real
+   original text** — the only way to genuinely verify order/distance, since
+   Hyperscan cannot.
+
+**This per-area evaluation must NEVER be merged across areas** — unlike the
+existing cross-area AND-NOT-by-presence logic above (a required word in the
+subject and an excluded word in the body legitimately share ONE boolean
+check there), word-distance/order is only meaningful within one contiguous
+text. A required leaf's occurrence in the subject and an excluded leaf's
+occurrence in the body do not share a coordinate space for a proximity/AND
+NOT condition — conflating the two evaluation paths would silently
+reintroduce a false-positive class of bug. `FeatureScanOrchestrator` keeps
+these as two genuinely separate code paths for this reason, selected
+per-term by whether `resolvedPatterns` was present in that term's JSON
+entry (the sole discriminator — a single compile-results file can mix old-
+and new-style terms with no special handling).
+
+`regex_match_hit_count` for a proximity term enumerates every distinct
+satisfying leaf-occurrence combination found per area (not a single
+synthetic "matched: yes"), capped at 50 per area with a separate, larger
+internal backtracking work-bound so a pathological leaf-occurrence count
+degrades by truncation (logged), never by failing the message.
+
+**Open question, not yet resolved by a real example:** no PASS AND NOT term
+under this new schema has been observed yet — it's unconfirmed whether such
+a term still emits `requiredExpressionIds`/`excludedExpressionIds` (a cheap
+per-area pre-filter) or relies purely on `resolvedPatterns`/`regexPattern`
+with no id at all. `TermExpressionMetadata.parse()` handles both shapes
+without hard-failing, and adds validation tripwires (throwing loudly if
+`hyperscanExpressionId` or `patternMapping` is ever populated alongside an
+AND-NOT-shaped `resolvedPatterns`) so a real example that contradicts either
+assumption surfaces immediately rather than silently mis-evaluating.
+
+### Optimization: why ONE combined loader now, not two
+
+Both the `.hdb` database and the term metadata now come from the SAME GCS
+object — see [Input path formation](#input-path-formation) for why the
+Compile Service writes one `<feature>.zip` bundle per feature instead of two
+separate files. `HyperscanBundleLoader` downloads and unzips that bundle
+EXACTLY ONCE per feature per partition, caching both resulting objects
+together (one `LexiconBundle` per feature, in one bounded `LruCache`) —
+this **replaces** the earlier two-loader design (`HyperscanDatabaseLoader` +
+`TermMetadataLoader`, each with its own broadcast/cache), which was a
+deliberate choice at the time (a `Database` is heavy/native/off-heap, a
+`TermExpressionMetadata` is light/on-heap, and the two came from genuinely
+independent GCS objects) but would now mean downloading and unzipping the
+identical file twice per feature per partition for no benefit, since
+`FeatureScanOrchestrator` always needs both together for any feature it
+scans anyway.
 
 ---
 
@@ -323,32 +422,44 @@ Every individual file path is then built by plain string concatenation —
 no further listing calls, however many features a run references:
 
 ```
-buildHdbPath(basePath, feature)           → <basePath>/<feature>.hdb
-buildTermMetadataPath(basePath, feature)  → <basePath>/<feature>-compile-results.json
+buildZipPath(basePath, feature)  → <basePath>/<feature>.zip
 ```
 
-The second convention matches the Compile Service's own
-`<ruleName>-compile-results.json` naming for the JSON it writes alongside
-every `/compile/bundle` database (`ruleName` there is the same value as
-`feature` here) — deliberately kept identical so the relationship between
-the two files is obvious from their names alone.
+**One zip per feature, not two separate files.** The Compile Service used
+to write two separate files per feature to this folder (`<feature>.hdb`,
+`<feature>-compile-results.json`), resolved via two separate path-builder
+methods. It now writes ONE `<feature>.zip` containing both as entries —
+`<feature>.hdb` and `<feature>-compile-results.json`, the exact same names
+as before, just zipped together instead of standing alone (see
+`TermIdBuilder.hdbFileName`/`termMetadataFileName` for those two entry-name
+builders, still used, now purely to identify entries INSIDE the zip rather
+than top-level GCS object names).
 
-### Two small, driver-resolved maps, broadcast once
+### One small, driver-resolved map, broadcast once
 
 ```
-featureToPath          = { feature → .hdb path }
-featureToMetadataPath  = { feature → compile-results.json path }
+featureToZipPath = { feature → .zip bundle path }
 ```
 
 Built once (stage 3 of the pipeline — see
 [Architecture & pipeline stages](#architecture--pipeline-stages)) from the
 distinct feature set the BQ view references for this run, then broadcast
 via `JavaSparkContext.broadcast(...)` — sent once per executor JVM, not
-re-serialized per task. Both maps share the same keys (built in the same
-loop over the same distinct-feature set), so a feature is either fully
-resolvable (both paths present) or the loaders' own
-`HyperscanFileNotFoundException` surfaces clearly which is missing, rather
-than one silently working while the other fails.
+re-serialized per task. This used to be TWO maps (one per loader — see
+"Optimization: why ONE combined loader now, not two" above); one map is
+sufficient now that both artifacts resolve to the same GCS object.
+
+### How the zip is read: `HyperscanBundleLoader`
+
+`HyperscanBundleLoader.load(feature)` downloads the zip bytes via the
+injected `GcsByteStreamer`, then reads it with a plain
+`java.util.zip.ZipInputStream` (sequential, no seeking needed — matches how
+the bytes arrive off a GCS read stream), matching each entry's BASE
+filename (any directory prefix inside the zip is stripped) against
+`TermIdBuilder.hdbFileName(feature)`/`termMetadataFileName(feature)` to
+decide which buffer to fill. Missing either entry throws
+`HyperscanFileLoadException` naming exactly which one was expected and
+every entry name actually found in the zip — never a silent partial load.
 
 ---
 
@@ -384,7 +495,10 @@ matched pattern within a message — for an AND NOT term, this reflects only
 the *required* side's occurrences (combined across every required-side
 expression id, if the required side was itself decomposed), since the
 excluded side is never itself a "hit" to count, only a condition already
-resolved before a `TermMatchResult` is built at all.
+resolved before a `TermMatchResult` is built at all. For a NEAR/FOLLOWEDBY
+proximity term, this counts every distinct satisfying leaf-occurrence
+combination found per scanned area (capped at 50 per area — see "A second
+schema change" above), not a single synthetic "matched" flag.
 
 ---
 
@@ -427,14 +541,12 @@ balance between within-executor parallelism and GC/overhead pressure — very
 high core counts cause more GC contention, very low counts under-utilize
 each executor) applies here, but this job has an **additional, specific**
 reason to stay on the low side of that range: each concurrent task on an
-executor can trigger its own `.hdb` load-and-cache cycle
-(`HyperscanDatabaseLoader`) AND its own term-metadata load-and-cache cycle
-(`TermMetadataLoader`, up to `max-cached-databases-per-partition` entries
-each). More cores means more concurrent partitions means more simultaneous
-native-memory pressure and more simultaneous GCS read connections (now
-potentially *two* per cache miss — one for the `.hdb`, one for the metadata
-JSON) from the same executor. 4 cores keeps this bounded while still
-getting reasonable parallelism.
+executor can trigger its own zip-bundle download-and-cache cycle
+(`HyperscanBundleLoader`, up to `max-cached-databases-per-partition` entries).
+More cores means more concurrent partitions means more simultaneous
+native-memory pressure and more simultaneous GCS read connections from the
+same executor. 4 cores keeps this bounded while still getting reasonable
+parallelism.
 
 **`memoryOverhead` needs to be explicitly generous, not left at Dataproc's
 auto-calculated default.** Hyperscan is accessed via JNI — every loaded
@@ -464,10 +576,10 @@ partition sizes automatically after the message↔view join and the view's
 potential (some messages legitimately have far more applicable features
 than others).
 
-Aim for partitions large enough that a partition's `HyperscanDatabaseLoader`
-*and* `TermMetadataLoader` caches get reused across a meaningful number of
-messages before the task ends (a partition of a few dozen messages barely
-benefits from either per-partition cache at all), but not so large that one
+Aim for partitions large enough that a partition's `HyperscanBundleLoader`
+cache gets reused across a meaningful number of messages before the task
+ends (a partition of a few dozen messages barely benefits from the
+per-partition cache at all), but not so large that one
 partition's peak memory (its own message batch plus up to
 `max-cached-databases-per-partition` loaded `.hdb` files) risks exceeding
 executor memory. A few thousand messages per partition is a reasonable
@@ -484,13 +596,12 @@ spark.serializer=org.apache.spark.serializer.KryoSerializer
 `PartitionProcessor`'s `mapPartitions` result type (`MessageProcessingResult`)
 is already read via `Encoders.kryo(...)` in code; setting Kryo as the
 **default** serializer (not just for that one Encoder) speeds up shuffle
-and broadcast serialization generally — including both broadcast maps
-(`featureToPath` and `featureToMetadataPath`), which are small but sent to
-every executor. Explicit class registration
-(`spark.kryo.registrationRequired=true` plus a registrator) is optional —
-Kryo works correctly without it, just marginally slower on first use of an
-unregistered class — worth adding later if serialization shows up in
-profiling, not a correctness requirement now.
+and broadcast serialization generally — including the broadcast
+`featureToZipPath` map, which is small but sent to every executor.
+Explicit class registration (`spark.kryo.registrationRequired=true` plus a
+registrator) is optional — Kryo works correctly without it, just marginally
+slower on first use of an unregistered class — worth adding later if
+serialization shows up in profiling, not a correctness requirement now.
 
 ### BigQuery connector writes
 
@@ -544,31 +655,28 @@ spark.speculation=false
 ```
 
 Leave off, at least initially. Each task does real external work (possible
-GCS `.hdb`/metadata-JSON fetches on cache miss, and ultimately a BigQuery
+GCS zip-bundle fetches on cache miss, and ultimately a BigQuery
 write) — a speculative retry duplicates that work, and this job's
 correctness depends on the BigQuery connector's own handling of a
 duplicated write attempt, which has not been verified against a live
 cluster here. Revisit only after confirming the connector's duplicate-write
 behavior is safe for this job's write pattern.
 
-### GCS connector (per-partition `.hdb` + metadata streaming reads)
+### GCS connector (per-partition zip-bundle streaming reads)
 
 ```
 spark.hadoop.fs.gs.io.buffersize=<tune from default if profiling shows read latency>
 spark.hadoop.fs.gs.http.max.retry=10
 ```
 
-Every cache miss in `HyperscanDatabaseLoader` OR `TermMetadataLoader` opens
-a fresh GCS read stream; with many executors and moderate core counts, this
-can mean a meaningful number of concurrent GCS connections at job start
-(before each partition's caches warm up) — now potentially double the
-earlier count, since a feature's first reference in a partition triggers
-both a `.hdb` fetch and a metadata-JSON fetch. The retry setting above is a
+Every cache miss in `HyperscanBundleLoader` opens ONE fresh GCS read stream
+per feature (the zip bundle containing both the `.hdb` and the metadata
+JSON — previously two independent streams, one per loader, before the zip
+consolidation); with many executors and moderate core counts, this can
+still mean a meaningful number of concurrent GCS connections at job start
+(before each partition's cache warms up). The retry setting above is a
 safety margin for transient GCS throttling under that initial burst; the
-buffer size is worth profiling against actual file sizes rather than
-guessed — term-metadata JSON files are expected to be small relative to
-`.hdb` files, so a buffer size tuned for `.hdb` reads should be more than
-adequate for metadata reads too.
+buffer size is worth profiling against actual zip sizes rather than guessed.
 
 ### Spark 4.1 / Scala 2.13 / JDK 21 upgrade notes
 
@@ -605,10 +713,14 @@ Tests run against the `test` Spring profile (`application-test.yml`).
 **Both commands are confirmed to genuinely succeed end-to-end** in a real
 environment with the project's actual dependencies available (Maven
 Central, Spark, the BigQuery connector, and — critically — the real
-`com.gliwka.hyperscan` native library): `mvn clean test` runs all 104
+`com.gliwka.hyperscan` native library): `mvn clean test` runs all 126
 tests against that real Hyperscan library and real Jackson serialization
 (not a stub), and `mvn clean package` produces the shaded jar with the
-correct `Main-Class` manifest entry. This corrects an earlier claim in
+correct `Main-Class` manifest entry. (104 at the point this claim was first
+verified; grew to 126 across the NEAR/FOLLOWEDBY/AND-NOT `resolvedPatterns`
+work and the `HyperscanDatabaseLoader`/`TermMetadataLoader` →
+`HyperscanBundleLoader` zip-bundle consolidation — see "Known limitations"
+below for both.) This corrects an earlier claim in
 this document that testing relied on a "hand-built stub environment" for
 Hyperscan — that was never accurate for this repository's own test
 classes, two of which referenced test-only static fields on
@@ -651,23 +763,54 @@ match's reported position is always correct against the message the
 analyst/downstream table actually sees, never the internally-stripped
 version.
 
-**Memory-safety design (`HyperscanDatabaseLoader`, `TermMetadataLoader`,
-`LruCache`)** — an earlier approach read every `.hdb` file's full bytes on
-the **driver** into a `Map<String, byte[]>` and broadcast that whole map to
-every executor, risking driver OOM for many/large files and wasting
-executor memory on files a given partition never needs. This engine
-instead loads `.hdb` bytes AND term-metadata JSON **lazily, per partition,
-streamed** (via `mapPartitions`, specifically so each loader and its cache
-are constructed once and reused across every message in that partition),
-with each partition's cumulative loaded-database memory bounded by a
-configurable `LruCache` (`scan-engine.max-cached-databases-per-partition`,
-default 20, shared as the bound for both loaders), evicting the
-least-recently-used entry rather than growing without bound.
+**Memory-safety design (`HyperscanBundleLoader`, `LruCache`)** — an earlier
+approach read every `.hdb` file's full bytes on the **driver** into a
+`Map<String, byte[]>` and broadcast that whole map to every executor,
+risking driver OOM for many/large files and wasting executor memory on
+files a given partition never needs. This engine instead downloads and
+unzips each feature's `.zip` bundle **lazily, per partition, streamed** (via
+`mapPartitions`, specifically so the loader and its cache are constructed
+once and reused across every message in that partition), with each
+partition's cumulative loaded-bundle memory bounded by a configurable
+`LruCache` (`scan-engine.max-cached-databases-per-partition`, default 20 —
+one bound now covers both the native database and its metadata together,
+since a `LexiconBundle` holds both and they're always loaded/evicted as one
+unit), evicting the least-recently-used entry rather than growing without
+bound.
 
 ---
 
 ## Known limitations / deferred work
 
+- **NEAR/FOLLOWEDBY proximity operator support (this pass)** — added for
+  terms the Compile Service decomposes into QUIET Hyperscan leaves plus a
+  `resolvedPatterns`/`patternMapping` description of the operator/distance
+  structure, verified in Java against real message text since Hyperscan's
+  own combination can only prove leaf presence, never distance/order — see
+  "A second schema change" under
+  [Hyperscan file processing](#hyperscan-file-processing-and-not-and-decomposed-terms).
+  **Open gap**: no real PASS AND NOT term under this new schema has been
+  observed yet (only a `FAILED` example exists in the sample data used to
+  build this), so whether such a term still emits
+  `requiredExpressionIds`/`excludedExpressionIds` or relies purely on
+  `resolvedPatterns` with no id at all is unconfirmed — handled defensively
+  with validation tripwires that throw loudly the moment a real example
+  contradicts either assumption, rather than hard-coding one shape. Verify
+  against a real Compile Service output once available.
+- **Zip-bundle consolidation (this pass)** — the Compile Service now writes
+  ONE `<feature>.zip` per feature (containing both `<feature>.hdb` and
+  `<feature>-compile-results.json`) instead of two separate GCS objects.
+  `HyperscanDatabaseLoader`/`TermMetadataLoader` (two loaders, two
+  broadcasts, two caches) were replaced by a single `HyperscanBundleLoader`
+  — see "Optimization: why ONE combined loader now, not two" under
+  [Hyperscan file processing](#hyperscan-file-processing-and-not-and-decomposed-terms)
+  and [Input path formation](#input-path-formation). Not verified against a
+  real Compile Service zip output (only synthetic zips built in-test via
+  `java.util.zip.ZipOutputStream`) — worth confirming entry-naming
+  conventions (any directory prefix inside the zip, compression method)
+  against a real Compile Service artifact before first production use,
+  though `HyperscanBundleLoader` already strips any directory prefix
+  defensively when matching entry names.
 - **Five real bugs found and fixed by this revision's full-codebase
   review — resolved, not merely documented.** A prior revision's claims
   about test coverage and build state were not backed by an actual
