@@ -110,12 +110,29 @@ public final class HtmlStrippingService {
      * the end of the string) rather than per character, so that both a
      * match's start (inclusive) and end (exclusive) position can be mapped
      * with the same lookup and no special-casing at the end of the string.
+     *
+     * <p><b>Except for {@link #identity()}</b> — a null {@code boundaries}
+     * array means "stripped position == original position," computed in O(1)
+     * with no backing array at all. This exists specifically for content
+     * that {@link #strip} would leave byte-for-byte unchanged anyway (e.g.
+     * attachment {@code cleanText}, already HTML-free by the time it reaches
+     * this engine — see {@code MessageAttachment} class Javadoc): running the
+     * full tag/whitespace-scanning algorithm AND allocating an {@code int[]}
+     * sized to the text's length is pure waste on text that can be
+     * megabytes long, for a transform guaranteed to be a no-op.
      */
     public static final class OffsetMap implements Serializable {
+        private static final OffsetMap IDENTITY = new OffsetMap(null);
+
         private final int[] boundaries;
 
         private OffsetMap(int[] boundaries) {
             this.boundaries = boundaries;
+        }
+
+        /** @return an offset map where every position maps to itself, built in O(1) — see class Javadoc. */
+        public static OffsetMap identity() {
+            return IDENTITY;
         }
 
         /**
@@ -123,12 +140,31 @@ public final class HtmlStrippingService {
          * @return the corresponding boundary position in the original text
          */
         public int toOriginal(int strippedPosition) {
+            if (boundaries == null) {
+                if (strippedPosition < 0) {
+                    throw new IndexOutOfBoundsException("strippedPosition " + strippedPosition + " must be >= 0");
+                }
+                return strippedPosition;
+            }
             if (strippedPosition < 0 || strippedPosition >= boundaries.length) {
                 throw new IndexOutOfBoundsException(
                         "strippedPosition " + strippedPosition + " out of range [0, " + (boundaries.length - 1) + "]");
             }
             return boundaries[strippedPosition];
         }
+    }
+
+    /**
+     * A {@link StripResult} for text KNOWN to need no stripping at all — see
+     * {@link OffsetMap#identity()}. Skips the whole tag/whitespace-scanning
+     * pass and its {@code int[]} allocation entirely, unlike calling
+     * {@link #strip} on already-clean text (which would produce an
+     * equivalent result, just via O(n) work and O(n) memory it doesn't need
+     * to spend). {@code null} input yields an empty result, matching
+     * {@link #strip}'s own null handling.
+     */
+    public static StripResult identity(String text) {
+        return new StripResult(text == null ? "" : text, OffsetMap.identity());
     }
 
     /**

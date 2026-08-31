@@ -15,6 +15,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -257,5 +260,180 @@ class HyperscanBundleLoaderTest {
         loader.load("feat-1"); // must reload
         long feat1Calls = calls.stream().filter(c -> c.contains("feat-1")).count();
         assertThat(feat1Calls).isEqualTo(2);
+    }
+
+    // ── prefetch(): concurrent warm-up (JDK 21 virtual threads) ────────────────
+
+    private static Map<String, byte[]> zipsFor(byte[] dbBytes, String... features) {
+        Map<String, byte[]> zips = new HashMap<>();
+        for (String feature : features) {
+            zips.put(feature, zipOf(feature, dbBytes, simpleMetadataJson(feature)));
+        }
+        return zips;
+    }
+
+    @Test
+    @DisplayName("prefetch() warms the cache for every distinct feature — subsequent load() calls are pure cache hits")
+    void prefetchWarmsCacheForAllDistinctFeatures() {
+        byte[] dbBytes = realDbBytes();
+        String[] features = {"feat-a", "feat-b", "feat-c"};
+        Map<String, byte[]> zips = zipsFor(dbBytes, features);
+        Map<String, String> pathMap = new HashMap<>();
+        for (String f : features) pathMap.put(f, "gs://bucket/" + f + ".zip");
+
+        List<String> streamOpenCalls = new CopyOnWriteArrayList<>();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            streamOpenCalls.add(path);
+            for (String f : features) {
+                if (path.contains(f)) return new ByteArrayInputStream(zips.get(f));
+            }
+            throw new IOException("no fixture for " + path);
+        };
+        HyperscanBundleLoader loader = new HyperscanBundleLoader(pathMap, streamer, 10);
+
+        loader.prefetch(List.of(features));
+
+        assertThat(loader.cachedCount()).isEqualTo(3);
+        assertThat(streamOpenCalls).hasSize(3);
+
+        // Every load() now must be a pure cache hit — no further stream opens.
+        for (String f : features) {
+            loader.load(f);
+        }
+        assertThat(streamOpenCalls).as("load() after prefetch() must not re-download anything").hasSize(3);
+    }
+
+    @Test
+    @DisplayName("prefetch() caps at the cache's own max size — never does concurrent work for " +
+                 "entries that would just be evicted before ever being consulted")
+    void prefetchCapsAtCacheMaxSize() {
+        byte[] dbBytes = realDbBytes();
+        String[] features = {"feat-1", "feat-2", "feat-3", "feat-4", "feat-5"};
+        Map<String, byte[]> zips = zipsFor(dbBytes, features);
+        Map<String, String> pathMap = new HashMap<>();
+        for (String f : features) pathMap.put(f, "gs://bucket/" + f + ".zip");
+
+        List<String> streamOpenCalls = new CopyOnWriteArrayList<>();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            streamOpenCalls.add(path);
+            for (String f : features) {
+                if (path.contains(f)) return new ByteArrayInputStream(zips.get(f));
+            }
+            throw new IOException("no fixture for " + path);
+        };
+        HyperscanBundleLoader loader = new HyperscanBundleLoader(pathMap, streamer, 2); // cap = 2
+
+        loader.prefetch(List.of(features));
+
+        assertThat(loader.cachedCount()).isEqualTo(2);
+        assertThat(streamOpenCalls).as("only the first 2 (cache's own bound) should ever be downloaded").hasSize(2);
+    }
+
+    @Test
+    @DisplayName("prefetch() is best-effort: a feature that fails to prefetch is silently skipped, " +
+                 "never fails the call, and still loads correctly (with its real error, if any) afterward")
+    void prefetchIsBestEffortOnFailure() {
+        byte[] dbBytes = realDbBytes();
+        String goodFeature = "feat-good";
+        String badFeature = "feat-bad";
+        byte[] goodZip = zipOf(goodFeature, dbBytes, simpleMetadataJson(goodFeature));
+
+        Map<String, String> pathMap = Map.of(
+                goodFeature, "gs://bucket/" + goodFeature + ".zip",
+                badFeature, "gs://bucket/" + badFeature + ".zip");
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            if (path.contains(badFeature)) {
+                throw new IOException("simulated GCS failure for " + badFeature);
+            }
+            return new ByteArrayInputStream(goodZip);
+        };
+        HyperscanBundleLoader loader = new HyperscanBundleLoader(pathMap, streamer, 10);
+
+        // Must not throw, despite one of the two features always failing.
+        loader.prefetch(List.of(goodFeature, badFeature));
+
+        assertThat(loader.cachedCount()).as("only the successfully-prefetched feature is cached").isEqualTo(1);
+        assertThat(loader.loadDatabase(goodFeature)).isNotNull();
+
+        // The bad feature's real error still surfaces normally on synchronous load.
+        assertThatThrownBy(() -> loader.load(badFeature))
+                .isInstanceOf(HyperscanFileLoadException.class)
+                .hasMessageContaining(badFeature);
+    }
+
+    @Test
+    @DisplayName("prefetch() with null or empty input is a safe no-op")
+    void prefetchWithEmptyInputIsNoOp() {
+        HyperscanBundleLoader loader = new HyperscanBundleLoader(
+                Map.of(), path -> { throw new IOException("should never be called"); }, 10);
+
+        loader.prefetch(null);
+        loader.prefetch(List.of());
+
+        assertThat(loader.cachedCount()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("prefetch() deduplicates repeated feature names in its input")
+    void prefetchDeduplicatesInput() {
+        byte[] dbBytes = realDbBytes();
+        String feature = "feat-dup";
+        byte[] zip = zipOf(feature, dbBytes, simpleMetadataJson(feature));
+        Map<String, Integer> callCounts = new ConcurrentHashMap<>();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            callCounts.merge(path, 1, Integer::sum);
+            return new ByteArrayInputStream(zip);
+        };
+        HyperscanBundleLoader loader = new HyperscanBundleLoader(
+                Map.of(feature, "gs://bucket/" + feature + ".zip"), streamer, 10);
+
+        loader.prefetch(List.of(feature, feature, feature));
+
+        assertThat(loader.cachedCount()).isEqualTo(1);
+        assertThat(callCounts.values()).as("the same feature repeated 3x in the input must download only once")
+                .containsExactly(1);
+    }
+
+    @Test
+    @DisplayName("prefetch() genuinely runs concurrently — many features complete in roughly the time " +
+                 "of the slowest ONE, not the sum of all of them")
+    void prefetchRunsConcurrently() throws InterruptedException {
+        byte[] dbBytes = realDbBytes();
+        int featureCount = 8;
+        long perFeatureDelayMs = 150;
+        String[] features = new String[featureCount];
+        Map<String, byte[]> zips = new HashMap<>();
+        Map<String, String> pathMap = new HashMap<>();
+        for (int i = 0; i < featureCount; i++) {
+            features[i] = "feat-slow-" + i;
+            zips.put(features[i], zipOf(features[i], dbBytes, simpleMetadataJson(features[i])));
+            pathMap.put(features[i], "gs://bucket/" + features[i] + ".zip");
+        }
+        Set<String> distinctThreads = ConcurrentHashMap.newKeySet();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            distinctThreads.add(Thread.currentThread().toString());
+            try {
+                Thread.sleep(perFeatureDelayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            for (String f : features) {
+                if (path.contains(f)) return new ByteArrayInputStream(zips.get(f));
+            }
+            throw new IOException("no fixture for " + path);
+        };
+        HyperscanBundleLoader loader = new HyperscanBundleLoader(pathMap, streamer, 10);
+
+        long start = System.nanoTime();
+        loader.prefetch(List.of(features));
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+        assertThat(loader.cachedCount()).isEqualTo(featureCount);
+        assertThat(distinctThreads)
+                .as("each feature's simulated GCS read observed a DIFFERENT (virtual) thread — genuine concurrency")
+                .hasSize(featureCount);
+        assertThat(elapsedMs)
+                .as("8 features x 150ms would take ~1200ms serially — concurrent execution should stay well under that")
+                .isLessThan(perFeatureDelayMs * featureCount / 2);
     }
 }

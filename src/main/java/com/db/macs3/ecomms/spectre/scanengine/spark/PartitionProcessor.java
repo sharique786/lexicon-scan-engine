@@ -9,6 +9,7 @@ import com.db.macs3.ecomms.spectre.scanengine.gcs.GcsClient;
 import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.scanengine.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.scanengine.model.decision.MessageEvaluationResult;
+import com.db.macs3.ecomms.spectre.scanengine.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.FeatureHitSummaryRow;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.LexiconHitDetailRow;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.LexiconHitSummaryRow;
@@ -23,8 +24,10 @@ import org.slf4j.LoggerFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The {@code mapPartitions} function that turns one partition's joined
@@ -55,10 +58,30 @@ import java.util.Map;
  *
  * <p>Not independently executable-verified in this project's development
  * sandbox — see {@code GcsClient} class Javadoc.
+ *
+ * <h2>Bounded lookahead prefetch — not a full-partition materialisation</h2>
+ * <p>{@link #call} peeks at most {@link #PREFETCH_LOOKAHEAD_ROWS} rows ahead
+ * (a small, FIXED buffer) purely to discover which distinct features the
+ * START of this partition will need, so {@link HyperscanBundleLoader#prefetch}
+ * can warm their bundles CONCURRENTLY (see that method's Javadoc) instead of
+ * paying for each one's cold-cache GCS round-trip serially, one at a time,
+ * the way the first several messages in a partition otherwise would.
+ * Deliberately NOT a full-partition materialisation into a {@code List<Row>}:
+ * a partition can hold many thousands of messages, some individually large
+ * (big attachments) — buffering the WHOLE partition to compute a fully
+ * exhaustive distinct-feature set would work directly against the bounded,
+ * one-row-at-a-time memory footprint {@code mapPartitions}'s iterator-based
+ * contract is meant to provide, in exactly the "some messages can be very
+ * large" scenario this needs to stay safe under. The rest of the partition,
+ * beyond the lookahead window, is still processed by streaming the iterator
+ * exactly as before.
  */
 public final class PartitionProcessor implements MapPartitionsFunction<Row, MessageProcessingResult> {
 
     private static final Logger log = LoggerFactory.getLogger(PartitionProcessor.class);
+
+    /** See class Javadoc "Bounded lookahead prefetch" — deliberately small and fixed, not partition-sized. */
+    private static final int PREFETCH_LOOKAHEAD_ROWS = 200;
 
     private final org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast;
     private final Long maxAttachmentSizeBytes;
@@ -84,16 +107,47 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         // not re-fetch or re-serialize anything per partition/task.
         GcsClient gcsClient = new GcsClient();
         try (HyperscanBundleLoader bundleLoader = new HyperscanBundleLoader(
-                featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition)) {
+                     featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
+             FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes)) {
 
-            FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes);
-            List<MessageProcessingResult> results = new ArrayList<>();
-
-            while (partitionRows.hasNext()) {
+            // Bounded lookahead + concurrent prefetch — see class Javadoc. lookaheadBuffer holds
+            // at most PREFETCH_LOOKAHEAD_ROWS raw rows, never the whole partition.
+            List<Row> lookaheadBuffer = new ArrayList<>(PREFETCH_LOOKAHEAD_ROWS);
+            Set<String> distinctFeatures = new LinkedHashSet<>();
+            while (partitionRows.hasNext() && lookaheadBuffer.size() < PREFETCH_LOOKAHEAD_ROWS) {
                 Row row = partitionRows.next();
+                lookaheadBuffer.add(row);
+                collectDistinctFeatures(row, distinctFeatures);
+            }
+            bundleLoader.prefetch(distinctFeatures);
+
+            List<MessageProcessingResult> results = new ArrayList<>();
+            for (Row row : lookaheadBuffer) {
                 results.add(processOneRow(row, orchestrator));
             }
+            while (partitionRows.hasNext()) {
+                results.add(processOneRow(partitionRows.next(), orchestrator));
+            }
             return results.iterator();
+        }
+    }
+
+    /**
+     * Best-effort only (see {@code HyperscanBundleLoader.prefetch} class
+     * Javadoc): a malformed feature definition here is silently skipped —
+     * it will surface properly, with full per-message error isolation, when
+     * this row is actually processed by {@link #processOneRow} below.
+     */
+    private static void collectDistinctFeatures(Row row, Set<String> out) {
+        List<Row> featureRows = row.getList(row.fieldIndex("features"));
+        for (Row featureRow : featureRows) {
+            try {
+                String json = ViewRowConverter.fromRow(featureRow).featureDefinitionJson();
+                out.add(FeatureDefinition.parse(json).body().feature());
+            } catch (RuntimeException e) {
+                log.debug("Could not parse a feature definition during prefetch lookahead — "
+                        + "will be handled normally during real processing: {}", e.getMessage());
+            }
         }
     }
 
@@ -113,11 +167,11 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             DecisionTreeEvaluator.FeatureRowScanner scanner = orchestrator.scannerFor(message);
             MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate(message.messageId(), orderedGroups, scanner);
 
-            String processId = viewRows.get(0).processId();
+            String processId = viewRows.getFirst().processId();
             // pipelineExecId/createdBy are not view columns — carried through as extra columns
             // attached during the join stage (see LexiconScanEngineJob), not read from the view itself.
             String pipelineExecId = row.getAs("pipeline_exec_id_for_output");
-            String featureTaggingType = viewRows.get(0).featureTaggingType();
+            String featureTaggingType = viewRows.getFirst().featureTaggingType();
             String createdBy = row.getAs("created_by_for_output");
             Instant now = Instant.now();
 

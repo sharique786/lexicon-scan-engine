@@ -4,6 +4,7 @@ import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanScanService;
 import com.db.macs3.ecomms.spectre.scanengine.hyperscan.TermIdBuilder;
+import com.db.macs3.ecomms.spectre.scanengine.html.HtmlStrippingService;
 import com.db.macs3.ecomms.spectre.scanengine.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.scanengine.model.match.AreaMatch;
 import com.db.macs3.ecomms.spectre.scanengine.model.match.MatchArea;
@@ -16,6 +17,7 @@ import com.db.macs3.ecomms.spectre.scanengine.model.termmeta.TermExpressionMetad
 import com.db.macs3.ecomms.spectre.scanengine.model.termmeta.TermExpressionMetadata.TermEntry;
 import com.db.macs3.ecomms.spectre.scanengine.model.view.FeatureDecisionRow;
 import com.gliwka.hyperscan.wrapper.Database;
+import com.gliwka.hyperscan.wrapper.Scanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,13 +95,45 @@ import java.util.stream.Collectors;
  * consistency across all three services. A term only produces a
  * {@link TermMatchResult} when the required side is satisfied AND the
  * excluded side is not.
+ *
+ * <h2>Performance: one {@link Scanner}, and one HTML-strip pass, per message — never per feature</h2>
+ * <p>A message can legitimately be evaluated against dozens of applicable
+ * lexicon features (one {@link #scanRow} call each, all via the SAME
+ * {@link #scannerFor} closure). Two real, measured anti-patterns this class
+ * deliberately avoids, both scaling with (features × messages), not just
+ * messages — significant at "millions of messages" volume:
+ * <ul>
+ *   <li><b>Constructing a new {@code Scanner} per scan call.</b> The wrapper
+ *       library's own {@code Scanner} Javadoc: "you need one scanner
+ *       instance per CPU thread" (reused across every scan that thread ever
+ *       does) — it holds a native function-pointer callback and scratch
+ *       space, both real, capped, per-JVM-process native resources (a
+ *       hard limit of 256 live instances). This class owns exactly ONE
+ *       {@link Scanner} for its entire lifetime (one instance = one Spark
+ *       partition, matching Spark's own single-thread-per-task model) —
+ *       see {@link #close}.</li>
+ *   <li><b>Re-running {@code HtmlStrippingService.strip} per feature.</b>
+ *       Subject/body/attachment TEXT doesn't change across which feature is
+ *       being scanned — only the {@code Database} does. {@link #scannerFor}
+ *       strips every area's text EXACTLY ONCE per message
+ *       ({@link #precomputeAreaTexts}), and every {@link #scanRow} call for
+ *       that message reuses the same precomputed
+ *       {@link HtmlStrippingService.StripResult}s. Attachment
+ *       {@code cleanText} uses {@link HtmlStrippingService#identity} rather
+ *       than {@link HtmlStrippingService#strip} — see
+ *       {@code MessageAttachment} class Javadoc: it is already HTML-free by
+ *       the time it reaches this engine, so the real stripping algorithm
+ *       (and its {@code int[]} offset-map allocation) would be pure waste
+ *       on text that can legitimately be megabytes long.</li>
+ * </ul>
  */
-public final class FeatureScanOrchestrator {
+public final class FeatureScanOrchestrator implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(FeatureScanOrchestrator.class);
 
     private final HyperscanBundleLoader bundleLoader;
     private final Long maxAttachmentSizeBytes;
+    private final Scanner scanner = new Scanner();
 
     /**
      * @param bundleLoader              this partition's shared, cached zip-bundle loader — see
@@ -113,18 +147,66 @@ public final class FeatureScanOrchestrator {
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
     }
 
-    /** A {@link DecisionTreeEvaluator.FeatureRowScanner} bound to one message — see {@code processMessage}. */
+    /**
+     * A {@link DecisionTreeEvaluator.FeatureRowScanner} bound to one message —
+     * strips every area's text exactly once here (see class Javadoc), then
+     * reuses that across however many {@link #scanRow} calls the caller
+     * makes for this same message (one per applicable feature).
+     */
     public DecisionTreeEvaluator.FeatureRowScanner scannerFor(ScanMessage message) {
-        return row -> scanRow(row, message);
+        List<MessageAreaText> areaTexts = precomputeAreaTexts(message);
+        return row -> scanRow(row, areaTexts);
+    }
+
+    /** One area's text, stripped exactly once per message — see class Javadoc. */
+    private record MessageAreaText(MatchArea area, String attachmentId, String originalText,
+                                    HtmlStrippingService.StripResult stripResult) {
+    }
+
+    private List<MessageAreaText> precomputeAreaTexts(ScanMessage message) {
+        List<MessageAreaText> areaTexts = new ArrayList<>(2 + message.attachmentsOrEmpty().size());
+
+        String subject = message.content() == null ? null : message.content().subject();
+        if (subject != null && !subject.isBlank()) {
+            areaTexts.add(new MessageAreaText(MatchArea.SUBJECT, null, subject, HtmlStrippingService.strip(subject)));
+        }
+
+        String rawText = message.content() == null ? null : message.content().rawText();
+        if (rawText != null && !rawText.isBlank()) {
+            areaTexts.add(new MessageAreaText(MatchArea.MESSAGE_BODY, null, rawText, HtmlStrippingService.strip(rawText)));
+        }
+
+        for (MessageAttachment attachment : message.attachmentsOrEmpty()) {
+            if (!withinSizeLimit(attachment)) {
+                continue;
+            }
+            String cleanText = attachment.cleanText();
+            if (cleanText == null || cleanText.isBlank()) {
+                continue;
+            }
+            // identity(), not strip(): attachment cleanText is already HTML-free — see class Javadoc.
+            areaTexts.add(new MessageAreaText(MatchArea.ATTACHMENT, attachment.attachmentId(), cleanText,
+                    HtmlStrippingService.identity(cleanText)));
+        }
+        return areaTexts;
+    }
+
+    /** @return the scope constant (see {@code BqColumns.FeatureDefinitionJson}) a given area is gated by. */
+    private static String scopeFor(MatchArea area) {
+        return switch (area) {
+            case SUBJECT -> BqColumns.FeatureDefinitionJson.SCOPE_SUBJECT;
+            case MESSAGE_BODY -> BqColumns.FeatureDefinitionJson.SCOPE_MESSAGE_BODY;
+            case ATTACHMENT -> BqColumns.FeatureDefinitionJson.SCOPE_ATTACHMENT;
+        };
     }
 
     /**
-     * Scans one row's lexicon feature against every area its scope covers,
-     * merges raw matches for the SAME expression id found in more than one
-     * area, then resolves and evaluates every distinct term referenced —
-     * see class Javadoc.
+     * Scans one row's lexicon feature against every precomputed area its
+     * scope covers, merges raw matches for the SAME expression id found in
+     * more than one area, then resolves and evaluates every distinct term
+     * referenced — see class Javadoc.
      */
-    private List<TermMatchResult> scanRow(FeatureDecisionRow row, ScanMessage message) {
+    private List<TermMatchResult> scanRow(FeatureDecisionRow row, List<MessageAreaText> areaTexts) {
         FeatureDefinition definition = FeatureDefinition.parse(row.featureDefinitionJson());
         String feature = definition.body().feature();
         HyperscanBundleLoader.LexiconBundle bundle = bundleLoader.load(feature);
@@ -134,31 +216,14 @@ public final class FeatureScanOrchestrator {
         List<RawExpressionMatch> allRawMatches = new ArrayList<>();
         List<AreaScanContext> areaScans = new ArrayList<>();
 
-        if (definition.body().hasScope(BqColumns.FeatureDefinitionJson.SCOPE_SUBJECT)) {
-            String subject = message.content() == null ? null : message.content().subject();
-            List<RawExpressionMatch> matches = HyperscanScanService.scan(subject, database, MatchArea.SUBJECT, null);
-            allRawMatches.addAll(matches);
-            areaScans.add(new AreaScanContext(MatchArea.SUBJECT, null, subject, matches));
-        }
-
-        if (definition.body().hasScope(BqColumns.FeatureDefinitionJson.SCOPE_MESSAGE_BODY)) {
-            String rawText = message.content() == null ? null : message.content().rawText();
-            List<RawExpressionMatch> matches = HyperscanScanService.scan(rawText, database, MatchArea.MESSAGE_BODY, null);
-            allRawMatches.addAll(matches);
-            areaScans.add(new AreaScanContext(MatchArea.MESSAGE_BODY, null, rawText, matches));
-        }
-
-        if (definition.body().hasScope(BqColumns.FeatureDefinitionJson.SCOPE_ATTACHMENT)) {
-            for (MessageAttachment attachment : message.attachmentsOrEmpty()) {
-                if (!withinSizeLimit(attachment)) {
-                    continue;
-                }
-                List<RawExpressionMatch> matches = HyperscanScanService.scan(
-                        attachment.cleanText(), database, MatchArea.ATTACHMENT, attachment.attachmentId());
-                allRawMatches.addAll(matches);
-                areaScans.add(new AreaScanContext(MatchArea.ATTACHMENT, attachment.attachmentId(),
-                        attachment.cleanText(), matches));
+        for (MessageAreaText areaText : areaTexts) {
+            if (!definition.body().hasScope(scopeFor(areaText.area()))) {
+                continue;
             }
+            List<RawExpressionMatch> matches = HyperscanScanService.scan(
+                    areaText.stripResult(), database, areaText.area(), areaText.attachmentId(), scanner);
+            allRawMatches.addAll(matches);
+            areaScans.add(new AreaScanContext(areaText.area(), areaText.attachmentId(), areaText.originalText(), matches));
         }
 
         return resolveAndEvaluate(feature, metadata, allRawMatches, areaScans);
@@ -176,6 +241,17 @@ public final class FeatureScanOrchestrator {
      */
     private record AreaScanContext(MatchArea area, String attachmentId, String originalText,
                                     List<RawExpressionMatch> rawMatches) {
+    }
+
+    /**
+     * Releases this instance's single {@link Scanner} — call once, when this
+     * partition's processing is entirely done (see {@code PartitionProcessor}'s
+     * try-with-resources block). Never close and keep using the same
+     * instance for more messages afterward.
+     */
+    @Override
+    public void close() {
+        scanner.close();
     }
 
     private boolean withinSizeLimit(MessageAttachment attachment) {

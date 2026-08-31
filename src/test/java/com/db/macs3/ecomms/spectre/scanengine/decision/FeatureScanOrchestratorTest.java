@@ -53,6 +53,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Compile Service now writes one zip per feature instead of two separate
  * files), including real {@code COMBINATION}/{@code QUIET} semantics for
  * the decomposed-term tests below.
+ *
+ * <h2>{@code FeatureScanOrchestrator} is now {@code AutoCloseable}</h2>
+ * <p>It owns a single, real, native {@code Scanner} for its whole lifetime
+ * (see that class's own Javadoc "Performance" section — reused across every
+ * scan call rather than constructed per call) — every test below opens one
+ * via try-with-resources so its native scratch/callback are released
+ * promptly rather than relying on the JVM exiting at the end of the suite.
  */
 @DisplayName("FeatureScanOrchestrator")
 class FeatureScanOrchestratorTest {
@@ -185,20 +192,21 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_bomb-1.zip", dbBytes,
                 wrapResults(simpleTermJson(feature, 1, "bomb")));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
-                List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
-                new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
+                    new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow bodyOnlyRow = row("1", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
+            FeatureDecisionRow bodyOnlyRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).matches()).hasSize(1);
-        assertThat(results.get(0).matches().get(0).area()).isEqualTo(MatchArea.MESSAGE_BODY);
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).matches()).hasSize(1);
+            assertThat(results.get(0).matches().get(0).area()).isEqualTo(MatchArea.MESSAGE_BODY);
+        }
     }
 
     @Test
@@ -210,24 +218,25 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_bomb-2.zip", dbBytes,
                 wrapResults(simpleTermJson(feature, 7, "bomb")));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
-                List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
-                new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
+                    new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow allScopeRow = row("2", feature, defJson(feature, "subject", "Message Body", "Attachment"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(allScopeRow);
+            FeatureDecisionRow allScopeRow = row("2", feature, defJson(feature, "subject", "Message Body", "Attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(allScopeRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).matches()).hasSize(3);
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::7");
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).matches()).hasSize(3);
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::7");
 
-        Set<MatchArea> areas = new HashSet<>();
-        for (var m : results.get(0).matches()) areas.add(m.area());
-        assertThat(areas).hasSize(3);
+            Set<MatchArea> areas = new HashSet<>();
+            for (var m : results.get(0).matches()) areas.add(m.area());
+            assertThat(areas).hasSize(3);
+        }
     }
 
     @Test
@@ -240,19 +249,20 @@ class FeatureScanOrchestratorTest {
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_bomb-3.zip", dbBytes,
                 wrapResults(simpleTermJson(feature, 1, "bomb")));
 
-        FeatureScanOrchestrator limited = new FeatureScanOrchestrator(loader, 5L); // 5-byte limit
-
         ScanMessage message = new ScanMessage("msg-101",
                 new MessageSource("chat", "src", "sys", "conv-1"),
                 new MessageContent(null, null, null, null),
                 List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in a long attachment")),
                 new MessageProcessing("2026-08-16", "10"), "ds1", true);
-
         FeatureDecisionRow attachOnlyRow = row("3", feature, defJson(feature, "Attachment"));
-        assertThat(limited.scannerFor(message).scan(attachOnlyRow)).isEmpty();
 
-        FeatureScanOrchestrator unlimited = new FeatureScanOrchestrator(loader, null);
-        assertThat(unlimited.scannerFor(message).scan(attachOnlyRow)).hasSize(1);
+        try (FeatureScanOrchestrator limited = new FeatureScanOrchestrator(loader, 5L)) { // 5-byte limit
+            assertThat(limited.scannerFor(message).scan(attachOnlyRow)).isEmpty();
+        }
+
+        try (FeatureScanOrchestrator unlimited = new FeatureScanOrchestrator(loader, null)) {
+            assertThat(unlimited.scannerFor(message).scan(attachOnlyRow)).hasSize(1);
+        }
     }
 
     @Test
@@ -265,19 +275,20 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_bomb-4.zip", dbBytes,
                 wrapResults(simpleTermJson(feature, 1, "bomb")));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "there is a bomb in the body", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "there is a bomb in the body", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow bodyOnlyRow = row("4", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
+            FeatureDecisionRow bodyOnlyRow = row("4", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termRegexPattern()).isEqualTo("bomb");
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::1");
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termRegexPattern()).isEqualTo("bomb");
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::1");
+        }
     }
 
     @Test
@@ -291,18 +302,19 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_bomb-5.zip", dbBytes,
                 wrapResults(simpleTermJson(feature, 47, "insider")));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "insider trading", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "insider trading", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow decisionRow = row("5", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+            FeatureDecisionRow decisionRow = row("5", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::47");
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::47");
+        }
     }
 
     // ── REGRESSION: the confirmed AND NOT gaps this fix addresses ──────────────
@@ -320,19 +332,20 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_andnot-1.zip", dbBytes,
                 wrapResults(andNotTermJson(feature, 3, List.of("insider"), List.of(5), List.of("disclosed"), List.of(6))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "insider trading occurred and was later disclosed to the board", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "insider trading occurred and was later disclosed to the board", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow decisionRow = row("6", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+            FeatureDecisionRow decisionRow = row("6", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results)
-                .as("required present AND excluded ALSO present -> term must NOT appear in results")
-                .isEmpty();
+            assertThat(results)
+                    .as("required present AND excluded ALSO present -> term must NOT appear in results")
+                    .isEmpty();
+        }
     }
 
     @Test
@@ -346,21 +359,22 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_andnot-2.zip", dbBytes,
                 wrapResults(andNotTermJson(feature, 3, List.of("insider"), List.of(5), List.of("disclosed"), List.of(6))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "insider trading occurred yesterday", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "insider trading occurred yesterday", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow decisionRow = row("7", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+            FeatureDecisionRow decisionRow = row("7", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termId())
-                .as("must be the term's OWN number (3), never a raw auxiliary id like 5 or 6")
-                .isEqualTo(feature + "::3");
-        assertThat(results.get(0).matches().get(0).span().matchedText()).isEqualTo("insider");
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termId())
+                    .as("must be the term's OWN number (3), never a raw auxiliary id like 5 or 6")
+                    .isEqualTo(feature + "::3");
+            assertThat(results.get(0).matches().get(0).span().matchedText()).isEqualTo("insider");
+        }
     }
 
     @Test
@@ -378,26 +392,27 @@ class FeatureScanOrchestratorTest {
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_andnot-3.zip", dbBytes,
                 wrapResults(andNotTermJson(feature, 9, List.of("alpha", "beta", "gamma"), List.of(10, 11, 12),
                         List.of("excluded"), List.of(13))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        FeatureDecisionRow decisionRow = row("8", feature, defJson(feature, "Message Body"));
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            FeatureDecisionRow decisionRow = row("8", feature, defJson(feature, "Message Body"));
 
-        // Only 2 of 3 required leaves present -> required side NOT satisfied -> no result at all.
-        ScanMessage partialMessage = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "alpha and beta but not the third", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        assertThat(orchestrator.scannerFor(partialMessage).scan(decisionRow)).isEmpty();
+            // Only 2 of 3 required leaves present -> required side NOT satisfied -> no result at all.
+            ScanMessage partialMessage = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "alpha and beta but not the third", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(partialMessage).scan(decisionRow)).isEmpty();
 
-        // All 3 required leaves present, excluded absent -> matches, correct term_id.
-        ScanMessage fullMessage = new ScanMessage("msg-102",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "alpha beta gamma all present here", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        List<TermMatchResult> results = orchestrator.scannerFor(fullMessage).scan(decisionRow);
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::9");
-        assertThat(results.get(0).matches()).hasSize(3); // one highlight per required leaf
+            // All 3 required leaves present, excluded absent -> matches, correct term_id.
+            ScanMessage fullMessage = new ScanMessage("msg-102",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "alpha beta gamma all present here", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            List<TermMatchResult> results = orchestrator.scannerFor(fullMessage).scan(decisionRow);
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::9");
+            assertThat(results.get(0).matches()).hasSize(3); // one highlight per required leaf
+        }
     }
 
     @Test
@@ -414,21 +429,22 @@ class FeatureScanOrchestratorTest {
 
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_decomp-1.zip", dbBytes,
                 wrapResults(simpleTermJson(feature, 2, "alpha", "beta", "gamma")));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "alpha beta gamma present", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "alpha beta gamma present", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow decisionRow = row("9", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+            FeatureDecisionRow decisionRow = row("9", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termRegexPattern())
-                .as("must NOT be the raw, unreadable combination formula")
-                .doesNotContain("(10&11&12)");
-        assertThat(results.get(0).termRegexPattern()).contains("alpha");
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termRegexPattern())
+                    .as("must NOT be the raw, unreadable combination formula")
+                    .doesNotContain("(10&11&12)");
+            assertThat(results.get(0).termRegexPattern()).contains("alpha");
+        }
     }
 
     @Test
@@ -445,21 +461,22 @@ class FeatureScanOrchestratorTest {
                 wrapResults(
                         simpleTermJson(feature, 1, "simple term"),
                         andNotTermJson(feature, 4, List.of("required"), List.of(20), List.of("excluded"), List.of(21))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        // "simple term" and "required" both present, "excluded" absent -> BOTH terms match.
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "here is a simple term and also required", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            // "simple term" and "required" both present, "excluded" absent -> BOTH terms match.
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "here is a simple term and also required", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
 
-        FeatureDecisionRow decisionRow = row("10", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+            FeatureDecisionRow decisionRow = row("10", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results).hasSize(2);
-        Set<String> termIds = new HashSet<>();
-        for (TermMatchResult r : results) termIds.add(r.termId());
-        assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::4");
+            assertThat(results).hasSize(2);
+            Set<String> termIds = new HashSet<>();
+            for (TermMatchResult r : results) termIds.add(r.termId());
+            assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::4");
+        }
     }
 
     // ── resolvedPatterns terms: NEAR / FOLLOWEDBY / AND NOT, new schema ────────
@@ -480,28 +497,30 @@ class FeatureScanOrchestratorTest {
                 wrapResults(resolvedPatternsChainTermJson(feature, 1,
                         List.of("manipulate", "(?:price|spread|stock)"),
                         "manipulate NEAR{5} (?:price|spread|stock)", 1, List.of(7, 8))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
-        FeatureDecisionRow decisionRow = row("11", feature, defJson(feature, "Message Body"));
 
-        ScanMessage nearMessage = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "we manipulate the closing price today", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        List<TermMatchResult> results = orchestrator.scannerFor(nearMessage).scan(decisionRow);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            FeatureDecisionRow decisionRow = row("11", feature, defJson(feature, "Message Body"));
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::1");
-        assertThat(results.get(0).matches()).hasSize(1);
-        assertThat(results.get(0).matches().get(0).area()).isEqualTo(MatchArea.MESSAGE_BODY);
+            ScanMessage nearMessage = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "we manipulate the closing price today", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            List<TermMatchResult> results = orchestrator.scannerFor(nearMessage).scan(decisionRow);
 
-        // Both leaves present -> native COMBINATION still fires -> but more than 5 words apart ->
-        // the real per-area regex distance check must reject it.
-        ScanMessage farMessage = new ScanMessage("msg-102",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null,
-                        "manipulate one two three four five six seven eight nine ten price", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        assertThat(orchestrator.scannerFor(farMessage).scan(decisionRow)).isEmpty();
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::1");
+            assertThat(results.get(0).matches()).hasSize(1);
+            assertThat(results.get(0).matches().get(0).area()).isEqualTo(MatchArea.MESSAGE_BODY);
+
+            // Both leaves present -> native COMBINATION still fires -> but more than 5 words apart ->
+            // the real per-area regex distance check must reject it.
+            ScanMessage farMessage = new ScanMessage("msg-102",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null,
+                            "manipulate one two three four five six seven eight nine ten price", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(farMessage).scan(decisionRow)).isEmpty();
+        }
     }
 
     @Test
@@ -519,17 +538,18 @@ class FeatureScanOrchestratorTest {
                 wrapResults(resolvedPatternsChainTermJson(feature, 6,
                         List.of("avoidnow", "frontrun", "danger"),
                         "avoidnow FOLLOWEDBY{4} frontrun FOLLOWEDBY{4} danger", 6, List.of(9, 10, 11))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "please avoidnow any frontrun of the danger zone", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        FeatureDecisionRow decisionRow = row("12", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "please avoidnow any frontrun of the danger zone", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            FeatureDecisionRow decisionRow = row("12", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::6");
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::6");
+        }
     }
 
     @Test
@@ -548,30 +568,32 @@ class FeatureScanOrchestratorTest {
             """.formatted(feature);
         HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_andnot-resolved-1.zip", dbBytes,
                 wrapResults(termJson));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
-        FeatureDecisionRow decisionRow = row("13", feature, defJson(feature, "Message Body"));
 
-        ScanMessage onlyExcluded = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "this message has exclleaf only", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        assertThat(orchestrator.scannerFor(onlyExcluded).scan(decisionRow)).isEmpty();
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            FeatureDecisionRow decisionRow = row("13", feature, defJson(feature, "Message Body"));
 
-        ScanMessage onlyRequired = new ScanMessage("msg-102",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "this message has reqleaf only", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        List<TermMatchResult> results = orchestrator.scannerFor(onlyRequired).scan(decisionRow);
-        assertThat(results).hasSize(1);
-        assertThat(results.get(0).termId()).isEqualTo(feature + "::7");
+            ScanMessage onlyExcluded = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "this message has exclleaf only", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(onlyExcluded).scan(decisionRow)).isEmpty();
 
-        ScanMessage both = new ScanMessage("msg-103",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "this message has reqleaf and exclleaf both", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        assertThat(orchestrator.scannerFor(both).scan(decisionRow))
-                .as("required present AND excluded ALSO present -> term must NOT appear in results")
-                .isEmpty();
+            ScanMessage onlyRequired = new ScanMessage("msg-102",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "this message has reqleaf only", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            List<TermMatchResult> results = orchestrator.scannerFor(onlyRequired).scan(decisionRow);
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).termId()).isEqualTo(feature + "::7");
+
+            ScanMessage both = new ScanMessage("msg-103",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "this message has reqleaf and exclleaf both", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(both).scan(decisionRow))
+                    .as("required present AND excluded ALSO present -> term must NOT appear in results")
+                    .isEmpty();
+        }
     }
 
     @Test
@@ -591,18 +613,19 @@ class FeatureScanOrchestratorTest {
                         resolvedPatternsChainTermJson(feature, 2,
                                 List.of("manipulate", "(?:price|spread|stock)"),
                                 "manipulate NEAR{5} (?:price|spread|stock)", 2, List.of(7, 8))));
-        FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null);
 
-        ScanMessage message = new ScanMessage("msg-101",
-                new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, "legacyword here, and manipulate the price too", null, null),
-                List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
-        FeatureDecisionRow decisionRow = row("14", feature, defJson(feature, "Message Body"));
-        List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "legacyword here, and manipulate the price too", null, null),
+                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+            FeatureDecisionRow decisionRow = row("14", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
-        assertThat(results).hasSize(2);
-        Set<String> termIds = new HashSet<>();
-        for (TermMatchResult r : results) termIds.add(r.termId());
-        assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::2");
+            assertThat(results).hasSize(2);
+            Set<String> termIds = new HashSet<>();
+            for (TermMatchResult r : results) termIds.add(r.termId());
+            assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::2");
+        }
     }
 }

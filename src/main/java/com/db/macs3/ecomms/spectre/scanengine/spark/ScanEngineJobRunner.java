@@ -20,6 +20,7 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RuntimeConfig;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 import org.slf4j.Logger;
@@ -118,7 +119,16 @@ public class ScanEngineJobRunner {
         BqTableConfig tableConfig = BqTableConfig.parse(
                 new ByteArrayInputStream(gcsClient.readTextFile(args[1]).getBytes(StandardCharsets.UTF_8)));
 
-        SparkSession spark = SparkSession.builder().appName("lexicon-scan-engine").getOrCreate();
+        // spark.serializer is a "static" config — only takes effect if set before the
+        // SparkContext is actually constructed, via SparkSession.builder().config(...), never
+        // via spark.conf().set(...) afterward. Kryo speeds up broadcast/shuffle serialisation
+        // generally (see applyJobSpecificSparkConf's own Javadoc for why this job does not rely
+        // on the shared cluster's own spark-defaults.conf for its critical settings).
+        SparkSession spark = SparkSession.builder()
+                .appName("lexicon-scan-engine")
+                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                .getOrCreate();
+        applyJobSpecificSparkConf(spark);
 
         Instant jobStart = Instant.now();
         writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, null, BqColumns.JobStatus.IN_PROGRESS, null, null);
@@ -133,6 +143,60 @@ public class ScanEngineJobRunner {
                     BqColumns.JobStatus.FAILED, "0", e.toString());
             throw e;
         }
+    }
+
+    /**
+     * Sets this job's OWN critical performance/skew-handling configs
+     * explicitly, rather than trusting the shared Dataproc cluster's
+     * {@code spark-defaults.conf} to already suit this specific workload —
+     * see README "Performance & scalability" for the full reasoning. On a
+     * cluster shared with other tenants, global defaults reflect whatever
+     * mix of OTHER jobs has driven them, not this job's own two independent
+     * skew sources (a single message's attachment text can be far larger
+     * than the median; a single message's applicable-lexicon-feature count
+     * can also be far larger than the median, independently of attachment
+     * size) — every setting below is a per-{@code SparkSession} RUNTIME
+     * config, safe to set here (unlike {@code spark.serializer}, a "static"
+     * config that must be set on the builder before {@code getOrCreate()} —
+     * see the caller).
+     */
+    private void applyJobSpecificSparkConf(SparkSession spark) {
+        RuntimeConfig conf = spark.conf();
+
+        // AQE + skew-join splitting: on by default since Spark 3.2, but never assumed here —
+        // this job's correctness/performance under skew depends on it, so it is asserted
+        // explicitly rather than hoped for.
+        conf.set("spark.sql.adaptive.enabled", "true");
+        conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true");
+        conf.set("spark.sql.adaptive.skewJoin.enabled", "true");
+        // Tightened from Spark's own defaults (factor 5, 256MB threshold): a single message
+        // with an unusually large attachment can dwarf the median shuffle-partition size by
+        // far more than 5x while still being one real, unsplittable row — the default
+        // threshold can under-react to exactly this job's specific skew shape. Reasoned
+        // defaults, not verified against real production message-size distributions — treat
+        // as a starting point to monitor and adjust, per this job's existing tuning philosophy.
+        conf.set("spark.sql.adaptive.skewJoin.skewedPartitionFactor", "3");
+        conf.set("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes", "128m");
+        conf.set("spark.sql.adaptive.advisoryPartitionSizeInBytes", "64m");
+
+        // spark.sql.shuffle.partitions: Spark's own hardcoded default (200) has no relationship
+        // to how many executor cores THIS run actually has on a shared, dynamically-allocated
+        // cluster — computed here relative to the driver's own view of available parallelism at
+        // job start instead, floored at 200 so a slow dynamic-allocation ramp-up at startup
+        // never produces an under-parallelised shuffle. AQE's coalescePartitions still merges
+        // this back down post-shuffle as actual data volume allows.
+        int defaultParallelism = spark.sparkContext().defaultParallelism();
+        conf.set("spark.sql.shuffle.partitions", String.valueOf(Math.max(200, defaultParallelism * 3)));
+
+        // Smaller AVRO read-side partitions: the default 128MB max-partition-bytes groups
+        // messages into a read partition purely by source-file byte range, with no awareness
+        // that one of those bytes might belong to a single message's giant attachment — a
+        // smaller ceiling here means fewer OTHER messages get bundled alongside a large one
+        // into the same initial partition, reducing (not eliminating — a single giant record
+        // is still a single giant record) the odds that one partition's read+decode cost
+        // dominates the whole stage's wall-clock time before AQE's post-shuffle rebalancing
+        // even has a chance to help.
+        conf.set("spark.sql.files.maxPartitionBytes", "67108864"); // 64MB
     }
 
     private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig) {
@@ -182,7 +246,7 @@ public class ScanEngineJobRunner {
             perDatasetMessages.add(MessageAvroReader.readDataset(
                     spark, gcsClient, messageBucket, dd.datasetId(), relevantMessageIds));
         }
-        Dataset<Row> messages = perDatasetMessages.get(0);
+        Dataset<Row> messages = perDatasetMessages.getFirst();
         for (int i = 1; i < perDatasetMessages.size(); i++) {
             messages = messages.unionByName(perDatasetMessages.get(i), true);
         }

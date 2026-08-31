@@ -4,6 +4,8 @@ import com.db.macs3.ecomms.spectre.scanengine.gcs.HyperscanPathResolver;
 import com.db.macs3.ecomms.spectre.scanengine.model.termmeta.TermExpressionMetadata;
 import com.db.macs3.ecomms.spectre.scanengine.util.LruCache;
 import com.gliwka.hyperscan.wrapper.Database;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -11,8 +13,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -48,8 +56,39 @@ import java.util.zip.ZipInputStream;
  * {@code mapPartitions} closure, not a {@code map} closure — so the cache is
  * genuinely reused across every message in that partition. See
  * {@code PartitionProcessor}.
+ *
+ * <h2>Concurrent prefetch (JDK 21 virtual threads) — safe despite a non-thread-safe cache</h2>
+ * <p>{@link #load}/{@link #loadDatabase}/{@link #loadMetadata} are NOT
+ * thread-safe (backed by {@link LruCache}, which documents the same
+ * constraint) — matching this class's own single-threaded, one-per-partition
+ * usage contract. {@link #prefetch} still safely warms the cache
+ * CONCURRENTLY for a batch of distinct features, via a two-phase design that
+ * never lets more than one thread touch the cache itself:
+ * <ol>
+ *   <li>The expensive, cache-INDEPENDENT part — {@link #loadFresh} (GCS
+ *       download, zip extraction, {@code Database.load},
+ *       {@code TermExpressionMetadata.parse}) — runs concurrently, one
+ *       virtual thread per feature, via {@link Executors#newVirtualThreadPerTaskExecutor()}.
+ *       Virtual threads are the right tool here specifically because this
+ *       work is I/O-BOUND (waiting on GCS network reads): many concurrent
+ *       virtual threads blocked on I/O consume no executor CPU while
+ *       waiting, so this does not compete for the Spark task's allocated
+ *       CPU core(s) — a real consideration on a SHARED Dataproc cluster,
+ *       where grabbing extra CPU beyond what YARN allocated this job would
+ *       be poor multi-tenant behaviour. (CPU-bound Hyperscan scanning
+ *       itself is deliberately NOT parallelised this way — see
+ *       {@code FeatureScanOrchestrator} class Javadoc.)</li>
+ *   <li>Once every concurrent load has completed (or failed) and every
+ *       virtual thread has been joined, inserting the results into
+ *       {@link #cache} happens SEQUENTIALLY, entirely on the calling
+ *       thread — the only code path that ever touches the cache is this
+ *       single-threaded loop, so {@link LruCache}'s own non-thread-safety
+ *       is never actually exercised concurrently.</li>
+ * </ol>
  */
 public final class HyperscanBundleLoader implements AutoCloseable {
+
+    private static final Logger log = LoggerFactory.getLogger(HyperscanBundleLoader.class);
 
     /**
      * Streams a GCS object's bytes — injected so this class's caching/
@@ -105,6 +144,65 @@ public final class HyperscanBundleLoader implements AutoCloseable {
     /** Convenience for callers that only need the term metadata — see {@link #load}. */
     public TermExpressionMetadata loadMetadata(String feature) {
         return load(feature).metadata();
+    }
+
+    /**
+     * Concurrently warms the cache for up to {@code cache.maxSize()} distinct
+     * features (first-seen order, i.e. {@code features}' own iteration
+     * order — callers should pass features in roughly the order they'll
+     * actually be needed, e.g. first-encountered-row order within a
+     * partition) — see class Javadoc "Concurrent prefetch" for the
+     * concurrency design and why it's safe. Capped at the cache's own bound
+     * so this never does concurrent work for entries that would just be
+     * evicted before ever being consulted.
+     *
+     * <p>Best-effort only: a feature that fails to prefetch (bad path,
+     * corrupt zip, transient GCS error) is silently skipped here and simply
+     * loads synchronously — with its real exception surfacing normally —
+     * the first time {@link #load} actually needs it. Prefetching must never
+     * be why a partition fails that would otherwise have succeeded.
+     *
+     * @param features   candidate features to warm — duplicates and features already
+     *                    cached are harmless (deduplicated / naturally re-verified here)
+     */
+    public void prefetch(Collection<String> features) {
+        if (features == null || features.isEmpty()) {
+            return;
+        }
+        List<String> distinct = features.stream().distinct().limit(cache.maxSize()).toList();
+        if (distinct.isEmpty()) {
+            return;
+        }
+
+        Map<String, LexiconBundle> loaded = new LinkedHashMap<>();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Map<String, Future<LexiconBundle>> futures = new LinkedHashMap<>();
+            for (String feature : distinct) {
+                futures.put(feature, executor.submit(() -> loadFresh(feature)));
+            }
+            for (Map.Entry<String, Future<LexiconBundle>> entry : futures.entrySet()) {
+                try {
+                    loaded.put(entry.getKey(), entry.getValue().get());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.debug("Prefetch interrupted for feature '{}' — will load synchronously when actually needed",
+                            entry.getKey());
+                } catch (ExecutionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    log.debug("Prefetch failed for feature '{}' — will retry synchronously when actually needed: {}",
+                            entry.getKey(), cause.getMessage());
+                }
+            }
+        }
+
+        // Sequential insertion, entirely on the calling thread — see class Javadoc for why this
+        // is the only place this method ever touches the (deliberately non-thread-safe) cache.
+        for (Map.Entry<String, LexiconBundle> entry : loaded.entrySet()) {
+            LexiconBundle bundle = entry.getValue();
+            cache.computeIfAbsent(entry.getKey(), f -> bundle);
+        }
+        log.debug("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
+                loaded.size(), distinct.size());
     }
 
     private LexiconBundle loadFresh(String feature) {

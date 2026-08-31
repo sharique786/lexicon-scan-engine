@@ -46,11 +46,10 @@ public class ScanEngineApplication {
      */
     public static void main(String[] args) throws Exception {
         ConfigurableApplicationContext context = SpringApplication.run(ScanEngineApplication.class, args);
-        ScanEngineJobRunner runner = context.getBean(ScanEngineJobRunner.class);
-        try {
+
+        try (context) {
+            ScanEngineJobRunner runner = context.getBean(ScanEngineJobRunner.class);
             runner.run(args);
-        } finally {
-            context.close();
         }
     }
 }
