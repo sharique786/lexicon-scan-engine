@@ -5,11 +5,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Flattened, Spark-serialisable representation of one AVRO message record —
- * built from the confirmed AVRO schema (see project README "AVRO Schema"
- * section for the full source shape). Only the fields this engine actually
- * reads are carried; {@code message.metadata} is intentionally NOT modelled
- * here since nothing in this engine's processing needs it.
+ * Flattened, Spark-serialisable representation of one AVRO message record.
+ * Only the fields this engine actually reads are carried;
+ * {@code message.metadata} is intentionally NOT modelled here since nothing
+ * in this engine's processing needs it.
  *
  * <h2>Which text field is scanned</h2>
  * <p>{@link MessageContent} carries both {@code rawText} and {@code cleanText}.
@@ -17,13 +16,9 @@ import java.util.Objects;
  * that class for when/why HTML stripping applies) rather than
  * {@code cleanText}, because {@code rawText} is the ORIGINAL text whose
  * character positions a match's {@code startCharIndex}/{@code endCharIndex}
- * must be reported against — see requirement 1.i's worked example. {@code
- * cleanText} is carried through for completeness/parity with the source
- * schema but is not itself scanned by this engine.
- *
- * <p>Java 11 class (not a record — this project targets Java 11) exposing
- * the same accessor-method-per-field shape a record would, so every call
- * site reads identically to before.
+ * must be reported against. {@code cleanText} is carried through for
+ * completeness/parity with the source schema but is not itself scanned by
+ * this engine.
  */
 public final class ScanMessage implements Serializable {
 
@@ -78,8 +73,12 @@ public final class ScanMessage implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof ScanMessage)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof ScanMessage)) {
+            return false;
+        }
         ScanMessage other = (ScanMessage) o;
         return restricted == other.restricted
                 && Objects.equals(messageId, other.messageId)

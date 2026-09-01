@@ -7,19 +7,16 @@ import java.util.Objects;
 
 /**
  * One row of {@code pipeline_stage_audit} — a stage-level lifecycle record.
- * Requirement 3.a: written once with {@code jobStatus = IN_PROGRESS} when
- * the job starts, and again with {@code SUCCESS}/{@code FAILED} on
- * completion. Two writes, two rows (this table accumulates history rather
- * than being updated in place, matching BigQuery's append-oriented write
- * model).
+ * Written once with {@code jobStatus = IN_PROGRESS} when the job starts, and
+ * again with {@code SUCCESS}/{@code FAILED} on completion. Two writes, two
+ * rows (this table accumulates history rather than being updated in place,
+ * matching BigQuery's append-oriented write model).
  *
  * <p>Field name note: {@link #pipelineExecId} maps to the BQ column
  * literally named {@code pipelinex_exec_id} (with an "x") — see
  * {@code BqColumns.PipelineStageAudit#PIPELINE_EXEC_ID}; kept verbatim from
  * the delivered schema rather than "corrected", since it persisted across a
  * schema revision and is therefore treated as intentional.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class PipelineStageAuditRow implements Serializable {
 
@@ -97,8 +94,12 @@ public final class PipelineStageAuditRow implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof PipelineStageAuditRow)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof PipelineStageAuditRow)) {
+            return false;
+        }
         PipelineStageAuditRow other = (PipelineStageAuditRow) o;
         return Objects.equals(processId, other.processId) && Objects.equals(triggerType, other.triggerType)
                 && Objects.equals(pipelineExecId, other.pipelineExecId) && Objects.equals(stageName, other.stageName)

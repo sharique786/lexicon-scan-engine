@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.view;
 
+import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
+
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -13,10 +15,6 @@ import java.util.Objects;
  * <p>{@link Serializable} — this class travels inside Spark's shuffle/join
  * machinery (grouped by {@code messageId} against the AVRO message dataset),
  * so every field must itself be serialisable; all fields here are.
- *
- * <p>Java 11 class (not a record — this project targets Java 11) exposing
- * the same accessor-method-per-field shape a record would, so every call
- * site reads identically to before.
  */
 public final class FeatureDecisionRow implements Serializable {
 
@@ -101,13 +99,17 @@ public final class FeatureDecisionRow implements Serializable {
 
     /** @return true iff {@link #isNoiseReduction} is exactly {@code "Y"} (case-sensitive, matches upstream). */
     public boolean isNoiseReductionFlag() {
-        return "Y".equals(isNoiseReduction);
+        return BqColumns.YES.equals(isNoiseReduction);
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof FeatureDecisionRow)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof FeatureDecisionRow)) {
+            return false;
+        }
         FeatureDecisionRow other = (FeatureDecisionRow) o;
         return Objects.equals(processId, other.processId)
                 && Objects.equals(messageId, other.messageId)

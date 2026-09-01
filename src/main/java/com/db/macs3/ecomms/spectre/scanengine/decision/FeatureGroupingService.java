@@ -14,7 +14,7 @@ import java.util.Map;
  * Groups one message's {@link FeatureDecisionRow}s (all sharing one
  * {@code messageId}) by {@code featureId} into {@link FeatureGroup}s, in the
  * order {@code DecisionTreeEvaluator} must process them: NoiseReduction
- * groups first, then Disclaimer, then everything else (requirement 2.f).
+ * groups first, then Disclaimer, then everything else.
  *
  * <p>This class is pure/Spark-agnostic — it operates on plain Java lists, so
  * it can be unit tested directly and called identically whether the caller
@@ -74,7 +74,7 @@ public final class FeatureGroupingService {
             throw new IllegalArgumentException(
                     "featureId=" + featureId + " has " + members.size()
                     + " member rows but no operator value — an operator is required to combine "
-                    + "multiple sub-features (see requirement 2.g's decision matrix).");
+                    + "multiple sub-features.");
         }
 
         return new FeatureGroup(
@@ -88,17 +88,17 @@ public final class FeatureGroupingService {
 
     private static void validateConsistency(String featureId, List<FeatureDecisionRow> members, FeatureDecisionRow first) {
         for (FeatureDecisionRow row : members) {
-            if (!eq(row.featureType(), first.featureType())) {
+            if (!sameValue(row.featureType(), first.featureType())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent featureType across its member rows: '"
                         + first.featureType() + "' vs '" + row.featureType() + "'");
             }
-            if (!eq(row.isNoiseReduction(), first.isNoiseReduction())) {
+            if (!sameValue(row.isNoiseReduction(), first.isNoiseReduction())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent is_noise_reduction across its member rows: '"
                         + first.isNoiseReduction() + "' vs '" + row.isNoiseReduction() + "'");
             }
-            if (members.size() > 1 && !eq(row.operator(), first.operator())) {
+            if (members.size() > 1 && !sameValue(row.operator(), first.operator())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent operator across its member rows: '"
                         + first.operator() + "' vs '" + row.operator() + "'");
@@ -106,8 +106,8 @@ public final class FeatureGroupingService {
         }
     }
 
-    private static boolean eq(String a, String b) {
-        return a == null ? b == null : a.equals(b);
+    private static boolean sameValue(String left, String right) {
+        return left == null ? right == null : left.equals(right);
     }
 
     /** Lower sorts first: 0 = NoiseReduction, 1 = Disclaimer, 2 = everything else (standard Lexicon/Composite). */

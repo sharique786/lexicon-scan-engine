@@ -38,11 +38,10 @@ public class ScanEngineApplication {
     /**
      * @param args {@code [0]} = path to the {@code RuntimeArgs} JSON,
      *              {@code [1]} = path to the {@code BqTableConfig} JSON —
-     *              both GCS paths, per requirement 4.b. Spring Boot's own
-     *              argument parsing is bypassed for these (they are
-     *              positional job arguments, not {@code --spring.*} style
-     *              properties) — they are read directly from {@code args}
-     *              after the Spring context starts.
+     *              both GCS paths. Spring Boot's own argument parsing is
+     *              bypassed for these (they are positional job arguments,
+     *              not {@code --spring.*} style properties) — they are read
+     *              directly from {@code args} after the Spring context starts.
      */
     public static void main(String[] args) throws Exception {
         ConfigurableApplicationContext context = SpringApplication.run(ScanEngineApplication.class, args);

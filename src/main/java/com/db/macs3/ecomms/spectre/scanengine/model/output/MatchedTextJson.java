@@ -9,27 +9,20 @@ import java.util.Objects;
 
 /**
  * The {@code matched_text} JSON value for ONE {@code term_dtls} entry of
- * {@code lexicon-hit-restricted}/{@code -unrestricted} — matches requirement
- * 2.i's {@code hit_details_hs} structure:
+ * {@code lexicon-hit-restricted}/{@code -unrestricted}:
  * <pre>
  * {"hit_details_hs":[{
  *   "message_id": "...",
  *   "msg_text": [{"text": "bomb", "start": 10, "length": 4}, ...],
- *   "subject": {"text": "bomb", "start": 10, "length": 4},
+ *   "subject": [{"text": "bomb", "start": 10, "length": 4}],
  *   "attachment_text": [{"attachment_id": "...", "att_text": [...]}]
  * }]}
  * </pre>
  *
- * <p><b>One deliberate deviation from the literal example:</b> the example
- * shows {@code subject} as a single object, but a term can in principle
- * match more than once within a subject line just as it can within the
- * message body — {@link HitDetail#subject} is therefore a LIST here (empty
- * when there is no subject match, one entry per occurrence otherwise), for
- * the same reason {@code msg_text}/{@code att_text} are lists. Flagged
- * explicitly since it is a structural choice beyond what the example
- * literally specifies, not a re-derivation of something already unambiguous.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * <p>{@link HitDetail#subject} is a LIST — a term can match more than once
+ * within a subject line just as it can within the message body — empty when
+ * there is no subject match, one entry per occurrence otherwise, the same
+ * shape as {@code msg_text}/{@code att_text}.
  */
 public final class MatchedTextJson implements Serializable {
 
@@ -45,8 +38,12 @@ public final class MatchedTextJson implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MatchedTextJson)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MatchedTextJson)) {
+            return false;
+        }
         return Objects.equals(hitDetailsHs, ((MatchedTextJson) o).hitDetailsHs);
     }
 
@@ -89,8 +86,12 @@ public final class MatchedTextJson implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof HitDetail)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof HitDetail)) {
+                return false;
+            }
             HitDetail other = (HitDetail) o;
             return Objects.equals(messageId, other.messageId)
                     && Objects.equals(msgText, other.msgText)
@@ -139,8 +140,12 @@ public final class MatchedTextJson implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof TextHit)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof TextHit)) {
+                return false;
+            }
             TextHit other = (TextHit) o;
             return start == other.start && length == other.length && Objects.equals(text, other.text);
         }
@@ -175,8 +180,12 @@ public final class MatchedTextJson implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof AttachmentTextHit)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof AttachmentTextHit)) {
+                return false;
+            }
             AttachmentTextHit other = (AttachmentTextHit) o;
             return Objects.equals(attachmentId, other.attachmentId) && Objects.equals(attText, other.attText);
         }

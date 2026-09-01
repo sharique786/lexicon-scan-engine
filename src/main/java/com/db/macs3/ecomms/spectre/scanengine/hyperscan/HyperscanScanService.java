@@ -39,27 +39,16 @@ import java.util.Map;
  * an independently-introduced off-by-one disagreeing with what Hyperscan
  * itself reports as matched.
  *
- * <h2>This class no longer resolves expression ids to term identity — confirmed gap fixed</h2>
- * <p>An earlier version of this class took an {@code ExpressionIdResolver}
- * and returned fully-resolved {@code TermMatchResult}s directly, on the
- * documented assumption that every PASS term's reportable expression id was
- * always its own term number, whether or not it needed AND NOT or
- * decomposition. Confirmed BROKEN by the Compile Service's AND NOT fix (see
- * {@code TermExpressionMetadata} class Javadoc for the full explanation):
- * AND NOT terms no longer have that property at all — every required/
- * excluded pattern gets its own individually-allocated id, and resolving
- * one directly via a simple {@code feature::id} builder would silently
- * populate {@code lexicon-hit-summary.term_dtls.term_id} with a wrong,
- * meaningless value, and would report a hit on the excluded pattern
- * matching alone, with no boolean evaluation at all.
- *
- * <p>The fix moves resolution and AND NOT evaluation OUT of this class and
- * up into {@code FeatureScanOrchestrator}, which alone has visibility across
- * every area a feature's scope covers (required and excluded patterns of
- * the SAME AND NOT term can legitimately match in different areas of the
- * same message, so evaluation cannot correctly happen per-area, inside this
- * class). This class's only remaining job is: scan one area, group by RAW
- * expression id, return that — see {@link #scan}.
+ * <h2>Does not resolve expression ids to term identity</h2>
+ * <p>An expression id is not always its owning term's own number — see
+ * {@code TermExpressionMetadata} class Javadoc for the id scheme. Resolving
+ * ids and evaluating AND NOT conditions happens in
+ * {@code FeatureScanOrchestrator}, which alone has visibility across every
+ * area a feature's scope covers (required and excluded patterns of the same
+ * AND NOT term can legitimately match in different areas of the same
+ * message, so evaluation cannot correctly happen per-area, inside this
+ * class). This class's only job is: scan one area, group by RAW expression
+ * id, return that — see {@link #scan}.
  *
  * <h2>Caller owns the {@link Scanner} AND the HTML-stripping — both across, not per, scan call</h2>
  * <p>Two performance-critical invariants this class deliberately does NOT
@@ -114,7 +103,7 @@ public final class HyperscanScanService {
      *                       the {@code Scanner} itself
      * @return raw matches found, empty if {@code stripResult}'s text is blank or nothing matched
      * @throws HyperscanScanException if the native scan call itself fails (scratch allocation,
-     *                                  a corrupted database, etc. — see requirement 3.b)
+     *                                  a corrupted database, etc.)
      */
     public static List<RawExpressionMatch> scan(HtmlStrippingService.StripResult stripResult, Database database,
                                                   MatchArea area, String attachmentId, Scanner scanner) {
@@ -137,38 +126,42 @@ public final class HyperscanScanService {
 
         // Group raw matches by expression id, preserving first-seen order for determinism.
         Map<Integer, List<Match>> byExpressionId = new LinkedHashMap<>();
-        for (Match m : rawMatches) {
-            int id = m.getMatchedExpression().getId();
-            byExpressionId.computeIfAbsent(id, k -> new ArrayList<>()).add(m);
+        for (Match rawMatch : rawMatches) {
+            int expressionId = rawMatch.getMatchedExpression().getId();
+            byExpressionId.computeIfAbsent(expressionId, unusedId -> new ArrayList<>()).add(rawMatch);
         }
 
         List<RawExpressionMatch> results = new ArrayList<>(byExpressionId.size());
         for (Map.Entry<Integer, List<Match>> entry : byExpressionId.entrySet()) {
-            int expressionId = entry.getKey();
-
-            // The pattern text comes directly from the match's own Expression object. Every
-            // match sharing this expressionId carries the identical Expression instance, so
-            // reading it from the first one is sufficient.
-            String matchedPatternText = entry.getValue().get(0).getMatchedExpression().getExpression();
-
-            List<AreaMatch> areaMatches = new ArrayList<>(entry.getValue().size());
-            for (Match m : entry.getValue()) {
-                int strippedStart = (int) m.getStartPosition();
-                int strippedEndExclusive = (int) m.getEndPosition() + 1; // inclusive -> exclusive
-
-                int originalStart = stripResult.offsetMap().toOriginal(strippedStart);
-                int originalEnd = stripResult.offsetMap().toOriginal(strippedEndExclusive);
-                String matchedText = m.getMatchedString();
-
-                MatchSpan span = new MatchSpan(originalStart, originalEnd, matchedText);
-                areaMatches.add(new AreaMatch(area, attachmentId, span));
-            }
-            results.add(new RawExpressionMatch(expressionId, matchedPatternText, areaMatches));
+            results.add(toRawExpressionMatch(entry.getKey(), entry.getValue(), stripResult, area, attachmentId));
         }
         return results;
     }
 
-    /** Thrown when the native Hyperscan scan call itself fails — see requirement 3.b. */
+    private static RawExpressionMatch toRawExpressionMatch(int expressionId, List<Match> matchesForExpression,
+                                                             HtmlStrippingService.StripResult stripResult,
+                                                             MatchArea area, String attachmentId) {
+        // The pattern text comes directly from the match's own Expression object. Every match
+        // sharing this expressionId carries the identical Expression instance, so reading it
+        // from the first one is sufficient.
+        String matchedPatternText = matchesForExpression.get(0).getMatchedExpression().getExpression();
+
+        List<AreaMatch> areaMatches = new ArrayList<>(matchesForExpression.size());
+        for (Match match : matchesForExpression) {
+            int strippedStart = (int) match.getStartPosition();
+            int strippedEndExclusive = (int) match.getEndPosition() + 1; // inclusive -> exclusive
+
+            int originalStart = stripResult.offsetMap().toOriginal(strippedStart);
+            int originalEnd = stripResult.offsetMap().toOriginal(strippedEndExclusive);
+            String matchedText = match.getMatchedString();
+
+            MatchSpan span = new MatchSpan(originalStart, originalEnd, matchedText);
+            areaMatches.add(new AreaMatch(area, attachmentId, span));
+        }
+        return new RawExpressionMatch(expressionId, matchedPatternText, areaMatches);
+    }
+
+    /** Thrown when the native Hyperscan scan call itself fails. */
     public static final class HyperscanScanException extends RuntimeException {
         public HyperscanScanException(String message, Throwable cause) {
             super(message, cause);

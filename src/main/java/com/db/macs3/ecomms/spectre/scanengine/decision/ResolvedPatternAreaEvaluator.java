@@ -22,29 +22,24 @@ import java.util.regex.Pattern;
  * this scan buffer," never the leaves' relative order or word-distance.
  *
  * <h2>Per-area only — never merge across areas</h2>
- * <p>Word-distance/order is only meaningful within one contiguous text.
- * Unlike the EXISTING cross-area AND-NOT-by-presence evaluation this project
- * already relies on for the older id-list scheme (a required word in the
- * subject and an excluded word in the body legitimately belong to the same
- * boolean check there), a required word in the subject and an excluded word
- * in the body do NOT share a coordinate space for a proximity/AND-NOT
- * condition evaluated here — {@code FeatureScanOrchestrator} must call this
- * once per scanned area, independently, never on text merged/concatenated
- * across areas.
+ * <p>Word-distance/order is only meaningful within one contiguous text. A
+ * required word in the subject and an excluded word in the body do NOT
+ * share a coordinate space for a proximity/AND-NOT condition evaluated
+ * here — {@code FeatureScanOrchestrator} must call this once per scanned
+ * area, independently, never on text merged/concatenated across areas.
  *
- * <h2>Adapted from the reference {@code ResolvedPatternMatcher}</h2>
- * <p>Same word-span/backtracking algorithm (leaves are matched via
- * {@code Matcher.find()} against the real text, occurrences mapped to word
- * indices via {@code \S+} word spans, NEAR allows either direction while
- * FOLLOWEDBY requires strictly increasing indices, gap = whole words
- * strictly between two chosen indices), but enumerates EVERY satisfying
- * leaf-occurrence combination (not just the first), each becoming one
- * output {@link MatchSpan} spanning the earliest-to-latest chosen leaf
- * span — needed because {@code lexicon-hit-summary.term_dtls.regex_match_hit_count}
- * counts every individual occurrence for every other term kind already;
- * collapsing a proximity term to a single synthetic "matched: yes" hit
- * would silently break that parity and under-report genuine repeated
- * violations.
+ * <h2>Algorithm</h2>
+ * <p>Each leaf is matched via {@code Matcher.find()} against the real text;
+ * occurrences are mapped to word indices via {@code \S+} word spans. NEAR
+ * allows either direction while FOLLOWEDBY requires strictly increasing
+ * indices; gap is the count of whole words strictly between two chosen
+ * indices. Every satisfying leaf-occurrence combination is enumerated (not
+ * just the first), each becoming one output {@link MatchSpan} spanning the
+ * earliest-to-latest chosen leaf span — needed because
+ * {@code lexicon-hit-summary.term_dtls.regex_match_hit_count} counts every
+ * individual occurrence for every other term kind already; collapsing a
+ * proximity term to a single synthetic "matched: yes" hit would under-report
+ * genuine repeated violations.
  */
 final class ResolvedPatternAreaEvaluator {
 
@@ -136,7 +131,8 @@ final class ResolvedPatternAreaEvaluator {
             }
             String operator = operators.get(leafIndex - 1);
             int maxGap = distances.get(leafIndex - 1);
-            boolean directionOk = "NEAR".equals(operator) || candidate.endWordIndex() > previous.endWordIndex();
+            boolean directionOk = ResolvedPatternTree.OPERATOR_NEAR.equals(operator)
+                    || candidate.endWordIndex() > previous.endWordIndex();
             int gap = Math.abs(candidate.endWordIndex() - previous.endWordIndex()) - 1;
             if (directionOk && gap >= 0 && gap <= maxGap) {
                 backtrack(occurrencesPerLeaf, operators, distances, leafIndex + 1, candidate, chosen,
@@ -177,9 +173,9 @@ final class ResolvedPatternAreaEvaluator {
     }
 
     private static int wordIndexAtOrBefore(List<int[]> words, int charOffset) {
-        for (int i = words.size() - 1; i >= 0; i--) {
-            if (words.get(i)[0] < charOffset) {
-                return i;
+        for (int wordIndex = words.size() - 1; wordIndex >= 0; wordIndex--) {
+            if (words.get(wordIndex)[0] < charOffset) {
+                return wordIndex;
             }
         }
         return -1;

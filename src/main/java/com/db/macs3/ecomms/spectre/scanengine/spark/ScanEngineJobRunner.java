@@ -51,26 +51,24 @@ import java.util.stream.Collectors;
  *
  * <h2>Wiring order</h2>
  * <ol>
- *   <li>Parse {@link RuntimeArgs} + {@link BqTableConfig} (requirement 4.b)</li>
- *   <li>Write the {@code IN_PROGRESS} {@code pipeline_stage_audit} row (requirement 3.a)</li>
+ *   <li>Parse {@link RuntimeArgs} + {@link BqTableConfig}</li>
+ *   <li>Write the {@code IN_PROGRESS} {@code pipeline_stage_audit} row</li>
  *   <li>Resolve the Hyperscan base path — ONE GCS listing call (see {@code HyperscanPathResolver})</li>
- *   <li>Read + union the view across every {@code dataset_details} entry, filtered
- *       (requirement 1.c) — stays a distributed {@code Dataset}</li>
+ *   <li>Read + union the view across every {@code dataset_details} entry, filtered —
+ *       stays a distributed {@code Dataset}</li>
  *   <li>Collect the (small) set of DISTINCT features referenced, resolve each to its
  *       {@code .zip} bundle path, and broadcast that small map — see class Javadoc "Driver load"</li>
- *   <li>Read + union AVRO messages across every {@code dataset_details} entry
- *       (requirement 1.c/8.d), restricted by the view's own {@code message_id} set
- *       (requirement 1.e)</li>
+ *   <li>Read + union AVRO messages across every {@code dataset_details} entry,
+ *       restricted by the view's own {@code message_id} set</li>
  *   <li>Aggregate the view by {@code message_id}, join against messages, attach the
  *       few extra columns {@code PartitionProcessor} needs that are not in either
  *       source (pipeline_exec_id, created_by, output-facing dataset_partition_value)</li>
  *   <li>{@code mapPartitions} via {@link PartitionProcessor} — the only place Hyperscan
  *       databases are loaded, one {@link com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanBundleLoader}
  *       per partition</li>
- *   <li>Split the per-message results into per-table {@code Dataset}s and write each
- *       (requirement 3.b); write the {@code lexicon-hit-restricted} CSV mirror
- *       (requirement 3.g); write {@code pipeline_record_audit} for any per-message
- *       failures (requirement 3, "Other errors")</li>
+ *   <li>Split the per-message results into per-table {@code Dataset}s and write each;
+ *       write the {@code lexicon-hit-restricted} CSV mirror; write
+ *       {@code pipeline_record_audit} for any per-message failures</li>
  *   <li>Write the {@code SUCCESS}/{@code FAILED} {@code pipeline_stage_audit} row</li>
  * </ol>
  *
@@ -83,12 +81,6 @@ import java.util.stream.Collectors;
  * per-message results, every output table) stays a Spark {@code Dataset}
  * from creation to write — this driver never calls {@code .collect()} on any
  * of them.
- *
- * <p>Not independently executable-verified in this project's development
- * sandbox (no live Spark cluster/GCP credentials here) — see
- * {@code GcsClient} class Javadoc, which applies to this whole orchestration
- * layer. Should be exercised against the integration test setup (requirement
- * 4.d) before first production use.
  */
 @Service
 public class ScanEngineJobRunner {
@@ -107,7 +99,7 @@ public class ScanEngineJobRunner {
     /**
      * @param args {@code [0]} = path to the {@link RuntimeArgs} JSON,
      *              {@code [1]} = path to the {@link BqTableConfig} JSON —
-     *              both GCS paths, per requirement 4.b
+     *              both GCS paths
      */
     public void run(String[] args) throws Exception {
         if (args.length < 2) {
@@ -121,12 +113,10 @@ public class ScanEngineJobRunner {
 
         // spark.serializer is a "static" config — only takes effect if set before the
         // SparkContext is actually constructed, via SparkSession.builder().config(...), never
-        // via spark.conf().set(...) afterward. Kryo speeds up broadcast/shuffle serialisation
-        // generally (see applyJobSpecificSparkConf's own Javadoc for why this job does not rely
-        // on the shared cluster's own spark-defaults.conf for its critical settings).
+        // via spark.conf().set(...) afterward.
         SparkSession spark = SparkSession.builder()
                 .appName("lexicon-scan-engine")
-                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                .config(SparkConfigKeys.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
                 .getOrCreate();
         applyJobSpecificSparkConf(spark);
 
@@ -166,18 +156,18 @@ public class ScanEngineJobRunner {
         // AQE + skew-join splitting: on by default since Spark 3.2, but never assumed here —
         // this job's correctness/performance under skew depends on it, so it is asserted
         // explicitly rather than hoped for.
-        conf.set("spark.sql.adaptive.enabled", "true");
-        conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true");
-        conf.set("spark.sql.adaptive.skewJoin.enabled", "true");
+        conf.set(SparkConfigKeys.ADAPTIVE_ENABLED, "true");
+        conf.set(SparkConfigKeys.ADAPTIVE_COALESCE_PARTITIONS_ENABLED, "true");
+        conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_ENABLED, "true");
         // Tightened from Spark's own defaults (factor 5, 256MB threshold): a single message
         // with an unusually large attachment can dwarf the median shuffle-partition size by
         // far more than 5x while still being one real, unsplittable row — the default
         // threshold can under-react to exactly this job's specific skew shape. Reasoned
-        // defaults, not verified against real production message-size distributions — treat
-        // as a starting point to monitor and adjust, per this job's existing tuning philosophy.
-        conf.set("spark.sql.adaptive.skewJoin.skewedPartitionFactor", "3");
-        conf.set("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes", "128m");
-        conf.set("spark.sql.adaptive.advisoryPartitionSizeInBytes", "64m");
+        // defaults, treated as a starting point to monitor and adjust against real production
+        // message-size distributions.
+        conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_SKEWED_PARTITION_FACTOR, "3");
+        conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_SKEWED_PARTITION_THRESHOLD_BYTES, "128m");
+        conf.set(SparkConfigKeys.ADAPTIVE_ADVISORY_PARTITION_SIZE_BYTES, "64m");
 
         // spark.sql.shuffle.partitions: Spark's own hardcoded default (200) has no relationship
         // to how many executor cores THIS run actually has on a shared, dynamically-allocated
@@ -186,7 +176,7 @@ public class ScanEngineJobRunner {
         // never produces an under-parallelised shuffle. AQE's coalescePartitions still merges
         // this back down post-shuffle as actual data volume allows.
         int defaultParallelism = spark.sparkContext().defaultParallelism();
-        conf.set("spark.sql.shuffle.partitions", String.valueOf(Math.max(200, defaultParallelism * 3)));
+        conf.set(SparkConfigKeys.SHUFFLE_PARTITIONS, String.valueOf(Math.max(200, defaultParallelism * 3)));
 
         // Smaller AVRO read-side partitions: the default 128MB max-partition-bytes groups
         // messages into a read partition purely by source-file byte range, with no awareness
@@ -196,7 +186,7 @@ public class ScanEngineJobRunner {
         // is still a single giant record) the odds that one partition's read+decode cost
         // dominates the whole stage's wall-clock time before AQE's post-shuffle rebalancing
         // even has a chance to help.
-        conf.set("spark.sql.files.maxPartitionBytes", "67108864"); // 64MB
+        conf.set(SparkConfigKeys.FILES_MAX_PARTITION_BYTES, "67108864"); // 64MB
     }
 
     private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig) {
@@ -208,9 +198,9 @@ public class ScanEngineJobRunner {
 
         // 2. Read + union the view across every dataset_details entry.
         List<Dataset<Row>> perDatasetView = new ArrayList<>();
-        for (RuntimeArgs.DatasetDetail dd : runtimeArgs.datasetDetails()) {
+        for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
             perDatasetView.add(FeatureDecisionViewReader.readFiltered(
-                    spark, tableConfig, dd.datasetPartitionValue(), runtimeArgs.featurePartitionValue(),
+                    spark, tableConfig, datasetDetail.datasetPartitionValue(), runtimeArgs.featurePartitionValue(),
                     runtimeArgs.processId()));
         }
         Dataset<Row> viewRows = FeatureDecisionViewReader.unionAll(spark, perDatasetView).cache();
@@ -223,7 +213,7 @@ public class ScanEngineJobRunner {
                 .distinct().as(Encoders.STRING()).collectAsList();
         Set<String> distinctFeatures = distinctFeatureDefJson.stream()
                 .map(FeatureDefinition::parse)
-                .map(fd -> fd.body().feature())
+                .map(featureDefinition -> featureDefinition.body().feature())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, String> featureToZipPath = new HashMap<>();
@@ -242,21 +232,21 @@ public class ScanEngineJobRunner {
         Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
         String messageBucket = properties.resolveMessageBucket(runtimeArgs);
         List<Dataset<Row>> perDatasetMessages = new ArrayList<>();
-        for (RuntimeArgs.DatasetDetail dd : runtimeArgs.datasetDetails()) {
+        for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
             perDatasetMessages.add(MessageAvroReader.readDataset(
-                    spark, gcsClient, messageBucket, dd.datasetId(), relevantMessageIds));
+                    spark, gcsClient, messageBucket, datasetDetail.datasetId(), relevantMessageIds));
         }
         Dataset<Row> messages = perDatasetMessages.getFirst();
-        for (int i = 1; i < perDatasetMessages.size(); i++) {
-            messages = messages.unionByName(perDatasetMessages.get(i), true);
+        for (int datasetIndex = 1; datasetIndex < perDatasetMessages.size(); datasetIndex++) {
+            messages = messages.unionByName(perDatasetMessages.get(datasetIndex), true);
         }
 
         // 5. Aggregate the view by message_id, join, attach output-facing columns.
         Dataset<Row> groupedView = FeatureDecisionViewReader.groupByMessageId(viewRows);
         Dataset<Row> joined = messages.join(groupedView, BqColumns.View.MESSAGE_ID)
-                .withColumn("pipeline_exec_id_for_output", functions.lit(runtimeArgs.pipelineExecId()))
-                .withColumn("created_by_for_output", functions.lit(properties.getCreatedBy()))
-                .withColumn("dataset_partition_value_for_output", functions.col("dataset_id"));
+                .withColumn(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT, functions.lit(runtimeArgs.pipelineExecId()))
+                .withColumn(JoinedRowColumns.CREATED_BY_FOR_OUTPUT, functions.lit(properties.getCreatedBy()))
+                .withColumn(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT, functions.col(JoinedRowColumns.DATASET_ID));
 
         // 6. mapPartitions — the only place Hyperscan databases are loaded.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
@@ -275,47 +265,50 @@ public class ScanEngineJobRunner {
         // API (FilterFunction<T>) and its Scala API (Function1<T, Object>), both of which are
         // structurally compatible with a T -> boolean lambda.
         Dataset<MessageProcessingResult> successes =
-                results.filter((FilterFunction<MessageProcessingResult>) r -> !r.isError());
+                results.filter((FilterFunction<MessageProcessingResult>) result -> !result.isError());
         Dataset<MessageProcessingResult> failures =
                 results.filter((FilterFunction<MessageProcessingResult>) MessageProcessingResult::isError);
 
-        JavaRDD<Row> summaryRows = successes.javaRDD().map(r -> OutputTableWriter.toRow(r.summaryRow()));
+        JavaRDD<Row> summaryRows = successes.javaRDD().map(result -> OutputTableWriter.toRow(result.summaryRow()));
         OutputTableWriter.writeLexiconHitSummary(spark, tableConfig, summaryRows);
 
         JavaRDD<Row> restrictedDetailRows = successes.javaRDD()
-                .filter(r -> r.restricted() && r.detailRow() != null)
-                .map(r -> OutputTableWriter.toRow(r.detailRow()));
+                .filter(result -> result.restricted() && result.detailRow() != null)
+                .map(result -> OutputTableWriter.toRow(result.detailRow()));
         OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, restrictedDetailRows, true);
         writeRestrictedCsvMirror(spark, runtimeArgs, restrictedDetailRows);
 
         JavaRDD<Row> unrestrictedDetailRows = successes.javaRDD()
-                .filter(r -> !r.restricted() && r.detailRow() != null)
-                .map(r -> OutputTableWriter.toRow(r.detailRow()));
+                .filter(result -> !result.restricted() && result.detailRow() != null)
+                .map(result -> OutputTableWriter.toRow(result.detailRow()));
         OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, unrestrictedDetailRows, false);
 
-        JavaRDD<Row> featureHitRows = successes.javaRDD().map(r -> OutputTableWriter.toRow(r.featureHitSummaryRow()));
+        JavaRDD<Row> featureHitRows =
+                successes.javaRDD().map(result -> OutputTableWriter.toRow(result.featureHitSummaryRow()));
         OutputTableWriter.writeFeatureHitSummary(spark, tableConfig, featureHitRows);
 
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        JavaRDD<Row> recordAuditRows = failures.javaRDD().map(r -> OutputTableWriter.toRow(new PipelineRecordAuditRow(
+        JavaRDD<Row> recordAuditRows = failures.javaRDD().map(result -> OutputTableWriter.toRow(new PipelineRecordAuditRow(
                 runtimeArgs.processId(), runtimeArgs.triggerType(), runtimeArgs.pipelineExecId(),
-                properties.getStageName(), r.messageId(), BqColumns.RecordStatus.FAILED, 1,
-                r.errorMessage(), today, properties.getCreatedBy(), Instant.now())));
+                properties.getStageName(), result.messageId(), BqColumns.RecordStatus.FAILED, 1,
+                result.errorMessage(), today, properties.getCreatedBy(), Instant.now())));
         if (!recordAuditRows.isEmpty()) {
             OutputTableWriter.writePipelineRecordAudit(spark, tableConfig, recordAuditRows);
         }
     }
 
-    /** Requirement 3.g: mirror the restricted detail rows to a CSV file on GCS. */
+    /** Mirrors the restricted detail rows to a single CSV file on GCS. */
     private void writeRestrictedCsvMirror(SparkSession spark, RuntimeArgs runtimeArgs, JavaRDD<Row> restrictedDetailRows) {
         String csvPath = "gs://" + properties.getEnvironmentBucket() + "/" + runtimeArgs.policyEngineId()
                 + "/" + runtimeArgs.processId() + "/restricted/" + runtimeArgs.pipelineExecId() + ".csv";
-        Dataset<Row> ds = spark.createDataFrame(restrictedDetailRows, OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA);
+        Dataset<Row> restrictedDetailDataset = spark.createDataFrame(restrictedDetailRows, OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA);
         // Spark's own CSV writer cannot represent nested array/struct columns directly — the
         // evaluated_lexicons column is flattened to its JSON string form specifically for this
         // CSV mirror, since CSV has no native nested-value representation.
-        ds.withColumn("evaluated_lexicons", functions.to_json(functions.col("evaluated_lexicons")))
-                .coalesce(1) // one CSV file at this path, matching requirement 3.g's single-file target
+        restrictedDetailDataset
+                .withColumn(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS,
+                        functions.to_json(functions.col(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS)))
+                .coalesce(1) // one CSV file at this path
                 .write()
                 .option("header", "true")
                 .mode("overwrite")

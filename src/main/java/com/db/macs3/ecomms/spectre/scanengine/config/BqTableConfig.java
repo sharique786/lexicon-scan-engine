@@ -10,14 +10,15 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * Input/output BigQuery view and table identifiers — requirement 4.b: for a
- * real Dataproc submission, this is read from a JSON file on GCS (path
- * passed as a Dataproc submit argument), not hard-coded or Spring-bound;
- * requirement 4.e: for tests, an equivalent shape is supplied via the
- * {@code test} Spring profile's application properties instead (see
- * {@code ScanEngineProperties}) rather than requiring a real GCS file.
+ * Input/output BigQuery view and table identifiers. For a real Dataproc
+ * submission, this is read from a JSON file on GCS (path passed as a
+ * Dataproc submit argument), not hard-coded or Spring-bound; for tests, an
+ * equivalent shape is supplied via the {@code test} Spring profile's
+ * application properties instead (see {@code ScanEngineProperties}) rather
+ * than requiring a real GCS file.
  *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * <p>A plain class rather than a record, matching this project's other
+ * pre-existing model classes.
  */
 public final class BqTableConfig implements Serializable {
 
@@ -94,8 +95,12 @@ public final class BqTableConfig implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof BqTableConfig)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof BqTableConfig)) {
+            return false;
+        }
         BqTableConfig other = (BqTableConfig) o;
         return Objects.equals(projectId, other.projectId) && Objects.equals(viewDataset, other.viewDataset)
                 && Objects.equals(viewName, other.viewName) && Objects.equals(outputDataset, other.outputDataset)

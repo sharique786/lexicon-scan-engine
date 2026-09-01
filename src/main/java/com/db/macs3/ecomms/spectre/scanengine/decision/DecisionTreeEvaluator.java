@@ -13,36 +13,32 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map;
 
 /**
  * Evaluates one message's ordered {@link FeatureGroup}s (see
- * {@code FeatureGroupingService}) against the decision tree — requirement 2's
- * NoiseReduction → Disclaimer → Lexicon ordering, the noise-reduction
- * short-circuit rule, and disclaimer-precedence suppression.
+ * {@code FeatureGroupingService}) against the decision tree: NoiseReduction
+ * → Disclaimer → Lexicon ordering, a noise-reduction short-circuit rule, and
+ * disclaimer-precedence suppression.
  *
  * <h2>Noise reduction: evaluated group-by-group, short-circuits on first hit</h2>
- * <p>Per the confirmed answer to "how do multiple separate noise-reduction
- * {@code featureId}s combine": each NoiseReduction-category group is
- * evaluated independently, using ONLY its own {@link FeatureGroup#operator()}
- * across its own members (requirement 2.g's matrix) — there is no additional
- * combination operator ACROSS different {@code featureId}s. Groups are
- * evaluated in order; the moment any one of them is a hit, evaluation stops
- * immediately — no further NoiseReduction group, the Disclaimer group, and
- * every Lexicon group are simply never evaluated, not evaluated-and-ignored.
+ * <p>Each NoiseReduction-category group is evaluated independently, using
+ * ONLY its own {@link FeatureGroup#operator()} across its own members —
+ * there is no additional combination operator ACROSS different
+ * {@code featureId}s. Groups are evaluated in order; the moment any one of
+ * them is a hit, evaluation stops immediately — no further NoiseReduction
+ * group, the Disclaimer group, and every Lexicon group are simply never
+ * evaluated, not evaluated-and-ignored.
  *
- * <h2>Disclaimer: a precedence lexicon, not the Scanner Service's detector</h2>
- * <p>Per requirement 8.a, disclaimer here is a Hyperscan-scanned feature like
- * any other lexicon (ordinary {@code .hdb}, ordinary scan pass) — NOT the
- * Lexicon Scanner Service's separate exact-substring disclaimer detector.
- * It is simply processed before standard Lexicon groups (requirement 2.f),
- * and its matches are used afterward to suppress overlapping Lexicon
- * matches (requirement 2.j) — full containment only (requirement 8.b: a
- * Lexicon match is suppressed only when ENTIRELY inside a disclaimer
- * match's span, never on partial overlap), and only within the SAME area
- * (subject-vs-subject, body-vs-body, or the SAME attachment's content —
- * comparing raw indices across different areas would be meaningless, since
- * each area is its own independent coordinate space).
+ * <h2>Disclaimer: a precedence lexicon</h2>
+ * <p>Disclaimer is a Hyperscan-scanned feature like any other lexicon
+ * (ordinary {@code .hdb}, ordinary scan pass), processed before standard
+ * Lexicon groups. Its matches are used afterward to suppress overlapping
+ * Lexicon matches — full containment only (a Lexicon match is suppressed
+ * only when ENTIRELY inside a disclaimer match's span, never on partial
+ * overlap), and only within the SAME area (subject-vs-subject, body-vs-body,
+ * or the SAME attachment's content — comparing raw indices across different
+ * areas would be meaningless, since each area is its own independent
+ * coordinate space).
  */
 public final class DecisionTreeEvaluator {
 
@@ -70,47 +66,57 @@ public final class DecisionTreeEvaluator {
      */
     public static MessageEvaluationResult evaluate(String messageId, List<FeatureGroup> orderedGroups,
                                                      FeatureRowScanner scanner) {
-        List<GroupEvaluationResult> evaluated = new ArrayList<>();
+        List<GroupEvaluationResult> evaluatedGroups = new ArrayList<>();
         List<TermMatchResult> disclaimerMatches = new ArrayList<>();
 
         for (FeatureGroup group : orderedGroups) {
-            GroupEvaluationResult result = evaluateGroup(group, scanner);
-            evaluated.add(result);
+            GroupEvaluationResult groupResult = evaluateGroup(group, scanner);
+            evaluatedGroups.add(groupResult);
 
-            if (group.isNoiseReduction()) {
-                if (result.isHit()) {
-                    // Short-circuit: every later group (further NoiseReduction, Disclaimer,
-                    // all Lexicon) is never evaluated at all.
-                    return new MessageEvaluationResult(messageId, evaluated, true, List.of(), Map.of(), 0);
-                }
-                continue;
+            if (group.isNoiseReduction() && groupResult.isHit()) {
+                // Short-circuit: every later group (further NoiseReduction, Disclaimer,
+                // all Lexicon) is never evaluated at all.
+                return new MessageEvaluationResult(messageId, evaluatedGroups, true, List.of(), Map.of(), 0);
             }
-
             if (group.isDisclaimer()) {
-                disclaimerMatches.addAll(flatten(result));
+                disclaimerMatches.addAll(flatten(groupResult));
             }
         }
 
-        List<AreaMatch> disclaimerSpans = new ArrayList<>();
-        for (TermMatchResult tmr : disclaimerMatches) {
-            disclaimerSpans.addAll(tmr.matches());
-        }
-
-        Map<String, List<TermMatchResult>> finalByFeatureId = new LinkedHashMap<>();
-        int totalSuppressed = 0;
-        for (GroupEvaluationResult result : evaluated) {
-            if (result.group().isNoiseReduction() || result.group().isDisclaimer()) {
-                continue;
-            }
-            Suppression suppression = suppressDisclaimerOverlaps(flatten(result), disclaimerSpans);
-            totalSuppressed += suppression.suppressedCount();
-            if (!suppression.kept().isEmpty()) {
-                finalByFeatureId.put(result.group().featureId(), suppression.kept());
-            }
-        }
+        List<AreaMatch> disclaimerSpans = flattenSpans(disclaimerMatches);
+        SuppressionOutcome outcome = suppressDisclaimerOverlapsAcrossGroups(evaluatedGroups, disclaimerSpans);
 
         return new MessageEvaluationResult(
-                messageId, evaluated, false, disclaimerMatches, finalByFeatureId, totalSuppressed);
+                messageId, evaluatedGroups, false, disclaimerMatches, outcome.finalByFeatureId(), outcome.totalSuppressed());
+    }
+
+    private static List<AreaMatch> flattenSpans(List<TermMatchResult> termMatches) {
+        List<AreaMatch> spans = new ArrayList<>();
+        for (TermMatchResult termMatch : termMatches) {
+            spans.addAll(termMatch.matches());
+        }
+        return spans;
+    }
+
+    /** One record per {@link #suppressDisclaimerOverlapsAcrossGroups} call: the surviving Lexicon matches and how many were suppressed. */
+    private record SuppressionOutcome(Map<String, List<TermMatchResult>> finalByFeatureId, int totalSuppressed) {
+    }
+
+    private static SuppressionOutcome suppressDisclaimerOverlapsAcrossGroups(List<GroupEvaluationResult> evaluatedGroups,
+                                                                               List<AreaMatch> disclaimerSpans) {
+        Map<String, List<TermMatchResult>> finalByFeatureId = new LinkedHashMap<>();
+        int totalSuppressed = 0;
+        for (GroupEvaluationResult groupResult : evaluatedGroups) {
+            if (groupResult.group().isNoiseReduction() || groupResult.group().isDisclaimer()) {
+                continue;
+            }
+            Suppression suppression = suppressDisclaimerOverlaps(flatten(groupResult), disclaimerSpans);
+            totalSuppressed += suppression.suppressedCount();
+            if (!suppression.kept().isEmpty()) {
+                finalByFeatureId.put(groupResult.group().featureId(), suppression.kept());
+            }
+        }
+        return new SuppressionOutcome(finalByFeatureId, totalSuppressed);
     }
 
     // ── Group evaluation ─────────────────────────────────────────────────────
@@ -123,8 +129,8 @@ public final class DecisionTreeEvaluator {
             List<TermMatchResult> matches = scanner.scan(member);
             matches = matches == null ? List.of() : matches;
             memberMatches.put(member, matches);
-            // minimumHits is informational only for this engine (confirmed) — any match at
-            // all, for any term within this member's lexicon, counts as a hit.
+            // minimumHits is informational only for this engine — any match at all, for
+            // any term within this member's lexicon, counts as a hit.
             memberHit.put(member, !matches.isEmpty());
         }
 
@@ -136,8 +142,8 @@ public final class DecisionTreeEvaluator {
      * Resolves a group's overall hit status from its members' individual hit
      * statuses — single-member groups need no operator (that one member's
      * hit status IS the group's); multi-member groups apply
-     * {@link FeatureGroup#operator()} (confirmed semantics: OR = any member
-     * hit, AND = every member hit).
+     * {@link FeatureGroup#operator()}: OR = any member hit, AND = every
+     * member hit.
      */
     private static boolean resolveGroupHit(FeatureGroup group, Map<FeatureDecisionRow, Boolean> memberHit) {
         if (!group.isMultiMember()) {
@@ -181,11 +187,11 @@ public final class DecisionTreeEvaluator {
 
     /**
      * Removes any Lexicon-category {@link AreaMatch} that is FULLY CONTAINED
-     * (requirement 8.b) within a disclaimer match's span, comparing only
-     * within the SAME area (and, for {@code ATTACHMENT}, the same
-     * {@code attachmentId} — see class Javadoc). A {@link TermMatchResult}
-     * left with zero surviving matches after suppression is dropped
-     * entirely, since {@link TermMatchResult} requires at least one match.
+     * within a disclaimer match's span, comparing only within the SAME area
+     * (and, for {@code ATTACHMENT}, the same {@code attachmentId} — see
+     * class Javadoc). A {@link TermMatchResult} left with zero surviving
+     * matches after suppression is dropped entirely, since
+     * {@link TermMatchResult} requires at least one match.
      */
     private static Suppression suppressDisclaimerOverlaps(List<TermMatchResult> rawGroupMatches,
                                                             List<AreaMatch> disclaimerSpans) {
@@ -196,19 +202,20 @@ public final class DecisionTreeEvaluator {
         List<TermMatchResult> kept = new ArrayList<>();
         int suppressedCount = 0;
 
-        for (TermMatchResult tmr : rawGroupMatches) {
+        for (TermMatchResult termMatch : rawGroupMatches) {
             List<AreaMatch> survivingMatches = new ArrayList<>();
-            for (AreaMatch am : tmr.matches()) {
-                boolean suppressed = disclaimerSpans.stream().anyMatch(d -> sameAreaScope(am, d)
-                        && am.span().isFullyContainedIn(d.span()));
+            for (AreaMatch lexiconMatch : termMatch.matches()) {
+                boolean suppressed = disclaimerSpans.stream().anyMatch(disclaimerMatch ->
+                        sameAreaScope(lexiconMatch, disclaimerMatch)
+                                && lexiconMatch.span().isFullyContainedIn(disclaimerMatch.span()));
                 if (suppressed) {
                     suppressedCount++;
                 } else {
-                    survivingMatches.add(am);
+                    survivingMatches.add(lexiconMatch);
                 }
             }
             if (!survivingMatches.isEmpty()) {
-                kept.add(new TermMatchResult(tmr.termId(), tmr.termRegexPattern(), survivingMatches));
+                kept.add(new TermMatchResult(termMatch.termId(), termMatch.termRegexPattern(), survivingMatches));
             }
         }
 
@@ -216,12 +223,12 @@ public final class DecisionTreeEvaluator {
     }
 
     /** True iff two matches are in the same coordinate space — same area, and same attachment if the area is ATTACHMENT. */
-    private static boolean sameAreaScope(AreaMatch a, AreaMatch b) {
-        if (a.area() != b.area()) {
+    private static boolean sameAreaScope(AreaMatch first, AreaMatch second) {
+        if (first.area() != second.area()) {
             return false;
         }
-        if (a.area() == MatchArea.ATTACHMENT) {
-            return a.attachmentId().equals(b.attachmentId());
+        if (first.area() == MatchArea.ATTACHMENT) {
+            return first.attachmentId().equals(second.attachmentId());
         }
         return true;
     }

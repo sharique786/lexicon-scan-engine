@@ -7,46 +7,39 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The evaluable form of one term's {@code resolvedPatterns} string — the
- * Lexicon Compile Service's new, decomposed representation of a NEAR/
- * FOLLOWEDBY proximity chain and/or an AND NOT condition, kept as a
- * left-to-right sequence of {@code regexPattern} leaves joined by the
- * operator text {@code resolvedPatterns} carries. See
- * {@code ResolvedPatternAreaEvaluator} for how a tree is actually evaluated
- * against real message text, and {@code TermExpressionMetadata} class
- * Javadoc for why this exists at all (decomposed leaves are compiled QUIET
- * in the {@code .hdb} — Hyperscan itself can never report their individual
- * positions, so the real proximity/AND-NOT condition must be re-verified in
- * Java against the leaves' own regex text).
+ * The evaluable form of one term's {@code resolvedPatterns} string — a
+ * decomposed representation of a NEAR/FOLLOWEDBY proximity chain and/or an
+ * AND NOT condition, kept as a left-to-right sequence of {@code regexPattern}
+ * leaves joined by the operator text {@code resolvedPatterns} carries. See
+ * {@code ResolvedPatternAreaEvaluator} for how a tree is evaluated against
+ * real message text, and {@code TermExpressionMetadata} class Javadoc for
+ * why this exists (decomposed leaves are compiled QUIET in the {@code .hdb}
+ * — Hyperscan itself can never report their individual positions, so the
+ * real proximity/AND-NOT condition must be re-verified in Java against the
+ * leaves' own regex text).
  *
- * <h2>Deliberate improvement over the {@code ResolvedPatternMatcher} reference class</h2>
- * <p>The attached reference implementation slices each leaf's own regex text
- * directly out of the {@code resolvedPatterns} string via top-level text
- * scanning — safe only so long as a leaf's regex text never happens to
- * contain the literal substring {@code " NEAR{5} "} etc. (an assumption its
- * own Javadoc admits, not a hardened guarantee). This project's JSON already
- * provides {@code regexPattern} as a clean, structured list of exactly the
- * leaf texts, in the same left-to-right order {@code resolvedPatterns}
- * renders them in — so {@link #build} instead uses the reference's
- * paren-depth-aware scanning ONLY to discover the tree's SHAPE (leaf count
- * per chain segment, operator+distance sequence, the AND NOT split point),
- * then zips that shape against {@code regexPattern} positionally. No leaf
- * regex text is ever sliced out of {@code resolvedPatterns} itself, and a
- * leaf-count disagreement between the two fields becomes a structural parse
- * error (the zip cursor running out, or having leftovers) rather than a
- * silent mismatch.
+ * <h2>Shape parsing, not text slicing</h2>
+ * <p>{@link #build} never slices leaf regex text directly out of the
+ * {@code resolvedPatterns} string — doing so would be unsafe if a leaf's own
+ * regex text happened to contain a literal operator marker like
+ * {@code " NEAR{5} "}. Instead, paren-depth-aware scanning discovers only the
+ * tree's SHAPE (leaf count per chain segment, operator+distance sequence,
+ * the AND NOT split point), which is then zipped against the {@code regexPattern}
+ * list positionally, in the same left-to-right order {@code resolvedPatterns}
+ * renders them in. A leaf-count disagreement between the two fields becomes a
+ * structural parse error (the zip cursor running out, or having leftovers)
+ * rather than a silent mismatch.
  *
  * <h2>Not {@code Serializable} — deliberately</h2>
  * <p>{@link Pattern} does not implement {@link java.io.Serializable}, so
- * neither can this class. This is safe today only because
- * {@code TermMetadataLoader} (like {@code HyperscanDatabaseLoader}) is
- * constructed INSIDE {@code PartitionProcessor}'s {@code mapPartitions}
+ * neither can this class. This is safe only because {@code HyperscanBundleLoader}
+ * is constructed INSIDE {@code PartitionProcessor}'s {@code mapPartitions}
  * closure body — every {@code TermExpressionMetadata}/{@code TermEntry}/
  * {@code ResolvedPatternTree} is built fresh, executor-local, per partition,
- * and never serialized across the wire. If a future refactor ever moves
- * that construction to the driver and ships the loaded object via closure
+ * and never serialized across the wire. If a future refactor ever moves that
+ * construction to the driver and ships the loaded object via closure
  * capture, this assumption breaks with a {@code NotSerializableException} —
- * do not "fix" that by making this Serializable; fix the refactor instead.
+ * fix the refactor, not by making this class Serializable.
  */
 public sealed interface ResolvedPatternTree {
 
@@ -71,6 +64,10 @@ public sealed interface ResolvedPatternTree {
     }
 
     int JAVA_LEAF_FLAGS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
+
+    /** {@link Chain#operators()} values. */
+    String OPERATOR_NEAR = "NEAR";
+    String OPERATOR_FOLLOWEDBY = "FOLLOWEDBY";
 
     /**
      * Parses {@code resolvedPatterns}'s SHAPE (never its leaf text — see
@@ -114,7 +111,7 @@ public sealed interface ResolvedPatternTree {
     }
 
     String AND_NOT_MARKER = " AND NOT (";
-    Pattern PROXIMITY_KEYWORD = Pattern.compile(" (NEAR|FOLLOWEDBY)\\{(\\d+)\\} ");
+    Pattern PROXIMITY_KEYWORD = Pattern.compile(" (" + OPERATOR_NEAR + "|" + OPERATOR_FOLLOWEDBY + ")\\{(\\d+)\\} ");
 
     static ShapeNode parseShape(String feature, String termId, String text) {
         int markerAt = findTopLevel(text, AND_NOT_MARKER);
@@ -134,28 +131,26 @@ public sealed interface ResolvedPatternTree {
 
         int depth = 0;
         int leafCount = 0;
-        int segmentStart = 0;
-        int i = 0;
-        while (i < text.length()) {
-            char c = text.charAt(i);
-            if (c == '(') {
+        int charIndex = 0;
+        while (charIndex < text.length()) {
+            char currentChar = text.charAt(charIndex);
+            if (currentChar == '(') {
                 depth++;
-            } else if (c == ')') {
+            } else if (currentChar == ')') {
                 depth--;
             }
             if (depth == 0) {
-                Matcher m = PROXIMITY_KEYWORD.matcher(text);
-                m.region(i, text.length());
-                if (m.lookingAt()) {
+                Matcher proximityMatcher = PROXIMITY_KEYWORD.matcher(text);
+                proximityMatcher.region(charIndex, text.length());
+                if (proximityMatcher.lookingAt()) {
                     leafCount++;
-                    operators.add(m.group(1));
-                    distances.add(Integer.parseInt(m.group(2)));
-                    i = m.end();
-                    segmentStart = i;
+                    operators.add(proximityMatcher.group(1));
+                    distances.add(Integer.parseInt(proximityMatcher.group(2)));
+                    charIndex = proximityMatcher.end();
                     continue;
                 }
             }
-            i++;
+            charIndex++;
         }
         leafCount++; // the final segment after the last operator (or the only segment, if none)
         return new ShapeNode.ChainShape(leafCount, operators, distances);
@@ -164,15 +159,15 @@ public sealed interface ResolvedPatternTree {
     /** First TOP-level (paren-depth 0) occurrence of {@code marker}, or -1. */
     static int findTopLevel(String text, String marker) {
         int depth = 0;
-        for (int i = 0; i <= text.length() - marker.length(); i++) {
-            char c = text.charAt(i);
-            if (c == '(') {
+        for (int charIndex = 0; charIndex <= text.length() - marker.length(); charIndex++) {
+            char currentChar = text.charAt(charIndex);
+            if (currentChar == '(') {
                 depth++;
-            } else if (c == ')') {
+            } else if (currentChar == ')') {
                 depth--;
             }
-            if (depth == 0 && text.startsWith(marker, i)) {
-                return i;
+            if (depth == 0 && text.startsWith(marker, charIndex)) {
+                return charIndex;
             }
         }
         return -1;
@@ -180,13 +175,13 @@ public sealed interface ResolvedPatternTree {
 
     static int matchingCloseParen(String feature, String termId, String text, int openParenAt) {
         int depth = 0;
-        for (int i = openParenAt; i < text.length(); i++) {
-            if (text.charAt(i) == '(') {
+        for (int charIndex = openParenAt; charIndex < text.length(); charIndex++) {
+            if (text.charAt(charIndex) == '(') {
                 depth++;
-            } else if (text.charAt(i) == ')') {
+            } else if (text.charAt(charIndex) == ')') {
                 depth--;
                 if (depth == 0) {
-                    return i;
+                    return charIndex;
                 }
             }
         }
@@ -205,7 +200,7 @@ public sealed interface ResolvedPatternTree {
         }
         ShapeNode.ChainShape chainShape = (ShapeNode.ChainShape) shape;
         List<Pattern> leaves = new ArrayList<>(chainShape.leafCount());
-        for (int i = 0; i < chainShape.leafCount(); i++) {
+        for (int leafPosition = 0; leafPosition < chainShape.leafCount(); leafPosition++) {
             if (!cursor.hasNext()) {
                 throw new TermExpressionMetadata.TermMetadataParseException(
                         "Term '" + termId + "' in feature '" + feature + "': resolvedPatterns' shape implies more "

@@ -56,9 +56,6 @@ import java.util.Set;
  * via a Spark broadcast variable (see {@code ScanEngineJobRunner}), not
  * recomputed per partition.
  *
- * <p>Not independently executable-verified in this project's development
- * sandbox — see {@code GcsClient} class Javadoc.
- *
  * <h2>Bounded lookahead prefetch — not a full-partition materialisation</h2>
  * <p>{@link #call} peeks at most {@link #PREFETCH_LOOKAHEAD_ROWS} rows ahead
  * (a small, FIXED buffer) purely to discover which distinct features the
@@ -138,12 +135,12 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
      * it will surface properly, with full per-message error isolation, when
      * this row is actually processed by {@link #processOneRow} below.
      */
-    private static void collectDistinctFeatures(Row row, Set<String> out) {
-        List<Row> featureRows = row.getList(row.fieldIndex("features"));
+    private static void collectDistinctFeatures(Row row, Set<String> distinctFeaturesOut) {
+        List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
         for (Row featureRow : featureRows) {
             try {
-                String json = ViewRowConverter.fromRow(featureRow).featureDefinitionJson();
-                out.add(FeatureDefinition.parse(json).body().feature());
+                String featureDefinitionJson = ViewRowConverter.fromRow(featureRow).featureDefinitionJson();
+                distinctFeaturesOut.add(FeatureDefinition.parse(featureDefinitionJson).body().feature());
             } catch (RuntimeException e) {
                 log.debug("Could not parse a feature definition during prefetch lookahead — "
                         + "will be handled normally during real processing: {}", e.getMessage());
@@ -152,12 +149,12 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     }
 
     private MessageProcessingResult processOneRow(Row row, FeatureScanOrchestrator orchestrator) {
-        boolean restricted = row.getAs("restricted");
-        String datasetPartitionValue = row.getAs("dataset_partition_value_for_output");
-        ScanMessage message = MessageRowConverter.fromRow(row, row.getAs("dataset_id"), restricted);
+        boolean restricted = row.getAs(JoinedRowColumns.RESTRICTED);
+        String datasetPartitionValue = row.getAs(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT);
+        ScanMessage message = MessageRowConverter.fromRow(row, row.getAs(JoinedRowColumns.DATASET_ID), restricted);
 
         try {
-            List<Row> featureRows = row.getList(row.fieldIndex("features"));
+            List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
             List<FeatureDecisionRow> viewRows = new ArrayList<>(featureRows.size());
             for (Row featureRow : featureRows) {
                 viewRows.add(ViewRowConverter.fromRow(featureRow));
@@ -169,10 +166,10 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
 
             String processId = viewRows.getFirst().processId();
             // pipelineExecId/createdBy are not view columns — carried through as extra columns
-            // attached during the join stage (see LexiconScanEngineJob), not read from the view itself.
-            String pipelineExecId = row.getAs("pipeline_exec_id_for_output");
+            // attached during the join stage (see ScanEngineJobRunner), not read from the view itself.
+            String pipelineExecId = row.getAs(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT);
             String featureTaggingType = viewRows.getFirst().featureTaggingType();
-            String createdBy = row.getAs("created_by_for_output");
+            String createdBy = row.getAs(JoinedRowColumns.CREATED_BY_FOR_OUTPUT);
             Instant now = Instant.now();
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
@@ -187,9 +184,9 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                     message.messageId(), restricted, datasetPartitionValue, summaryRow, detailRow, featureHitSummaryRow);
 
         } catch (Exception e) {
-            // Requirement 3, "Other errors": a single message's processing failure must NOT
-            // fail the whole job — recorded here for pipeline_record_audit instead (see
-            // LexiconScanEngineJob, which writes every isError() result there).
+            // A single message's processing failure must NOT fail the whole job — recorded
+            // here for pipeline_record_audit instead (see ScanEngineJobRunner.writeOutputs,
+            // which writes every isError() result there).
             log.warn("Processing failed for message_id={}: {}", message.messageId(), e.getMessage(), e);
             return MessageProcessingResult.failure(message.messageId(), restricted, datasetPartitionValue, e.toString());
         }

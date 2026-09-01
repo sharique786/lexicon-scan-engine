@@ -27,21 +27,13 @@ import java.util.regex.Pattern;
  * place that actually talks to GCS.
  *
  * <h2>Spring-managed on the driver; plain {@code new} on executors</h2>
- * <p>{@code @Component}-annotated so the DRIVER (see {@link com.db.macs3.ecomms.spectre.scanengine.spark.ScanEngineJobRunner})
- * can receive a shared instance via constructor injection. Executor-side
- * code ({@code PartitionProcessor}, running inside a {@code mapPartitions}
- * closure with no Spring {@code ApplicationContext} available at all — see
- * {@code ScanEngineApplication} class Javadoc) instead constructs its own
- * instance directly with {@code new GcsClient()}, which works identically
- * either way since this class holds no Spring-specific state — only its
- * {@code transient} lazily-initialised {@link Storage} client.
- *
- * <p><b>Not independently executable-verified in this project's development
- * sandbox</b> (no live GCP credentials/connectivity here) — written directly
- * against the documented {@code google-cloud-storage} Java client API rather
- * than a stub, and should be exercised against a real bucket (or the
- * emulator) as part of this project's own integration test setup
- * (requirement 4.d) before first production use.
+ * <p>{@code @Component}-annotated so the driver can receive a shared instance
+ * via constructor injection. Executor-side code ({@code PartitionProcessor},
+ * running inside a {@code mapPartitions} closure with no Spring
+ * {@code ApplicationContext} available) instead constructs its own instance
+ * directly with {@code new GcsClient()}, which works identically either way
+ * since this class holds no Spring-specific state — only its {@code transient}
+ * lazily-initialised {@link Storage} client.
  *
  * <p>{@link Serializable} — a {@code GcsClient} instance is constructed and
  * used from within executor-side {@code mapPartitions} closures (via
@@ -67,11 +59,11 @@ public final class GcsClient implements Serializable {
 
     /** Parses {@code gs://bucket/path/to/object} into a {@link BlobId}. */
     public static BlobId parseGsUri(String gsUri) {
-        Matcher m = GS_URI_PATTERN.matcher(gsUri);
-        if (!m.matches()) {
+        Matcher matcher = GS_URI_PATTERN.matcher(gsUri);
+        if (!matcher.matches()) {
             throw new IllegalArgumentException("Not a valid gs:// URI: " + gsUri);
         }
-        return BlobId.of(m.group(1), m.group(2));
+        return BlobId.of(matcher.group(1), matcher.group(2));
     }
 
     /**
@@ -86,13 +78,13 @@ public final class GcsClient implements Serializable {
                 Storage.BlobListOption.prefix(prefix),
                 Storage.BlobListOption.currentDirectory()).iterateAll()) {
             if (blob.isDirectory()) {
-                String name = blob.getName(); // e.g. "policy_test/2026-08-16_10-00-00_101/"
-                String child = name.substring(prefix.length());
-                if (child.endsWith("/")) {
-                    child = child.substring(0, child.length() - 1);
+                String blobName = blob.getName(); // e.g. "policy_test/2026-08-16_10-00-00_101/"
+                String childName = blobName.substring(prefix.length());
+                if (childName.endsWith("/")) {
+                    childName = childName.substring(0, childName.length() - 1);
                 }
-                if (!child.isEmpty()) {
-                    children.add(child);
+                if (!childName.isEmpty()) {
+                    children.add(childName);
                 }
             }
         }
@@ -120,8 +112,8 @@ public final class GcsClient implements Serializable {
 
     /**
      * Opens an output stream for writing a new object — for the
-     * {@code lexicon-hit-restricted} CSV mirror (requirement 3.g). Any
-     * existing object at {@code gsUri} is overwritten.
+     * {@code lexicon-hit-restricted} CSV mirror. Any existing object at
+     * {@code gsUri} is overwritten.
      */
     public OutputStream openWriteStream(String gsUri) {
         BlobId blobId = parseGsUri(gsUri);
@@ -129,7 +121,7 @@ public final class GcsClient implements Serializable {
                 com.google.cloud.storage.BlobInfo.newBuilder(blobId).setContentType("text/csv").build()));
     }
 
-    /** @return true iff an object exists at {@code gsUri} — used for the "no hyperscan file" / "no AVRO" checks (requirement 3.a/3.c). */
+    /** @return true iff an object exists at {@code gsUri} — used for the "no hyperscan file" / "no AVRO" checks. */
     public boolean exists(String gsUri) {
         BlobId blobId = parseGsUri(gsUri);
         Blob blob = storage().get(blobId);

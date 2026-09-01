@@ -6,8 +6,6 @@ import java.util.Objects;
 /**
  * {@code processing} block of the AVRO message schema — identifies which
  * partition (by run date/hour) this message record was written under.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class MessageProcessing implements Serializable {
 
@@ -28,8 +26,12 @@ public final class MessageProcessing implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageProcessing)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MessageProcessing)) {
+            return false;
+        }
         MessageProcessing other = (MessageProcessing) o;
         return Objects.equals(runDate, other.runDate) && Objects.equals(runHour, other.runHour);
     }

@@ -58,18 +58,18 @@ public final class OutputRowBuilder {
 
             for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.memberMatches().entrySet()) {
                 FeatureDecisionRow member = entry.getKey();
-                FeatureDefinition def = FeatureDefinition.parse(member.featureDefinitionJson());
-                Integer memberTotalTerms = def.body().totalTermsCount();
+                FeatureDefinition featureDefinition = FeatureDefinition.parse(member.featureDefinitionJson());
+                Integer memberTotalTerms = featureDefinition.body().totalTermsCount();
                 totalTermsCount += memberTotalTerms == null ? 0 : memberTotalTerms;
 
-                for (TermMatchResult tmr : entry.getValue()) {
+                for (TermMatchResult termMatch : entry.getValue()) {
                     // regexMatchHitCount = every individual occurrence this term's compiled pattern
                     // matched, across every scanned area (subject/body/each attachment) — the size
                     // of its AreaMatch list, NOT the distinct-term count (that is regexHitCount,
                     // below, at the EvaluatedLexicon level).
-                    long regexMatchHitCount = tmr.matches().size();
+                    long regexMatchHitCount = termMatch.matches().size();
                     termDtls.add(new LexiconHitSummaryRow.TermDtl(
-                            tmr.termId(), tmr.termRegexPattern(), regexMatchHitCount));
+                            termMatch.termId(), termMatch.termRegexPattern(), regexMatchHitCount));
                 }
             }
 
@@ -93,12 +93,12 @@ public final class OutputRowBuilder {
      *
      * @return null when there is nothing to report — the message was
      *          short-circuited by noise reduction, or every Lexicon-category
-     *          group had zero surviving matches after suppression. Requirement
-     *          3.f/3.g describe this table as carrying genuine hit detail, not
-     *          a broad per-message summary the way {@code lexicon-hit-summary}
-     *          is, so a message with nothing to report simply has no row here —
-     *          the caller should skip writing when this returns null, not write
-     *          a row with an empty {@code evaluated_lexicons} array.
+     *          group had zero surviving matches after suppression. This table
+     *          carries genuine hit detail, not a broad per-message summary the
+     *          way {@code lexicon-hit-summary} is, so a message with nothing to
+     *          report simply has no row here — the caller should skip writing
+     *          when this returns null, not write a row with an empty
+     *          {@code evaluated_lexicons} array.
      */
     public static LexiconHitDetailRow buildDetailRow(String messageId, String processId, String pipelineExecId,
                                                        String datasetPartitionValue,
@@ -111,9 +111,9 @@ public final class OutputRowBuilder {
         List<LexiconHitDetailRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
         for (Map.Entry<String, List<TermMatchResult>> entry : evaluation.finalLexiconMatchesByFeatureId().entrySet()) {
             List<LexiconHitDetailRow.EvaluatedLexicon.TermDtl> termDtls = new ArrayList<>();
-            for (TermMatchResult tmr : entry.getValue()) {
-                String matchedTextJson = buildMatchedTextJson(messageId, tmr.matches());
-                termDtls.add(new LexiconHitDetailRow.EvaluatedLexicon.TermDtl(tmr.termId(), matchedTextJson));
+            for (TermMatchResult termMatch : entry.getValue()) {
+                String matchedTextJson = buildMatchedTextJson(messageId, termMatch.matches());
+                termDtls.add(new LexiconHitDetailRow.EvaluatedLexicon.TermDtl(termMatch.termId(), matchedTextJson));
             }
             evaluatedLexicons.add(new LexiconHitDetailRow.EvaluatedLexicon(entry.getKey(), termDtls));
         }
@@ -131,27 +131,19 @@ public final class OutputRowBuilder {
         List<MatchedTextJson.TextHit> subject = new ArrayList<>();
         Map<String, List<MatchedTextJson.TextHit>> attachmentHits = new LinkedHashMap<>();
 
-        for (AreaMatch am : matches) {
+        for (AreaMatch areaMatch : matches) {
             MatchedTextJson.TextHit hit = new MatchedTextJson.TextHit(
-                    am.span().matchedText(), am.span().startCharIndex(), am.span().length());
-            switch (am.area()) {
-                case MESSAGE_BODY:
-                    msgText.add(hit);
-                    break;
-                case SUBJECT:
-                    subject.add(hit);
-                    break;
-                case ATTACHMENT:
-                    attachmentHits.computeIfAbsent(am.attachmentId(), k -> new ArrayList<>()).add(hit);
-                    break;
-                default:
-                    throw new IllegalStateException("Unrecognised MatchArea: " + am.area());
+                    areaMatch.span().matchedText(), areaMatch.span().startCharIndex(), areaMatch.span().length());
+            switch (areaMatch.area()) {
+                case MESSAGE_BODY -> msgText.add(hit);
+                case SUBJECT -> subject.add(hit);
+                case ATTACHMENT -> attachmentHits.computeIfAbsent(areaMatch.attachmentId(), unusedKey -> new ArrayList<>()).add(hit);
             }
         }
 
         List<MatchedTextJson.AttachmentTextHit> attachmentText = new ArrayList<>();
-        for (Map.Entry<String, List<MatchedTextJson.TextHit>> e : attachmentHits.entrySet()) {
-            attachmentText.add(new MatchedTextJson.AttachmentTextHit(e.getKey(), e.getValue()));
+        for (Map.Entry<String, List<MatchedTextJson.TextHit>> attachmentEntry : attachmentHits.entrySet()) {
+            attachmentText.add(new MatchedTextJson.AttachmentTextHit(attachmentEntry.getKey(), attachmentEntry.getValue()));
         }
 
         MatchedTextJson.HitDetail detail = new MatchedTextJson.HitDetail(messageId, msgText, subject, attachmentText);

@@ -33,11 +33,10 @@ import java.util.stream.Collectors;
  * Scans one {@link FeatureDecisionRow} (one lexicon feature applied to one
  * message) against whatever areas its {@code feature_definition.body.scope}
  * covers, using a per-partition {@link HyperscanBundleLoader} for the
- * {@code .hdb} database AND the accompanying per-term AND NOT/decomposition
- * metadata — both now extracted from the same GCS zip bundle, see that
- * class's Javadoc — this is the {@link DecisionTreeEvaluator.FeatureRowScanner}
- * implementation {@code DecisionTreeEvaluator} needs, wired to the real
- * Hyperscan/GCS layer rather than a test double.
+ * {@code .hdb} database and the accompanying per-term AND NOT/decomposition
+ * metadata — both extracted from the same GCS zip bundle, see that class's
+ * Javadoc. This is the real, Hyperscan/GCS-backed
+ * {@link DecisionTreeEvaluator.FeatureRowScanner} implementation.
  *
  * <h2>Designed for reuse inside one {@code mapPartitions} call</h2>
  * <p>One instance is constructed per Spark partition (sharing that
@@ -47,61 +46,37 @@ import java.util.stream.Collectors;
  * on exactly one message and returns plain, serialisable result objects,
  * safe to run entirely on an executor.
  *
- * <h2>Confirmed gap this class fixes: AND NOT / decomposed term_id and hit evaluation</h2>
- * <p>An earlier version of this class resolved a matched Hyperscan
- * expression id directly to a {@code term_id} via
- * {@code TermIdBuilder.build(feature, expressionId)}, on the documented
- * assumption that this id was always the term's own number. The Compile
- * Service's AND NOT fix broke that assumption for AND NOT terms
- * specifically — see {@link TermExpressionMetadata} class Javadoc for the
- * full explanation. Confirmed, concrete consequences of the old code,
- * traced through to production impact:
- * <ul>
- *   <li>{@code lexicon-hit-summary.evaluated_lexicons.term_dtls.term_id} was
- *       populated with a wrong, meaningless value for any AND NOT term's
- *       required/excluded pattern match (an arbitrary allocated id, not the
- *       term's number).</li>
- *   <li>{@code DecisionTreeEvaluator}'s hit check
- *       ({@code !matches.isEmpty()}) had no AND NOT boolean logic to rely
- *       on at all — a message containing ONLY the excluded pattern, with
- *       the required pattern entirely absent, would still register as a
- *       feature hit, a real false-positive risk, not merely a labelling issue.</li>
- *   <li>{@code term_regex_pattern} for a purely-decomposed (non-AND-NOT)
- *       term would show the unreadable native COMBINATION formula string
- *       (e.g. {@code "(2&3&4)"}) rather than the term's actual pattern
- *       text, since the match's own {@code Expression} text IS that
- *       formula for a combination match — a separate, pre-existing
- *       display bug this rewrite also fixes by preferring
- *       {@link TermExpressionMetadata}'s own {@code termRegexPattern}
- *       (built from the Compile Service's {@code translatedPattern} list)
- *       over the raw match's expression text.</li>
- * </ul>
+ * <h2>Term id resolution and AND NOT evaluation</h2>
+ * <p>A matched Hyperscan expression id is not always the term's own number
+ * — see {@link TermExpressionMetadata} class Javadoc for the full id
+ * scheme. {@code term_id} is always resolved via {@link TermIdBuilder},
+ * never built directly from a raw matched expression id.
  *
- * <h2>The fix: scan every area first, THEN resolve/evaluate once, across all of them</h2>
- * <p>{@link HyperscanScanService#scan} now returns raw,
- * un-resolved {@link RawExpressionMatch}es per area — see that class's
- * Javadoc for why resolution moved out of it. This class scans every area
- * the feature's scope covers, merges the raw results by expression id
- * ACROSS all of them (required and excluded patterns of the same AND NOT
- * term can legitimately match in different areas of the same message — a
- * per-area evaluation would miss this), then for every DISTINCT term any
- * matched expression id belongs to (via {@link TermExpressionMetadata}),
- * evaluates: the required side is satisfied iff EVERY entry of
+ * <h2>Scan every area first, then resolve/evaluate once, across all of them</h2>
+ * <p>{@link HyperscanScanService#scan} returns raw, un-resolved
+ * {@link RawExpressionMatch}es per area. This class scans every area the
+ * feature's scope covers, merges the raw results by expression id ACROSS
+ * all of them (required and excluded patterns of the same AND NOT term can
+ * legitimately match in different areas of the same message — a per-area
+ * evaluation would miss this), then for every DISTINCT term any matched
+ * expression id belongs to (via {@link TermExpressionMetadata}), evaluates:
+ * the required side is satisfied iff EVERY entry of
  * {@code requiredExpressionIds} appears in the combined match-id set; for
  * an AND NOT term, the excluded side is satisfied (term therefore excluded)
  * iff EVERY entry of {@code excludedExpressionIds} also appears — same AND
- * convention on both sides, mirroring the Lexicon Compile Service's and
- * Lexicon Scanner Service's own documented AND NOT contracts exactly, for
- * consistency across all three services. A term only produces a
- * {@link TermMatchResult} when the required side is satisfied AND the
- * excluded side is not.
+ * convention on both sides. A term only produces a {@link TermMatchResult}
+ * when the required side is satisfied AND the excluded side is not.
+ *
+ * <p>{@code term_regex_pattern} prefers {@link TermExpressionMetadata}'s own
+ * pattern text over the raw match's expression text, since for a
+ * COMBINATION match the expression text is the unreadable boolean formula
+ * itself (e.g. {@code "(2&3&4)"}), not the term's actual pattern.
  *
  * <h2>Performance: one {@link Scanner}, and one HTML-strip pass, per message — never per feature</h2>
  * <p>A message can legitimately be evaluated against dozens of applicable
  * lexicon features (one {@link #scanRow} call each, all via the SAME
- * {@link #scannerFor} closure). Two real, measured anti-patterns this class
- * deliberately avoids, both scaling with (features × messages), not just
- * messages — significant at "millions of messages" volume:
+ * {@link #scannerFor} closure). Two anti-patterns this class deliberately
+ * avoids, both scaling with (features × messages), not just messages:
  * <ul>
  *   <li><b>Constructing a new {@code Scanner} per scan call.</b> The wrapper
  *       library's own {@code Scanner} Javadoc: "you need one scanner
@@ -113,7 +88,7 @@ import java.util.stream.Collectors;
  *       partition, matching Spark's own single-thread-per-task model) —
  *       see {@link #close}.</li>
  *   <li><b>Re-running {@code HtmlStrippingService.strip} per feature.</b>
- *       Subject/body/attachment TEXT doesn't change across which feature is
+ *       Subject/body/attachment text doesn't change across which feature is
  *       being scanned — only the {@code Database} does. {@link #scannerFor}
  *       strips every area's text EXACTLY ONCE per message
  *       ({@link #precomputeAreaTexts}), and every {@link #scanRow} call for
@@ -138,9 +113,9 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     /**
      * @param bundleLoader              this partition's shared, cached zip-bundle loader — see
      *                                   {@link HyperscanBundleLoader} class Javadoc
-     * @param maxAttachmentSizeBytes    null means unlimited (requirement 4.e default) — an
-     *                                   attachment whose {@code cleanText} UTF-8 byte length
-     *                                   exceeds this is skipped entirely (not scanned, not an error)
+     * @param maxAttachmentSizeBytes    null means unlimited — an attachment whose
+     *                                   {@code cleanText} UTF-8 byte length exceeds this is
+     *                                   skipped entirely (not scanned, not an error)
      */
     public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes) {
         this.bundleLoader = bundleLoader;
@@ -177,18 +152,26 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         }
 
         for (MessageAttachment attachment : message.attachmentsOrEmpty()) {
-            if (!withinSizeLimit(attachment)) {
-                continue;
+            MessageAreaText attachmentAreaText = toEligibleAttachmentAreaText(attachment);
+            if (attachmentAreaText != null) {
+                areaTexts.add(attachmentAreaText);
             }
-            String cleanText = attachment.cleanText();
-            if (cleanText == null || cleanText.isBlank()) {
-                continue;
-            }
-            // identity(), not strip(): attachment cleanText is already HTML-free — see class Javadoc.
-            areaTexts.add(new MessageAreaText(MatchArea.ATTACHMENT, attachment.attachmentId(), cleanText,
-                    HtmlStrippingService.identity(cleanText)));
         }
         return areaTexts;
+    }
+
+    /** @return the attachment's area text, or null if it's oversized or has no scannable content. */
+    private MessageAreaText toEligibleAttachmentAreaText(MessageAttachment attachment) {
+        if (!withinSizeLimit(attachment)) {
+            return null;
+        }
+        String cleanText = attachment.cleanText();
+        if (cleanText == null || cleanText.isBlank()) {
+            return null;
+        }
+        // identity(), not strip(): attachment cleanText is already HTML-free — see class Javadoc.
+        return new MessageAreaText(MatchArea.ATTACHMENT, attachment.attachmentId(), cleanText,
+                HtmlStrippingService.identity(cleanText));
     }
 
     /** @return the scope constant (see {@code BqColumns.FeatureDefinitionJson}) a given area is gated by. */
@@ -287,60 +270,80 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                                                        List<AreaScanContext> areaScans) {
         Map<Integer, List<AreaMatch>> matchesByExpressionId = new LinkedHashMap<>();
         Map<Integer, String> patternTextByExpressionId = new LinkedHashMap<>();
-        for (RawExpressionMatch rem : allRawMatches) {
-            matchesByExpressionId.computeIfAbsent(rem.expressionId(), k -> new ArrayList<>()).addAll(rem.matches());
-            patternTextByExpressionId.putIfAbsent(rem.expressionId(), rem.matchedPatternText());
+        for (RawExpressionMatch rawMatch : allRawMatches) {
+            matchesByExpressionId.computeIfAbsent(rawMatch.expressionId(), unusedKey -> new ArrayList<>())
+                    .addAll(rawMatch.matches());
+            patternTextByExpressionId.putIfAbsent(rawMatch.expressionId(), rawMatch.matchedPatternText());
         }
         Set<Integer> matchedExpressionIds = matchesByExpressionId.keySet();
+        Map<Integer, TermEntry> termsToEvaluate = collectTermsToEvaluate(feature, metadata, matchedExpressionIds);
 
-        // Every DISTINCT term any matched expression id belongs to, in first-seen order for
-        // determinism — a term may be referenced by several matched ids (an AND NOT term's
-        // required AND excluded sides both matching), so dedupe by term number.
+        List<TermMatchResult> results = new ArrayList<>();
+        for (TermEntry entry : termsToEvaluate.values()) {
+            TermMatchResult termMatchResult = buildTermMatchResult(
+                    feature, entry, matchedExpressionIds, matchesByExpressionId, patternTextByExpressionId, areaScans);
+            if (termMatchResult != null) {
+                results.add(termMatchResult);
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Every DISTINCT term any matched expression id belongs to, in first-seen order for
+     * determinism — a term may be referenced by several matched ids (an AND NOT term's
+     * required AND excluded sides both matching), so dedupe by term number. Also includes
+     * every mandatory-per-area term (a resolvedPatternTree term with NO expression id at
+     * all — a mandatory-per-area AND NOT term the Compile Service gave no id list for),
+     * which is otherwise never discoverable via a matched expression id.
+     */
+    private Map<Integer, TermEntry> collectTermsToEvaluate(String feature, TermExpressionMetadata metadata,
+                                                             Set<Integer> matchedExpressionIds) {
         Map<Integer, TermEntry> termsToEvaluate = new LinkedHashMap<>();
         Set<Integer> unrecognisedIds = new LinkedHashSet<>();
-        for (int id : matchedExpressionIds) {
-            TermEntry entry = metadata.termByAnyExpressionId(id);
-            if (entry == null) {
-                unrecognisedIds.add(id);
-                continue;
+        for (int expressionId : matchedExpressionIds) {
+            TermEntry entry = metadata.termByAnyExpressionId(expressionId);
+            if (entry != null) {
+                termsToEvaluate.putIfAbsent(entry.termNumber(), entry);
+            } else {
+                unrecognisedIds.add(expressionId);
             }
-            termsToEvaluate.putIfAbsent(entry.termNumber(), entry);
         }
         if (!unrecognisedIds.isEmpty()) {
             log.warn("feature='{}': {} matched expression id(s) not found in term metadata — skipping: {}",
                     feature, unrecognisedIds.size(), unrecognisedIds);
         }
-        // A resolvedPatternTree term with NO expression id at all (a mandatory-per-area AND NOT
-        // term the Compile Service gave no id list for) is never discoverable via a matched
-        // expression id above — this is the only way it's ever found.
         for (TermEntry entry : metadata.mandatoryPerAreaTerms()) {
             termsToEvaluate.putIfAbsent(entry.termNumber(), entry);
         }
+        return termsToEvaluate;
+    }
 
-        List<TermMatchResult> results = new ArrayList<>();
-        for (TermEntry entry : termsToEvaluate.values()) {
-            List<AreaMatch> combined = entry.requiresPerAreaEvaluation()
-                    ? resolveAndEvaluatePerArea(feature, entry, matchedExpressionIds, areaScans)
-                    : resolveAndEvaluateCrossArea(feature, entry, matchedExpressionIds, matchesByExpressionId);
-            if (combined.isEmpty()) {
-                continue;
-            }
-
-            String termId = TermIdBuilder.build(feature, entry.termNumber());
-            // Prefer the metadata's own pattern text (the resolvedPatterns string, or the
-            // Compile Service's translatedPattern — always a genuine, readable pattern) over the
-            // raw match's Expression text, which for a COMBINATION match is the unreadable
-            // boolean formula string itself, and for an AND NOT match is only ONE leaf's own
-            // text, not representative of the whole term.
-            String termRegexPattern = entry.termRegexPattern() != null
-                    ? entry.termRegexPattern()
-                    : entry.hasCoarseExpressionId()
-                            ? patternTextByExpressionId.get(entry.requiredExpressionIds().get(0))
-                            : null;
-
-            results.add(new TermMatchResult(termId, termRegexPattern, combined));
+    /** @return this term's resolved match result, or null if the term did not produce any matches. */
+    private TermMatchResult buildTermMatchResult(String feature, TermEntry entry, Set<Integer> matchedExpressionIds,
+                                                  Map<Integer, List<AreaMatch>> matchesByExpressionId,
+                                                  Map<Integer, String> patternTextByExpressionId,
+                                                  List<AreaScanContext> areaScans) {
+        List<AreaMatch> combined = entry.requiresPerAreaEvaluation()
+                ? resolveAndEvaluatePerArea(feature, entry, matchedExpressionIds, areaScans)
+                : resolveAndEvaluateCrossArea(feature, entry, matchedExpressionIds, matchesByExpressionId);
+        if (combined.isEmpty()) {
+            return null;
         }
-        return results;
+
+        String termId = TermIdBuilder.build(feature, entry.termNumber());
+        // Prefer the metadata's own pattern text (the resolvedPatterns string, or the
+        // Compile Service's translatedPattern — always a genuine, readable pattern) over the
+        // raw match's Expression text, which for a COMBINATION match is the unreadable
+        // boolean formula string itself, and for an AND NOT match is only ONE leaf's own
+        // text, not representative of the whole term.
+        String termRegexPattern = entry.termRegexPattern() != null
+                ? entry.termRegexPattern()
+                : entry.hasCoarseExpressionId()
+                        ? patternTextByExpressionId.get(entry.requiredExpressionIds().get(0))
+                        : null;
+
+        return new TermMatchResult(termId, termRegexPattern, combined);
     }
 
     /** Today's cross-area, id-presence-only evaluation — unchanged for any term without a resolvedPatternTree. */
@@ -385,24 +388,30 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         }
 
         List<AreaMatch> combined = new ArrayList<>();
-        for (AreaScanContext ctx : areaScans) {
-            if (ctx.originalText() == null || ctx.originalText().isBlank()) {
+        for (AreaScanContext areaScan : areaScans) {
+            if (!canSatisfyCondition(entry, areaScan)) {
                 continue;
             }
-            if (entry.hasCoarseExpressionId()) {
-                Set<Integer> areaIds = ctx.rawMatches().stream()
-                        .map(RawExpressionMatch::expressionId)
-                        .collect(Collectors.toSet());
-                if (!areaIds.containsAll(entry.requiredExpressionIds())) {
-                    continue; // per-area pre-filter: this area can't possibly satisfy the condition
-                }
-            }
             List<MatchSpan> spans = ResolvedPatternAreaEvaluator.findMatchingSpans(
-                    entry.resolvedPatternTree(), ctx.originalText());
+                    entry.resolvedPatternTree(), areaScan.originalText());
             for (MatchSpan span : spans) {
-                combined.add(new AreaMatch(ctx.area(), ctx.attachmentId(), span));
+                combined.add(new AreaMatch(areaScan.area(), areaScan.attachmentId(), span));
             }
         }
         return combined;
+    }
+
+    /** @return false if this area's text is empty, or (pre-filter) is missing a required leaf entirely. */
+    private static boolean canSatisfyCondition(TermEntry entry, AreaScanContext areaScan) {
+        if (areaScan.originalText() == null || areaScan.originalText().isBlank()) {
+            return false;
+        }
+        if (!entry.hasCoarseExpressionId()) {
+            return true;
+        }
+        Set<Integer> areaExpressionIds = areaScan.rawMatches().stream()
+                .map(RawExpressionMatch::expressionId)
+                .collect(Collectors.toSet());
+        return areaExpressionIds.containsAll(entry.requiredExpressionIds());
     }
 }

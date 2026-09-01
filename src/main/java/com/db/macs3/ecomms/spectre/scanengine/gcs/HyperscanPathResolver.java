@@ -10,33 +10,29 @@ import java.util.List;
  * template:
  * {@code gs://<environment_bkt>/policy_test/<YYYY-MM-DD_HH-MM-SS_<policy_engine_id>>/lex-hyperscan/<feature>.zip}
  *
- * <p>Confirmed: the {@code policy_test} segment is used regardless of
- * trigger type (live or test), and the timestamp segment is resolved via a
- * GCS wildcard listing rather than being supplied as a runtime parameter.
+ * <p>The {@code policy_test} segment is used regardless of trigger type
+ * (live or test); the timestamp segment is resolved via a GCS wildcard
+ * listing rather than being supplied as a runtime parameter.
  *
- * <h2>One zip per feature, not two separate files</h2>
- * <p>The Compile Service used to write two separate files per feature to
- * this folder — {@code <feature>.hdb} and {@code <feature>-compile-results.json}
- * — resolved via two separate path-builder methods. It now writes ONE
- * {@code <feature>.zip} containing both as entries — see
+ * <p>Each feature's zip bundle contains both the compiled {@code .hdb} and
+ * its {@code compile-results.json} metadata as entries — see
  * {@code HyperscanBundleLoader} for how that zip is downloaded once and both
- * entries extracted from it, and {@code TermIdBuilder#hdbFileName}/
- * {@code #termMetadataFileName} for the two entries' expected names inside it.
+ * entries extracted from it.
  *
  * <h2>One listing call per job run, not one per feature</h2>
  * <p>The wildcard timestamp segment is the SAME for every feature a given
- * job run needs — only the trailing {@code <feature>.hdb} differs. This
+ * job run needs — only the trailing {@code <feature>.zip} differs. This
  * class therefore resolves the wildcard folder ONCE
  * ({@link #resolveBasePath}, a single lightweight GCS metadata listing call)
- * and hands back a base path every feature's {@code .hdb} path is then built
- * from by simple string concatenation ({@link #buildHdbPath}) — avoiding a
- * redundant GCS listing round-trip per feature, which would otherwise scale
- * with the number of DISTINCT features a job run touches (potentially in the
- * hundreds) rather than staying constant.
+ * and hands back a base path every feature's zip path is then built from by
+ * simple string concatenation ({@link #buildZipPath}) — avoiding a redundant
+ * GCS listing round-trip per feature, which would otherwise scale with the
+ * number of distinct features a job run touches rather than staying
+ * constant.
  *
- * <p>This resolution happens on the DRIVER, once, before any broadcast —
- * see {@code FeatureScanOrchestrator} class Javadoc for why only the small,
- * resolved path strings (never file bytes) are ever broadcast to executors.
+ * <p>This resolution happens on the driver, once, before any broadcast — only
+ * the small, resolved path strings (never file bytes) are ever broadcast to
+ * executors.
  */
 public final class HyperscanPathResolver {
 
@@ -66,9 +62,7 @@ public final class HyperscanPathResolver {
      * — the {@code YYYY-MM-DD_HH-MM-SS} format sorts lexicographically in
      * chronological order, so this picks the most recent compile.
      *
-     * @throws HyperscanFileNotFoundException if no folder matches {@code *_<policyEngineId>} —
-     *                                          requirement 3.a: no hyperscan file available must fail
-     *                                          the job with a clear error, not proceed silently
+     * @throws HyperscanFileNotFoundException if no folder matches {@code *_<policyEngineId>}
      */
     public static String resolveBasePath(String environmentBucket, String policyEngineId, GcsDirectoryLister lister) {
         String prefix = POLICY_SEGMENT + "/";
@@ -98,7 +92,7 @@ public final class HyperscanPathResolver {
         return basePath + TermIdBuilder.zipFileName(feature);
     }
 
-    /** Thrown when no hyperscan compile folder can be resolved — see requirement 3.a. */
+    /** Thrown when no hyperscan compile folder can be resolved for a policy engine id. */
     public static final class HyperscanFileNotFoundException extends RuntimeException {
         public HyperscanFileNotFoundException(String message) {
             super(message);

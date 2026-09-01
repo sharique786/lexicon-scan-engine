@@ -9,9 +9,8 @@ import java.util.Objects;
 
 /**
  * The Airflow (Google Composer) DAG's runtime parameters for one job
- * invocation — requirement 2.a's JSON shape, plus {@code triggerType} (shown
- * separately in the workflow diagram's "Runtime Args" as its own value, not
- * nested in this JSON body).
+ * invocation, plus {@code triggerType} (supplied separately from this JSON
+ * body).
  *
  * <pre>
  * {
@@ -24,13 +23,14 @@ import java.util.Objects;
  * </pre>
  *
  * <h2>{@code dataset_details} cardinality by trigger type</h2>
- * <p>Confirmed: for {@code policy-alert-live}, this list always has exactly
- * one entry. For {@code policy-alert-test}, it can have several — the
- * engine reads/queries once per entry and unions the results (see
+ * <p>For {@code policy-alert-live}, this list always has exactly one entry.
+ * For {@code policy-alert-test}, it can have several — the engine reads/
+ * queries once per entry and unions the results (see
  * {@code FeatureScanOrchestrator}). This class does not itself enforce
  * either cardinality; it is a plain, uniform data holder for both cases.
  *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * <p>A plain class rather than a record, matching this project's other
+ * pre-existing model classes.
  */
 public final class RuntimeArgs implements Serializable {
 
@@ -48,9 +48,7 @@ public final class RuntimeArgs implements Serializable {
      * @param pipelineExecId             this pipeline execution's identifier
      * @param policyEngineId              which policy engine's compiled features to use
      * @param processId                    this process run's identifier
-     * @param triggerType                  {@code "policy-alert-live"} / {@code "policy-alert-test"} —
-     *                                   confirmed values, replacing the workflow diagram's earlier
-     *                                   {@code POLICY_DEPLOYMENT}/{@code POLICY_TEST} naming
+     * @param triggerType                  {@code "policy-alert-live"} or {@code "policy-alert-test"}
      */
     @JsonCreator
     public RuntimeArgs(@JsonProperty("dataset_details") List<DatasetDetail> datasetDetails,
@@ -87,8 +85,12 @@ public final class RuntimeArgs implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof RuntimeArgs)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof RuntimeArgs)) {
+            return false;
+        }
         RuntimeArgs other = (RuntimeArgs) o;
         return Objects.equals(datasetDetails, other.datasetDetails)
                 && Objects.equals(featurePartitionValue, other.featurePartitionValue)
@@ -128,8 +130,12 @@ public final class RuntimeArgs implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof DatasetDetail)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof DatasetDetail)) {
+                return false;
+            }
             DatasetDetail other = (DatasetDetail) o;
             return Objects.equals(datasetId, other.datasetId)
                     && Objects.equals(datasetPartitionValue, other.datasetPartitionValue);

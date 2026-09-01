@@ -9,11 +9,7 @@ import java.util.List;
  * an AND NOT boolean condition. {@link com.db.macs3.ecomms.spectre.scanengine.hyperscan.HyperscanScanService#scan}
  * returns these; {@code FeatureScanOrchestrator} merges them across every
  * area a feature's scope covers, then resolves and evaluates them into
- * final {@link TermMatchResult}s using {@code TermExpressionMetadata} — see
- * both classes' Javadoc for why this two-stage split now exists (it did
- * not, before the Compile Service's AND NOT fix, when an expression id
- * could be resolved to a term identity immediately, with no cross-area
- * merge or boolean evaluation needed first).
+ * final {@link TermMatchResult}s using {@code TermExpressionMetadata}.
  *
  * @param expressionId        the raw Hyperscan expression id, as reported on a {@code Match} —
  *                              may belong to a simple/decomposed term's own reportable id, or to

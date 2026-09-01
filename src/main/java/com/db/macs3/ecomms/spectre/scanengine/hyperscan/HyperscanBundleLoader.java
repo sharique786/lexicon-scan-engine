@@ -25,31 +25,16 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Loads and caches, per feature, the {@link Database} AND
- * {@link TermExpressionMetadata} the Lexicon Compile Service now writes
- * TOGETHER in a single {@code <feature>.zip} bundle on GCS — one instance per
- * Spark partition, mirroring {@code HyperscanDatabaseLoader}/
- * {@code TermMetadataLoader}'s original per-partition, lazy-load, LRU-cached
- * pattern, now unified into one loader/one cache.
+ * Loads and caches, per feature, the {@link Database} and
+ * {@link TermExpressionMetadata} the Lexicon Compile Service writes together
+ * in a single {@code <feature>.zip} bundle on GCS — one instance per Spark
+ * partition, lazy-loading and LRU-caching both together.
  *
- * <h2>Replaces two separate loaders — because the underlying resource is now one file</h2>
- * <p>Before this change, the Compile Service wrote two separate files per
- * feature ({@code <feature>.hdb}, {@code <feature>-compile-results.json}),
- * and this project accordingly used two independent loaders/broadcasts/caches
- * ({@code HyperscanDatabaseLoader}, {@code TermMetadataLoader}) — a
- * deliberate design at the time, reasoned from the fact that a
- * {@link Database} (heavy, native/off-heap) and a {@link TermExpressionMetadata}
- * (light, on-heap plain id lists) had genuinely different memory-bounding
- * needs and came from genuinely independent GCS objects.
- *
- * <p>The Compile Service now writes ONE {@code <feature>.zip} containing both
- * as entries. Keeping two independent loaders under this new scheme would
- * mean downloading and unzipping the SAME file twice per feature per
- * partition — once for the database, once for the metadata — for no benefit,
- * since {@code FeatureScanOrchestrator} always needs both together for any
- * feature it scans anyway. This class downloads and unzips the bundle
- * EXACTLY ONCE per feature per partition, caching both resulting objects
- * together as one {@link LexiconBundle} entry in one bounded {@link LruCache}.
+ * <p>This class downloads and unzips the bundle EXACTLY ONCE per feature per
+ * partition, since {@code FeatureScanOrchestrator} always needs both the
+ * database and the metadata together for any feature it scans — caching them
+ * as one {@link LexiconBundle} entry in one bounded {@link LruCache} avoids
+ * downloading and unzipping the same file twice.
  *
  * <h2>Usage pattern</h2>
  * <p>Construct exactly ONE instance per Spark partition — inside a
@@ -199,13 +184,19 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         // is the only place this method ever touches the (deliberately non-thread-safe) cache.
         for (Map.Entry<String, LexiconBundle> entry : loaded.entrySet()) {
             LexiconBundle bundle = entry.getValue();
-            cache.computeIfAbsent(entry.getKey(), f -> bundle);
+            cache.computeIfAbsent(entry.getKey(), unusedFeature -> bundle);
         }
         log.debug("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
                 loaded.size(), distinct.size());
     }
 
     private LexiconBundle loadFresh(String feature) {
+        String path = resolveZipPath(feature);
+        ZipEntryBytes zipEntryBytes = extractZipEntries(feature, path);
+        return buildBundle(feature, path, zipEntryBytes);
+    }
+
+    private String resolveZipPath(String feature) {
         String path = featureToZipPath.get(feature);
         if (path == null) {
             throw new HyperscanPathResolver.HyperscanFileNotFoundException(
@@ -214,7 +205,14 @@ public final class HyperscanBundleLoader implements AutoCloseable {
                     + "this job's path resolution never saw, which should not happen if both derive from "
                     + "the same view query result.");
         }
+        return path;
+    }
 
+    /** The two entries a feature's zip bundle must contain — raw bytes, not yet parsed. */
+    private record ZipEntryBytes(byte[] hdbBytes, String metadataJson) {
+    }
+
+    private ZipEntryBytes extractZipEntries(String feature, String path) {
         byte[] hdbBytes = null;
         String metadataJson = null;
         List<String> entryNames = new ArrayList<>();
@@ -247,13 +245,16 @@ public final class HyperscanBundleLoader implements AutoCloseable {
                     "Zip bundle for feature '" + feature + "' at " + path + " has no entry named '"
                     + TermIdBuilder.termMetadataFileName(feature) + "' — entries found: " + entryNames);
         }
+        return new ZipEntryBytes(hdbBytes, metadataJson);
+    }
 
+    private LexiconBundle buildBundle(String feature, String path, ZipEntryBytes zipEntryBytes) {
         try {
             Database database;
-            try (InputStream hdbIn = new ByteArrayInputStream(hdbBytes)) {
+            try (InputStream hdbIn = new ByteArrayInputStream(zipEntryBytes.hdbBytes())) {
                 database = Database.load(hdbIn);
             }
-            TermExpressionMetadata metadata = TermExpressionMetadata.parse(feature, metadataJson);
+            TermExpressionMetadata metadata = TermExpressionMetadata.parse(feature, zipEntryBytes.metadataJson());
             return new LexiconBundle(database, metadata);
         } catch (IOException | RuntimeException e) {
             throw new HyperscanFileLoadException(
@@ -284,7 +285,6 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         // Database itself is Closeable (a native resource handle) — but this loader does not
         // proactively close cached entries on eviction, since a Database evicted from the cache
         // may still be in use by an in-flight Scanner in a concurrent context; relying on GC +
-        // the native library's own finalisation is the safer default here, mirroring the
-        // superseded HyperscanDatabaseLoader's identical reasoning.
+        // the native library's own finalisation is the safer default here.
     }
 }

@@ -10,19 +10,6 @@ import java.util.Objects;
  * Hyperscan scans the stripped text, but every match reported here has
  * already been translated back to where that text actually sits in the
  * message as it was originally written.
- *
- * <p>Matches requirement 1.i's worked example: for term
- * {@code Enjoy(?:\s+\S+){0,2}\s+Happy} against
- * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} (stripped to
- * {@code " Enjoy Happy Birthday "}), the reported match is
- * {@code {startCharIndex: 3, endCharIndex: 21, matchedText: "Enjoy Happy"}} —
- * see {@code HtmlStrippingService} class Javadoc for why {@code endCharIndex}
- * is 21 (verified against the offset-mapping algorithm), not the 22 the
- * requirement's own text states.
- *
- * <p>Java 11 class (not a record — this project targets Java 11) exposing
- * the same accessor-method-per-field shape a record would, so every call
- * site reads identically to before.
  */
 public final class MatchSpan implements Serializable {
 
@@ -67,8 +54,12 @@ public final class MatchSpan implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MatchSpan)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MatchSpan)) {
+            return false;
+        }
         MatchSpan other = (MatchSpan) o;
         return startCharIndex == other.startCharIndex
                 && endCharIndex == other.endCharIndex
