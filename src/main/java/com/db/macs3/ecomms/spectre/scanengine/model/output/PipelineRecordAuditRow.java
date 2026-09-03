@@ -7,15 +7,13 @@ import java.util.Objects;
 
 /**
  * One row of {@code pipeline_record_audit} — a per-RECORD (per-message)
- * outcome, written for messages that failed processing (requirement 3,
- * "Other errors": a per-message processing failure must NOT fail the whole
- * job — it is recorded here instead).
+ * outcome, written for messages that failed processing. A per-message
+ * processing failure does not fail the whole job — it is recorded here
+ * instead.
  *
  * <p>Field name note: {@link #pipelineExecId} maps to the BQ column
  * literally named {@code pipelinex_exec_id} — see
  * {@link PipelineStageAuditRow} class Javadoc for the same note.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class PipelineRecordAuditRow implements Serializable {
 
@@ -74,8 +72,12 @@ public final class PipelineRecordAuditRow implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof PipelineRecordAuditRow)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof PipelineRecordAuditRow)) {
+            return false;
+        }
         PipelineRecordAuditRow other = (PipelineRecordAuditRow) o;
         return Objects.equals(processId, other.processId) && Objects.equals(triggerType, other.triggerType)
                 && Objects.equals(pipelineExecId, other.pipelineExecId) && Objects.equals(stageName, other.stageName)

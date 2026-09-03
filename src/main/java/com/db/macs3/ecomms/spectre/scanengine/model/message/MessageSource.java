@@ -3,13 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.message;
 import java.io.Serializable;
 import java.util.Objects;
 
-/**
- * {@code source} block of the AVRO message schema.
- *
- * <p>Java 11 class (not a record — this project targets Java 11) exposing
- * the same accessor-method-per-field shape a record would, so every call
- * site reads identically to before.
- */
+/** {@code source} block of the AVRO message schema. */
 public final class MessageSource implements Serializable {
 
     private final String channelName;
@@ -37,8 +31,12 @@ public final class MessageSource implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageSource)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MessageSource)) {
+            return false;
+        }
         MessageSource other = (MessageSource) o;
         return Objects.equals(channelName, other.channelName)
                 && Objects.equals(sourceName, other.sourceName)

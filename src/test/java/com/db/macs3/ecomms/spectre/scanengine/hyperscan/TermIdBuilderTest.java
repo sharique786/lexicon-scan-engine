@@ -39,4 +39,17 @@ class TermIdBuilderTest {
     void hdbFileNameRejectsBlankFeature() {
         assertThatThrownBy(() -> TermIdBuilder.hdbFileName(null)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("zipFileName() appends .zip to the feature name")
+    void buildsZipFileName() {
+        assertThat(TermIdBuilder.zipFileName("lexicon_market_cond-1")).isEqualTo("lexicon_market_cond-1.zip");
+    }
+
+    @Test
+    @DisplayName("zipFileName() rejects a null/blank feature")
+    void zipFileNameRejectsBlankFeature() {
+        assertThatThrownBy(() -> TermIdBuilder.zipFileName(null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> TermIdBuilder.zipFileName("")).isInstanceOf(IllegalArgumentException.class);
+    }
 }

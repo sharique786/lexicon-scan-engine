@@ -18,8 +18,6 @@ import java.util.Objects;
  * stops there and {@link #shortCircuited} is true — every LATER group
  * (further NoiseReduction groups, the Disclaimer group, all Lexicon groups)
  * is simply never evaluated at all, not evaluated-and-discarded.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class MessageEvaluationResult implements Serializable {
 
@@ -42,8 +40,8 @@ public final class MessageEvaluationResult implements Serializable {
      *                                           suppress overlapping Lexicon matches; disclaimer
      *                                           matches themselves are never suppressed
      * @param finalLexiconMatchesByFeatureId      Lexicon-category matches AFTER disclaimer-overlap
-     *                                           suppression (requirement 2.j; full containment only —
-     *                                           see {@code DecisionTreeEvaluator}), keyed by
+     *                                           suppression (full containment only — see
+     *                                           {@code DecisionTreeEvaluator}), keyed by
      *                                           {@code featureId} (i.e. by {@link FeatureGroup#featureId()})
      *                                           so a downstream row builder can reconstruct which
      *                                           evaluated group each surviving match belongs to — this
@@ -77,8 +75,12 @@ public final class MessageEvaluationResult implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageEvaluationResult)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MessageEvaluationResult)) {
+            return false;
+        }
         MessageEvaluationResult other = (MessageEvaluationResult) o;
         return shortCircuited == other.shortCircuited
                 && suppressedLexiconMatchCount == other.suppressedLexiconMatchCount

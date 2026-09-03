@@ -13,8 +13,6 @@ import java.util.Objects;
  * whether the group counts as a "hit" (after resolving its
  * {@link FeatureGroup#operator()} across every member), and the raw scan
  * results behind that decision.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class GroupEvaluationResult implements Serializable {
 
@@ -33,14 +31,14 @@ public final class GroupEvaluationResult implements Serializable {
      *                                    matches is present with an empty list, not absent
      * @param memberHit                  per-member hit status — true iff that member's
      *                                    {@code featuresToApply} lexicon had at least one
-     *                                    match anywhere in scope (see requirement 3 answer:
-     *                                    minimumHits is informational only for this engine —
-     *                                    any match at all counts as a hit)
+     *                                    match anywhere in scope ({@code minimumHits} is
+     *                                    informational only for this engine — any match at
+     *                                    all counts as a hit)
      * @param isHit                       the group's OVERALL hit status: for a single-member
      *                                    group, equal to that member's hit; for a multi-member
      *                                    group, {@link FeatureGroup#operator()} applied across
      *                                    every {@link #memberHit} value (OR = any true, AND =
-     *                                    all true — requirement 4's confirmed semantics)
+     *                                    all true)
      */
     public GroupEvaluationResult(FeatureGroup group, Map<FeatureDecisionRow, List<TermMatchResult>> memberMatches,
                                   Map<FeatureDecisionRow, Boolean> memberHit, boolean isHit) {
@@ -57,8 +55,12 @@ public final class GroupEvaluationResult implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof GroupEvaluationResult)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof GroupEvaluationResult)) {
+            return false;
+        }
         GroupEvaluationResult other = (GroupEvaluationResult) o;
         return isHit == other.isHit
                 && Objects.equals(group, other.group)

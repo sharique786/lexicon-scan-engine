@@ -11,13 +11,10 @@ import java.util.Objects;
  * composite/NoiseReduction group's individual sub-feature outcomes.
  *
  * <p>{@link Feature#hitStatus} is the GROUP's overall resolved hit status
- * (requirement 4's confirmed semantics: OR = any sub-feature hit is Yes;
- * AND = every sub-feature must hit for Yes) — see
- * {@code DecisionTreeEvaluator}'s {@code GroupEvaluationResult#isHit()}.
+ * (OR = any sub-feature hit is Yes; AND = every sub-feature must hit for
+ * Yes) — see {@code DecisionTreeEvaluator}'s {@code GroupEvaluationResult#isHit()}.
  * {@link SubFeature#hitStatus} is that ONE member's own individual hit
  * status, before the group's operator is applied.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class FeatureHitSummaryRow implements Serializable {
 
@@ -67,8 +64,12 @@ public final class FeatureHitSummaryRow implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof FeatureHitSummaryRow)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof FeatureHitSummaryRow)) {
+            return false;
+        }
         FeatureHitSummaryRow other = (FeatureHitSummaryRow) o;
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)
@@ -131,8 +132,12 @@ public final class FeatureHitSummaryRow implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof Feature)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof Feature)) {
+                return false;
+            }
             Feature other = (Feature) o;
             return id == other.id && isNoiseReduction == other.isNoiseReduction && hitStatus == other.hitStatus
                     && Objects.equals(name, other.name) && Objects.equals(type, other.type)
@@ -177,8 +182,12 @@ public final class FeatureHitSummaryRow implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof SubFeature)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof SubFeature)) {
+                return false;
+            }
             SubFeature other = (SubFeature) o;
             return hitStatus == other.hitStatus && Objects.equals(type, other.type) && Objects.equals(name, other.name);
         }

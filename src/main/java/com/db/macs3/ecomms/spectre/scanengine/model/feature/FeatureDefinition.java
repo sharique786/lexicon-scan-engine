@@ -35,11 +35,6 @@ import java.util.Objects;
  * it is never re-derived from {@code featureName} or the view's own
  * {@code feature_name}/{@code features_to_apply} columns, which are
  * independent, human-readable labels only.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
- * {@code @JsonCreator}/{@code @JsonProperty} on the constructor is the
- * standard, portable way to have Jackson deserialise into an immutable
- * class without records or JavaBean setters.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public final class FeatureDefinition implements Serializable {
@@ -68,8 +63,12 @@ public final class FeatureDefinition implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof FeatureDefinition)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof FeatureDefinition)) {
+            return false;
+        }
         FeatureDefinition other = (FeatureDefinition) o;
         return isNoiseReduction == other.isNoiseReduction
                 && Objects.equals(featureName, other.featureName)
@@ -127,8 +126,12 @@ public final class FeatureDefinition implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof Body)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof Body)) {
+                return false;
+            }
             Body other = (Body) o;
             return Objects.equals(feature, other.feature)
                     && Objects.equals(totalTermsCount, other.totalTermsCount)

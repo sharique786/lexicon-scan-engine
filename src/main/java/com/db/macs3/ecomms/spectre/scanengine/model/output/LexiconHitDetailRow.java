@@ -8,19 +8,16 @@ import java.util.Objects;
 /**
  * Shared row shape for {@code lexicon-hit-restricted} and
  * {@code lexicon-hit-unrestricted} — identical schema, split purely by
- * source GCS path (requirement 3.f, 8.d): a message read from a
- * {@code restricted/} subfolder writes here; one from {@code unrestricted/}
- * writes to the unrestricted table. Which table a given row is destined for
- * is a WRITE-TIME decision (see {@code OutputTableWriter}), not encoded in
- * this class itself.
+ * source GCS path: a message read from a {@code restricted/} subfolder
+ * writes here; one from {@code unrestricted/} writes to the unrestricted
+ * table. Which table a given row is destined for is a WRITE-TIME decision
+ * (see {@code OutputTableWriter}), not encoded in this class itself.
  *
  * <p>Unlike {@link LexiconHitSummaryRow}, only Lexicon-category (post
  * disclaimer-suppression) matches are represented here — see
  * {@code OutputRowBuilder} — since this table exists specifically to carry
  * {@link EvaluatedLexicon.TermDtl#matchedText} detail for genuine hits, not
  * a broad per-group summary.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class LexiconHitDetailRow implements Serializable {
 
@@ -64,8 +61,12 @@ public final class LexiconHitDetailRow implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof LexiconHitDetailRow)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof LexiconHitDetailRow)) {
+            return false;
+        }
         LexiconHitDetailRow other = (LexiconHitDetailRow) o;
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(processId, other.processId)
@@ -109,8 +110,12 @@ public final class LexiconHitDetailRow implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof EvaluatedLexicon)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof EvaluatedLexicon)) {
+                return false;
+            }
             EvaluatedLexicon other = (EvaluatedLexicon) o;
             return Objects.equals(id, other.id) && Objects.equals(termDtls, other.termDtls);
         }
@@ -145,8 +150,12 @@ public final class LexiconHitDetailRow implements Serializable {
 
             @Override
             public boolean equals(Object o) {
-                if (this == o) return true;
-                if (!(o instanceof TermDtl)) return false;
+                if (this == o) {
+                    return true;
+                }
+                if (!(o instanceof TermDtl)) {
+                    return false;
+                }
                 TermDtl other = (TermDtl) o;
                 return Objects.equals(termId, other.termId) && Objects.equals(matchedText, other.matchedText);
             }

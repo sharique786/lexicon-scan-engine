@@ -26,8 +26,6 @@ import java.util.Objects;
  * group short-circuit means every later group (further NoiseReduction, the
  * Disclaimer group, all Lexicon groups) simply has no entry at all here,
  * since {@code DecisionTreeEvaluator} never evaluated them.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class LexiconHitSummaryRow implements Serializable {
 
@@ -65,8 +63,12 @@ public final class LexiconHitSummaryRow implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof LexiconHitSummaryRow)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof LexiconHitSummaryRow)) {
+            return false;
+        }
         LexiconHitSummaryRow other = (LexiconHitSummaryRow) o;
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(processId, other.processId)
@@ -121,8 +123,12 @@ public final class LexiconHitSummaryRow implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof EvaluatedLexicon)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof EvaluatedLexicon)) {
+                return false;
+            }
             EvaluatedLexicon other = (EvaluatedLexicon) o;
             return totalTermsCount == other.totalTermsCount
                     && regexHitCount == other.regexHitCount
@@ -171,8 +177,12 @@ public final class LexiconHitSummaryRow implements Serializable {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof TermDtl)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof TermDtl)) {
+                return false;
+            }
             TermDtl other = (TermDtl) o;
             return regexMatchHitCount == other.regexMatchHitCount
                     && Objects.equals(termId, other.termId)

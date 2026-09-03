@@ -2,126 +2,144 @@ package com.db.macs3.ecomms.spectre.scanengine.config;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * Input/output BigQuery view and table identifiers — requirement 4.b: for a
- * real Dataproc submission, this is read from a JSON file on GCS (path
- * passed as a Dataproc submit argument), not hard-coded or Spring-bound;
- * requirement 4.e: for tests, an equivalent shape is supplied via the
- * {@code test} Spring profile's application properties instead (see
- * {@code ScanEngineProperties}) rather than requiring a real GCS file.
+ * The {@code spectre.engine.bigquery} section of the {@link DataprocConfig}
+ * YAML file — the view this job reads plus every output/audit table it
+ * writes.
  *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * <p><strong>Every {@code bq-output-*}/{@code bq-feature-master}/
+ * {@code bq-language-feature-dec} field below is already the FULLY QUALIFIED
+ * {@code <project>.<dataset>.<table>} identifier</strong> — unlike this
+ * class's previous shape (a separate {@code project_id}/{@code output_dataset}
+ * plus bare table names, concatenated at call time via a since-removed
+ * {@code fullyQualifiedTable(String)} method). The upstream YAML now supplies
+ * the complete identifier for each output table directly (see the sample in
+ * {@code RuntimeArgs}/{@code DataprocConfig} class Javadoc), so callers
+ * ({@code OutputTableWriter}) use these accessors verbatim as the Spark
+ * BigQuery connector's {@code "table"} option — no further concatenation.
+ *
+ * <p>The VIEW is the one exception: {@code bq-project}/{@code bq-dataset}/
+ * {@code bq-view-name} remain three separate fields (matching the YAML), so
+ * {@link #fullyQualifiedViewName()} still builds the identifier itself.
+ *
+ * <p>{@code bq-feature-master} and {@code bq-language-feature-dec} are new
+ * fields this YAML shape introduces that no class in this engine currently
+ * reads — carried here so the config's full shape round-trips faithfully;
+ * wiring them into an actual read path is out of scope for this change.
+ *
+ * <p>A plain class rather than a record, matching this project's other
+ * pre-existing model classes.
  */
 public final class BqTableConfig implements Serializable {
 
-    private final String projectId;
-    private final String viewDataset;
-    private final String viewName;
-    private final String outputDataset;
-    private final String lexiconHitSummaryTable;
-    private final String lexiconHitRestrictedTable;
-    private final String lexiconHitUnrestrictedTable;
-    private final String featureHitSummaryTable;
-    private final String pipelineStageAuditTable;
-    private final String pipelineRecordAuditTable;
+    private final String bqProject;
+    private final String bqDataset;
+    private final String bqViewName;
+    private final String bqFeatureMaster;
+    private final String bqLanguageFeatureDec;
+    private final String bqOutputFeatureHitSummary;
+    private final String bqOutputHitSummary;
+    private final String bqOutputHitRestricted;
+    private final String bqOutputHitUnrestricted;
+    private final String bqOutputStageAudit;
+    private final String bqOutputRecordAudit;
 
     /**
-     * @param projectId                     the GCP project every table/view below lives in
-     * @param viewDataset                     BQ dataset containing {@code vw_src_msg_lexicon_decision_mapping}
-     * @param viewName                        the view's own name
-     * @param outputDataset                   BQ dataset every output/audit table below lives in
-     *                                        (all six currently share one dataset — {@code spectre-audit} —
-     *                                        but each is named separately here rather than assuming that
-     *                                        stays true)
+     * @param bqProject                     the GCP project {@code bqDataset}/{@code bqViewName} live in
+     * @param bqDataset                       BQ dataset containing {@code vw_src_msg_lexicon_decision_mapping}
+     * @param bqViewName                      the view's own name
+     * @param bqFeatureMaster                  fully-qualified — see class Javadoc "new fields"
+     * @param bqLanguageFeatureDec              fully-qualified — see class Javadoc "new fields"
+     * @param bqOutputFeatureHitSummary         fully-qualified {@code feature-hit-summary} table
+     * @param bqOutputHitSummary                 fully-qualified {@code lexicon-hit-summary} table
+     * @param bqOutputHitRestricted               fully-qualified {@code lexicon-hit-restricted} table
+     * @param bqOutputHitUnrestricted              fully-qualified {@code lexicon-hit-unrestricted} table
+     * @param bqOutputStageAudit                    fully-qualified {@code pipeline-stage-audit} table
+     * @param bqOutputRecordAudit                    fully-qualified {@code pipeline-record-audit} table
      */
     @JsonCreator
-    public BqTableConfig(@JsonProperty("project_id") String projectId,
-                          @JsonProperty("view_dataset") String viewDataset,
-                          @JsonProperty("view_name") String viewName,
-                          @JsonProperty("output_dataset") String outputDataset,
-                          @JsonProperty("lexicon_hit_summary_table") String lexiconHitSummaryTable,
-                          @JsonProperty("lexicon_hit_restricted_table") String lexiconHitRestrictedTable,
-                          @JsonProperty("lexicon_hit_unrestricted_table") String lexiconHitUnrestrictedTable,
-                          @JsonProperty("feature_hit_summary_table") String featureHitSummaryTable,
-                          @JsonProperty("pipeline_stage_audit_table") String pipelineStageAuditTable,
-                          @JsonProperty("pipeline_record_audit_table") String pipelineRecordAuditTable) {
-        this.projectId = projectId;
-        this.viewDataset = viewDataset;
-        this.viewName = viewName;
-        this.outputDataset = outputDataset;
-        this.lexiconHitSummaryTable = lexiconHitSummaryTable;
-        this.lexiconHitRestrictedTable = lexiconHitRestrictedTable;
-        this.lexiconHitUnrestrictedTable = lexiconHitUnrestrictedTable;
-        this.featureHitSummaryTable = featureHitSummaryTable;
-        this.pipelineStageAuditTable = pipelineStageAuditTable;
-        this.pipelineRecordAuditTable = pipelineRecordAuditTable;
+    public BqTableConfig(@JsonProperty("bq-project") String bqProject,
+                          @JsonProperty("bq-dataset") String bqDataset,
+                          @JsonProperty("bq-view-name") String bqViewName,
+                          @JsonProperty("bq-feature-master") String bqFeatureMaster,
+                          @JsonProperty("bq-language-feature-dec") String bqLanguageFeatureDec,
+                          @JsonProperty("bq-output-feature-hit-summary") String bqOutputFeatureHitSummary,
+                          @JsonProperty("bq-output-hit-summary") String bqOutputHitSummary,
+                          @JsonProperty("bq-output-hit-restricted") String bqOutputHitRestricted,
+                          @JsonProperty("bq-output-hit-unrestricted") String bqOutputHitUnrestricted,
+                          @JsonProperty("bq-output-stage-audit") String bqOutputStageAudit,
+                          @JsonProperty("bq-output-record-audit") String bqOutputRecordAudit) {
+        this.bqProject = bqProject;
+        this.bqDataset = bqDataset;
+        this.bqViewName = bqViewName;
+        this.bqFeatureMaster = bqFeatureMaster;
+        this.bqLanguageFeatureDec = bqLanguageFeatureDec;
+        this.bqOutputFeatureHitSummary = bqOutputFeatureHitSummary;
+        this.bqOutputHitSummary = bqOutputHitSummary;
+        this.bqOutputHitRestricted = bqOutputHitRestricted;
+        this.bqOutputHitUnrestricted = bqOutputHitUnrestricted;
+        this.bqOutputStageAudit = bqOutputStageAudit;
+        this.bqOutputRecordAudit = bqOutputRecordAudit;
     }
 
-    public String projectId() { return projectId; }
-    public String viewDataset() { return viewDataset; }
-    public String viewName() { return viewName; }
-    public String outputDataset() { return outputDataset; }
-    public String lexiconHitSummaryTable() { return lexiconHitSummaryTable; }
-    public String lexiconHitRestrictedTable() { return lexiconHitRestrictedTable; }
-    public String lexiconHitUnrestrictedTable() { return lexiconHitUnrestrictedTable; }
-    public String featureHitSummaryTable() { return featureHitSummaryTable; }
-    public String pipelineStageAuditTable() { return pipelineStageAuditTable; }
-    public String pipelineRecordAuditTable() { return pipelineRecordAuditTable; }
+    public String bqProject() { return bqProject; }
+    public String bqDataset() { return bqDataset; }
+    public String bqViewName() { return bqViewName; }
+    public String bqFeatureMaster() { return bqFeatureMaster; }
+    public String bqLanguageFeatureDec() { return bqLanguageFeatureDec; }
+    public String bqOutputFeatureHitSummary() { return bqOutputFeatureHitSummary; }
+    public String bqOutputHitSummary() { return bqOutputHitSummary; }
+    public String bqOutputHitRestricted() { return bqOutputHitRestricted; }
+    public String bqOutputHitUnrestricted() { return bqOutputHitUnrestricted; }
+    public String bqOutputStageAudit() { return bqOutputStageAudit; }
+    public String bqOutputRecordAudit() { return bqOutputRecordAudit; }
 
-    /** {@code <project>.<dataset>.<view>} — the fully-qualified identifier the Spark BQ connector expects. */
+    /** {@code <bq-project>.<bq-dataset>.<bq-view-name>} — the fully-qualified identifier the Spark BQ connector expects. */
     public String fullyQualifiedViewName() {
-        return projectId + "." + viewDataset + "." + viewName;
-    }
-
-    public String fullyQualifiedTable(String tableName) {
-        return projectId + "." + outputDataset + "." + tableName;
-    }
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    /** Parses the JSON file's content — see class Javadoc for where this file lives in production. */
-    public static BqTableConfig parse(InputStream jsonStream) throws IOException {
-        return MAPPER.readValue(
-                new String(jsonStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8), BqTableConfig.class);
+        return bqProject + "." + bqDataset + "." + bqViewName;
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof BqTableConfig)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof BqTableConfig)) {
+            return false;
+        }
         BqTableConfig other = (BqTableConfig) o;
-        return Objects.equals(projectId, other.projectId) && Objects.equals(viewDataset, other.viewDataset)
-                && Objects.equals(viewName, other.viewName) && Objects.equals(outputDataset, other.outputDataset)
-                && Objects.equals(lexiconHitSummaryTable, other.lexiconHitSummaryTable)
-                && Objects.equals(lexiconHitRestrictedTable, other.lexiconHitRestrictedTable)
-                && Objects.equals(lexiconHitUnrestrictedTable, other.lexiconHitUnrestrictedTable)
-                && Objects.equals(featureHitSummaryTable, other.featureHitSummaryTable)
-                && Objects.equals(pipelineStageAuditTable, other.pipelineStageAuditTable)
-                && Objects.equals(pipelineRecordAuditTable, other.pipelineRecordAuditTable);
+        return Objects.equals(bqProject, other.bqProject) && Objects.equals(bqDataset, other.bqDataset)
+                && Objects.equals(bqViewName, other.bqViewName)
+                && Objects.equals(bqFeatureMaster, other.bqFeatureMaster)
+                && Objects.equals(bqLanguageFeatureDec, other.bqLanguageFeatureDec)
+                && Objects.equals(bqOutputFeatureHitSummary, other.bqOutputFeatureHitSummary)
+                && Objects.equals(bqOutputHitSummary, other.bqOutputHitSummary)
+                && Objects.equals(bqOutputHitRestricted, other.bqOutputHitRestricted)
+                && Objects.equals(bqOutputHitUnrestricted, other.bqOutputHitUnrestricted)
+                && Objects.equals(bqOutputStageAudit, other.bqOutputStageAudit)
+                && Objects.equals(bqOutputRecordAudit, other.bqOutputRecordAudit);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(projectId, viewDataset, viewName, outputDataset, lexiconHitSummaryTable,
-                lexiconHitRestrictedTable, lexiconHitUnrestrictedTable, featureHitSummaryTable,
-                pipelineStageAuditTable, pipelineRecordAuditTable);
+        return Objects.hash(bqProject, bqDataset, bqViewName, bqFeatureMaster, bqLanguageFeatureDec,
+                bqOutputFeatureHitSummary, bqOutputHitSummary, bqOutputHitRestricted, bqOutputHitUnrestricted,
+                bqOutputStageAudit, bqOutputRecordAudit);
     }
 
     @Override
     public String toString() {
-        return "BqTableConfig[projectId=" + projectId + ", viewDataset=" + viewDataset + ", viewName=" + viewName
-                + ", outputDataset=" + outputDataset + ", lexiconHitSummaryTable=" + lexiconHitSummaryTable
-                + ", lexiconHitRestrictedTable=" + lexiconHitRestrictedTable
-                + ", lexiconHitUnrestrictedTable=" + lexiconHitUnrestrictedTable
-                + ", featureHitSummaryTable=" + featureHitSummaryTable
-                + ", pipelineStageAuditTable=" + pipelineStageAuditTable
-                + ", pipelineRecordAuditTable=" + pipelineRecordAuditTable + "]";
+        return "BqTableConfig[bqProject=" + bqProject + ", bqDataset=" + bqDataset + ", bqViewName=" + bqViewName
+                + ", bqFeatureMaster=" + bqFeatureMaster + ", bqLanguageFeatureDec=" + bqLanguageFeatureDec
+                + ", bqOutputFeatureHitSummary=" + bqOutputFeatureHitSummary
+                + ", bqOutputHitSummary=" + bqOutputHitSummary
+                + ", bqOutputHitRestricted=" + bqOutputHitRestricted
+                + ", bqOutputHitUnrestricted=" + bqOutputHitUnrestricted
+                + ", bqOutputStageAudit=" + bqOutputStageAudit
+                + ", bqOutputRecordAudit=" + bqOutputRecordAudit + "]";
     }
 }

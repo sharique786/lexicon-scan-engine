@@ -17,8 +17,17 @@ class HyperscanPathResolverTest {
     void resolvesSingleMatch() {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) ->
                 List.of("2026-08-16_10-00-00_101", "2026-08-15_09-00-00_202");
-        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
         assertThat(basePath).isEqualTo("gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/");
+    }
+
+    @Test
+    @DisplayName("resolves under a non-default configured prefix, not a hardcoded one")
+    void resolvesUnderConfiguredPrefix() {
+        HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) ->
+                List.of("2026-08-16_10-00-00_101");
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "custom_prefix", "101", lister);
+        assertThat(basePath).isEqualTo("gs://my-bucket/custom_prefix/2026-08-16_10-00-00_101/lex-hyperscan/");
     }
 
     @Test
@@ -29,10 +38,10 @@ class HyperscanPathResolverTest {
             listCalls.add(bucket + "/" + prefix);
             return List.of("2026-08-16_10-00-00_101");
         };
-        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
-        HyperscanPathResolver.buildHdbPath(basePath, "feature-a");
-        HyperscanPathResolver.buildHdbPath(basePath, "feature-b");
-        HyperscanPathResolver.buildHdbPath(basePath, "feature-c");
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
+        HyperscanPathResolver.buildZipPath(basePath, "feature-a");
+        HyperscanPathResolver.buildZipPath(basePath, "feature-b");
+        HyperscanPathResolver.buildZipPath(basePath, "feature-c");
         assertThat(listCalls).hasSize(1);
     }
 
@@ -41,7 +50,7 @@ class HyperscanPathResolverTest {
     void picksLatestOnMultipleMatches() {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) -> List.of(
                 "2026-08-14_08-00-00_101", "2026-08-16_10-00-00_101", "2026-08-15_09-00-00_101");
-        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
         assertThat(basePath).contains("2026-08-16_10-00-00_101");
     }
 
@@ -49,24 +58,24 @@ class HyperscanPathResolverTest {
     @DisplayName("throws HyperscanFileNotFoundException when no folder matches (requirement 3.a)")
     void throwsWhenNoMatch() {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) -> List.of("2026-08-16_10-00-00_999");
-        assertThatThrownBy(() -> HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister))
+        assertThatThrownBy(() -> HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister))
                 .isInstanceOf(HyperscanPathResolver.HyperscanFileNotFoundException.class)
                 .hasMessageContaining("101");
     }
 
     @Test
-    @DisplayName("buildHdbPath produces the correct .hdb filename")
-    void buildsHdbPath() {
-        String hdbPath = HyperscanPathResolver.buildHdbPath(
+    @DisplayName("buildZipPath produces the correct .zip filename")
+    void buildsZipPath() {
+        String zipPath = HyperscanPathResolver.buildZipPath(
                 "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/", "lexicon_market_cond-1");
-        assertThat(hdbPath).isEqualTo(
-                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/lexicon_market_cond-1.hdb");
+        assertThat(zipPath).isEqualTo(
+                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/lexicon_market_cond-1.zip");
     }
 
     @Test
-    @DisplayName("buildHdbPath rejects a basePath without a trailing slash")
+    @DisplayName("buildZipPath rejects a basePath without a trailing slash")
     void rejectsMalformedBasePath() {
-        assertThatThrownBy(() -> HyperscanPathResolver.buildHdbPath("gs://bucket/no-trailing-slash", "feature-1"))
+        assertThatThrownBy(() -> HyperscanPathResolver.buildZipPath("gs://bucket/no-trailing-slash", "feature-1"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

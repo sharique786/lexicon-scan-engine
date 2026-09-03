@@ -7,11 +7,7 @@ import java.util.regex.Pattern;
 /**
  * Strips HTML markup from message text before it is scanned by Hyperscan,
  * while preserving the ability to report a match's position against the
- * ORIGINAL (un-stripped) text — ported from the same approach used in the
- * Lexicon Scanner Service (requirement 8.a: reuse only the HTML-stripping /
- * original-text offset mapping from that service, not its disclaimer
- * detection, which the Scan Engine handles differently — see
- * {@code DecisionTreeEvaluator}).
+ * ORIGINAL (un-stripped) text.
  *
  * <h2>Why this exists</h2>
  * <p>A term like {@code Enjoy(?:\s+\S+){0,2}\s+Happy} requires whitespace
@@ -51,7 +47,7 @@ import java.util.regex.Pattern;
  * multi-character whitespace runs means the "stripped" text is
  * character-for-character identical to the original, and the offset map is
  * simply the identity mapping), so there is no need for a separate
- * HTML-detection pre-check per requirement 1.i.1.
+ * HTML-detection pre-check.
  */
 public final class HtmlStrippingService {
 
@@ -83,8 +79,12 @@ public final class HtmlStrippingService {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof StripResult)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof StripResult)) {
+                return false;
+            }
             StripResult other = (StripResult) o;
             return java.util.Objects.equals(strippedText, other.strippedText)
                     && java.util.Objects.equals(offsetMap, other.offsetMap);
@@ -110,12 +110,29 @@ public final class HtmlStrippingService {
      * the end of the string) rather than per character, so that both a
      * match's start (inclusive) and end (exclusive) position can be mapped
      * with the same lookup and no special-casing at the end of the string.
+     *
+     * <p><b>Except for {@link #identity()}</b> — a null {@code boundaries}
+     * array means "stripped position == original position," computed in O(1)
+     * with no backing array at all. This exists specifically for content
+     * that {@link #strip} would leave byte-for-byte unchanged anyway (e.g.
+     * attachment {@code cleanText}, already HTML-free by the time it reaches
+     * this engine — see {@code MessageAttachment} class Javadoc): running the
+     * full tag/whitespace-scanning algorithm AND allocating an {@code int[]}
+     * sized to the text's length is pure waste on text that can be
+     * megabytes long, for a transform guaranteed to be a no-op.
      */
     public static final class OffsetMap implements Serializable {
+        private static final OffsetMap IDENTITY = new OffsetMap(null);
+
         private final int[] boundaries;
 
         private OffsetMap(int[] boundaries) {
             this.boundaries = boundaries;
+        }
+
+        /** @return an offset map where every position maps to itself, built in O(1) — see class Javadoc. */
+        public static OffsetMap identity() {
+            return IDENTITY;
         }
 
         /**
@@ -123,12 +140,31 @@ public final class HtmlStrippingService {
          * @return the corresponding boundary position in the original text
          */
         public int toOriginal(int strippedPosition) {
+            if (boundaries == null) {
+                if (strippedPosition < 0) {
+                    throw new IndexOutOfBoundsException("strippedPosition " + strippedPosition + " must be >= 0");
+                }
+                return strippedPosition;
+            }
             if (strippedPosition < 0 || strippedPosition >= boundaries.length) {
                 throw new IndexOutOfBoundsException(
                         "strippedPosition " + strippedPosition + " out of range [0, " + (boundaries.length - 1) + "]");
             }
             return boundaries[strippedPosition];
         }
+    }
+
+    /**
+     * A {@link StripResult} for text KNOWN to need no stripping at all — see
+     * {@link OffsetMap#identity()}. Skips the whole tag/whitespace-scanning
+     * pass and its {@code int[]} allocation entirely, unlike calling
+     * {@link #strip} on already-clean text (which would produce an
+     * equivalent result, just via O(n) work and O(n) memory it doesn't need
+     * to spend). {@code null} input yields an empty result, matching
+     * {@link #strip}'s own null handling.
+     */
+    public static StripResult identity(String text) {
+        return new StripResult(text == null ? "" : text, OffsetMap.identity());
     }
 
     /**
@@ -146,24 +182,24 @@ public final class HtmlStrippingService {
         int[] boundariesBuf = new int[originalText.length() + 1];
         int strippedLen = 0;
 
-        int i = 0;
-        int n = originalText.length();
+        int originalIndex = 0;
+        int textLength = originalText.length();
         Matcher tagMatcher = TAG_PATTERN.matcher(originalText);
 
-        while (i < n) {
-            char c = originalText.charAt(i);
-            boolean isTagStart = c == '<' && tagMatcher.region(i, n).lookingAt();
+        while (originalIndex < textLength) {
+            char currentChar = originalText.charAt(originalIndex);
+            boolean isTagStart = currentChar == '<' && tagMatcher.region(originalIndex, textLength).lookingAt();
 
-            if (isTagStart || Character.isWhitespace(c)) {
+            if (isTagStart || Character.isWhitespace(currentChar)) {
                 // Consume this whole contiguous run of tags and/or whitespace as ONE unit.
-                int runStart = i;
-                int j = i;
-                while (j < n) {
-                    char cj = originalText.charAt(j);
-                    if (cj == '<' && tagMatcher.region(j, n).lookingAt()) {
-                        j = tagMatcher.end();
-                    } else if (Character.isWhitespace(cj)) {
-                        j++;
+                int runStart = originalIndex;
+                int scanIndex = originalIndex;
+                while (scanIndex < textLength) {
+                    char scanChar = originalText.charAt(scanIndex);
+                    if (scanChar == '<' && tagMatcher.region(scanIndex, textLength).lookingAt()) {
+                        scanIndex = tagMatcher.end();
+                    } else if (Character.isWhitespace(scanChar)) {
+                        scanIndex++;
                     } else {
                         break;
                     }
@@ -171,16 +207,16 @@ public final class HtmlStrippingService {
                 stripped.append(' ');
                 boundariesBuf[strippedLen] = runStart;
                 strippedLen++;
-                i = j;
+                originalIndex = scanIndex;
             } else {
-                stripped.append(c);
-                boundariesBuf[strippedLen] = i;
+                stripped.append(currentChar);
+                boundariesBuf[strippedLen] = originalIndex;
                 strippedLen++;
-                i++;
+                originalIndex++;
             }
         }
         // Final boundary: the end of the original text (one past its last character).
-        boundariesBuf[strippedLen] = n;
+        boundariesBuf[strippedLen] = textLength;
 
         int[] boundaries = new int[strippedLen + 1];
         System.arraycopy(boundariesBuf, 0, boundaries, 0, strippedLen + 1);

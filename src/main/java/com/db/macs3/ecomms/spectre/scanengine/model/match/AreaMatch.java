@@ -5,11 +5,8 @@ import java.util.Objects;
 
 /**
  * A {@link MatchSpan} tagged with which part of the message it came from —
- * needed because the output shape (see requirement 2.i's {@code hit_details_hs}
- * JSON) organises matches by area (subject / message body / per-attachment),
- * not just as one flat list.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * needed because the output {@code hit_details_hs} JSON organises matches by
+ * area (subject / message body / per-attachment), not just as one flat list.
  */
 public final class AreaMatch implements Serializable {
 
@@ -53,8 +50,12 @@ public final class AreaMatch implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof AreaMatch)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof AreaMatch)) {
+            return false;
+        }
         AreaMatch other = (AreaMatch) o;
         return area == other.area
                 && Objects.equals(attachmentId, other.attachmentId)

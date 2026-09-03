@@ -1,82 +1,80 @@
 package com.db.macs3.ecomms.spectre.scanengine.avro;
 
+import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.scanengine.gcs.GcsClient;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 
-import java.util.List;
-
 /**
  * Reads AVRO message files for one dataset from its {@code restricted/} and
- * {@code unrestricted/} GCS subfolders (requirement 1.c, 8.d — one job run
- * reads both), filters to only {@code message_id}s the view actually
- * referenced (requirement 1.e), and tags each row with which subfolder it
- * came from plus its {@code datasetId} — the two pieces of context
+ * {@code unrestricted/} GCS subfolders, filters to only the {@code message_id}s
+ * the view actually referenced, and tags each row with which subfolder it
+ * came from plus its {@code datasetId} — context
  * {@link com.db.macs3.ecomms.spectre.scanengine.model.message.ScanMessage}
- * needs that are not present in the AVRO itself.
+ * needs that is not present in the AVRO itself.
  *
  * <p>Stays fully distributed: reading is Spark's own {@code avro} format
  * reader (parallelised across the underlying files automatically), and the
- * {@code message_id} filter is a broadcast-join-friendly {@code isin}/
- * semi-join against the (small, driver-collected) set of relevant ids or —
- * for a very large id set — a proper Dataset-to-Dataset join, never a
- * driver-side per-message filter.
- *
- * <p>Not independently executable-verified in this project's development
- * sandbox — see {@code GcsClient} class Javadoc.
+ * {@code message_id} filter is a broadcast join against the (driver-collected)
+ * set of relevant ids.
  */
 public final class MessageAvroReader {
 
     private MessageAvroReader() {}
 
     /**
-     * @param baseBucket           the resolved live/test message bucket (see
-     *                              {@code ScanEngineProperties#resolveMessageBucket})
-     * @param datasetId              which {@code coreapp-trans/<dataset_id>/} folder to read
+     * @param baseBucket           {@code DataprocConfig.messages().msgGcsBucket()}
+     * @param datasetPathPrefix     {@code DataprocConfig.messages().msgGcsPrefix()} — e.g.
+     *                              {@code "coreapp-trans"}, without a trailing slash
+     * @param datasetId              which {@code <datasetPathPrefix>/<dataset_id>/} folder to read
      * @param relevantMessageIds     restrict to these ids only — the view's own
-     *                              {@code message_id} set (requirement 1.e's "process only
-     *                              those messages... derived from
-     *                              spectre-audit.language-feature-decision")
+     *                              {@code message_id} set
      * @throws NoAvroFilesFoundException if neither the {@code restricted/} nor
-     *          {@code unrestricted/} subfolder has any {@code .avro} file — requirement 3.c
+     *          {@code unrestricted/} subfolder has any {@code .avro} file
      */
     public static Dataset<Row> readDataset(SparkSession spark, GcsClient gcsClient, String baseBucket,
-                                            String datasetId, Dataset<Row> relevantMessageIds) {
-        String restrictedPath = "gs://" + baseBucket + "/coreapp-trans/" + datasetId + "/restricted/";
-        String unrestrictedPath = "gs://" + baseBucket + "/coreapp-trans/" + datasetId + "/unrestricted/";
+                                            String datasetPathPrefix, String datasetId,
+                                            Dataset<Row> relevantMessageIds) {
+        String datasetPrefix = datasetPathPrefix + "/" + datasetId + "/";
+        String restrictedPrefix = datasetPrefix + AvroConstants.RESTRICTED_SUBFOLDER;
+        String unrestrictedPrefix = datasetPrefix + AvroConstants.UNRESTRICTED_SUBFOLDER;
+        String restrictedPath = "gs://" + baseBucket + "/" + restrictedPrefix;
+        String unrestrictedPath = "gs://" + baseBucket + "/" + unrestrictedPrefix;
 
-        boolean hasRestricted = !gcsClient.listAllObjects(baseBucket,
-                "coreapp-trans/" + datasetId + "/restricted/").isEmpty();
-        boolean hasUnrestricted = !gcsClient.listAllObjects(baseBucket,
-                "coreapp-trans/" + datasetId + "/unrestricted/").isEmpty();
+        boolean hasRestrictedFiles = !gcsClient.listAllObjects(baseBucket, restrictedPrefix).isEmpty();
+        boolean hasUnrestrictedFiles = !gcsClient.listAllObjects(baseBucket, unrestrictedPrefix).isEmpty();
 
-        if (!hasRestricted && !hasUnrestricted) {
+        if (!hasRestrictedFiles && !hasUnrestrictedFiles) {
             throw new NoAvroFilesFoundException(
                     "No AVRO files found for dataset_id='" + datasetId + "' under either " + restrictedPath
                     + " or " + unrestrictedPath);
         }
 
-        Dataset<Row> combined = null;
-        if (hasRestricted) {
-            combined = readAndTag(spark, restrictedPath, datasetId, true);
+        Dataset<Row> combinedMessages = null;
+        if (hasRestrictedFiles) {
+            combinedMessages = readAndTag(spark, restrictedPath, datasetId, true);
         }
-        if (hasUnrestricted) {
-            Dataset<Row> unrestrictedDf = readAndTag(spark, unrestrictedPath, datasetId, false);
-            combined = (combined == null) ? unrestrictedDf : combined.unionByName(unrestrictedDf);
+        if (hasUnrestrictedFiles) {
+            Dataset<Row> unrestrictedMessages = readAndTag(spark, unrestrictedPath, datasetId, false);
+            combinedMessages = (combinedMessages == null)
+                    ? unrestrictedMessages
+                    : combinedMessages.unionByName(unrestrictedMessages);
         }
 
-        return combined.join(functions.broadcast(relevantMessageIds.dropDuplicates("message_id")), "message_id");
+        return combinedMessages.join(
+                functions.broadcast(relevantMessageIds.dropDuplicates(BqColumns.View.MESSAGE_ID)),
+                BqColumns.View.MESSAGE_ID);
     }
 
     private static Dataset<Row> readAndTag(SparkSession spark, String path, String datasetId, boolean restricted) {
-        return spark.read().format("avro").load(path)
-                .withColumn("dataset_id", functions.lit(datasetId))
-                .withColumn("restricted", functions.lit(restricted));
+        return spark.read().format(AvroConstants.FORMAT).load(path)
+                .withColumn(AvroConstants.COLUMN_DATASET_ID, functions.lit(datasetId))
+                .withColumn(AvroConstants.COLUMN_RESTRICTED, functions.lit(restricted));
     }
 
-    /** Thrown when a dataset has no AVRO files in either subfolder — see requirement 3.c. */
+    /** Thrown when a dataset has no AVRO files in either subfolder. */
     public static final class NoAvroFilesFoundException extends RuntimeException {
         public NoAvroFilesFoundException(String message) {
             super(message);

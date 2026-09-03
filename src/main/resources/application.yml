@@ -1,19 +1,17 @@
 # Lexicon Scan Engine — production configuration.
 #
-# Values here are DEFAULTS; per requirement 4.b, the actual per-environment
-# values (bucket names, etc.) are expected to be supplied at Dataproc submit
-# time as Spark driver system properties (e.g.
-# --properties spark.driver.extraJavaOptions=-Dscan-engine.environment-bucket=...),
-# which Spring Boot's standard property-source precedence lets override
-# whatever is set here without editing/rebuilding the jar.
+# GCS buckets and BQ table/view identifiers are NOT configured here — they
+# are per-pipeline-execution values, supplied via the --config_file_path
+# Dataproc submit argument (a DataprocConfig YAML file on GCS; see
+# RuntimeArgs/DataprocConfig class Javadoc). What remains here is genuine
+# job-infrastructure config, overridable at Dataproc submit time as Spark
+# driver system properties (e.g.
+# --properties spark.driver.extraJavaOptions=-Dscan-engine.stage-name=...)
+# via Spring Boot's standard property-source precedence.
 scan-engine:
-  live-message-bucket: ${SCAN_ENGINE_LIVE_MESSAGE_BUCKET:}
-  test-message-bucket: ${SCAN_ENGINE_TEST_MESSAGE_BUCKET:}
-  environment-bucket: ${SCAN_ENGINE_ENVIRONMENT_BUCKET:}
   max-cached-databases-per-partition: 20
   created-by: lexicon-scan-engine
   stage-name: lexicon-scan-engine
-  bq-table-config-path: ${SCAN_ENGINE_BQ_TABLE_CONFIG_PATH:}
 
 logging:
   level:

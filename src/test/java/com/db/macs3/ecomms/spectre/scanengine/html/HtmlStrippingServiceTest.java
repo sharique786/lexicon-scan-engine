@@ -123,4 +123,58 @@ class HtmlStrippingServiceTest {
             assertThat(HtmlStrippingService.strip(strayLt).strippedText()).isEqualTo(strayLt);
         }
     }
+
+    @Nested
+    @DisplayName("identity() — the zero-allocation passthrough for content known to need no stripping")
+    class Identity {
+
+        @Test
+        @DisplayName("strippedText is the input verbatim, even for text strip() WOULD change — " +
+                     "proving identity() never runs the tag/whitespace-scanning algorithm at all")
+        void strippedTextIsVerbatim() {
+            String htmlBearing = "<p>Enjoy</p>\n<p>Happy Birthday</p>";
+            HtmlStrippingService.StripResult result = HtmlStrippingService.identity(htmlBearing);
+            assertThat(result.strippedText()).isEqualTo(htmlBearing);
+        }
+
+        @Test
+        @DisplayName("toOriginal(x) == x for every position, matching a genuinely unchanged text")
+        void offsetMapIsTrueIdentity() {
+            String text = "manipulate the closing price";
+            HtmlStrippingService.StripResult result = HtmlStrippingService.identity(text);
+            for (int i = 0; i <= text.length(); i++) {
+                assertThat(result.offsetMap().toOriginal(i)).isEqualTo(i);
+            }
+        }
+
+        @Test
+        @DisplayName("works correctly for a position far beyond any small fixed-size array — " +
+                     "no int[] is ever allocated, so there is no length to be out of bounds of")
+        void handlesArbitrarilyLargePositionsWithNoAllocation() {
+            HtmlStrippingService.OffsetMap identity = HtmlStrippingService.OffsetMap.identity();
+            assertThat(identity.toOriginal(10_000_000)).isEqualTo(10_000_000);
+        }
+
+        @Test
+        @DisplayName("a negative position still throws, matching strip()'s own bounds contract")
+        void negativePositionThrows() {
+            HtmlStrippingService.OffsetMap identity = HtmlStrippingService.OffsetMap.identity();
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> identity.toOriginal(-1))
+                    .isInstanceOf(IndexOutOfBoundsException.class);
+        }
+
+        @Test
+        @DisplayName("null input produces an empty result, matching strip()'s own null handling")
+        void handlesNull() {
+            assertThat(HtmlStrippingService.identity(null).strippedText()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("identity() and strip() agree on already-clean, HTML-free text")
+        void agreesWithStripOnCleanText() {
+            String clean = "insider trading occurred yesterday";
+            assertThat(HtmlStrippingService.identity(clean).strippedText())
+                    .isEqualTo(HtmlStrippingService.strip(clean).strippedText());
+        }
+    }
 }

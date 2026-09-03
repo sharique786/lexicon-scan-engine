@@ -160,6 +160,27 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
+        <!-- ── YAML (the Dataproc submit config file passed via the config_file_path
+             argument). NOT jackson-dataformat-yaml: that module's version is tied to
+             jackson-bom (pinned to 2.13.4 above, to match Spark's own bundled Jackson —
+             see that dependencyManagement entry's comment), but Spring Boot 4's own
+             dependency tree already pulls in a much newer snakeyaml (2.5) — confirmed by
+             reproducing a real `NoSuchMethodError: ParserImpl.<init>` at test time,
+             since jackson-dataformat-yaml 2.13.4's YAMLParser was compiled against
+             snakeyaml 1.30's constructor signature, not 2.x's. Rather than pinning
+             snakeyaml back down (risking breaking Spring Boot 4's OWN yaml property
+             loading, itself compiled against the 2.x API) or bumping the whole
+             jackson-bom (which the Spark-alignment comment above says not to do
+             casually), this depends on plain snakeyaml directly instead — version
+             managed by spring-boot-starter-parent's own BOM, so it always matches
+             whatever snakeyaml Spring Boot itself already needs — and DataprocConfig
+             binds the resulting raw Map through the existing, already-pinned
+             jackson-databind ObjectMapper via convertValue(...), never through
+             YAMLFactory. -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
 
         <!-- ── HTML stripping / Unicode normalisation (ported approach from the
              Lexicon Scanner Service) ── -->

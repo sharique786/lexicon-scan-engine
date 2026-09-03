@@ -3,11 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.message;
 import java.io.Serializable;
 import java.util.Objects;
 
-/**
- * {@code message.content} block of the AVRO message schema.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
- */
+/** {@code message.content} block of the AVRO message schema. */
 public final class MessageContent implements Serializable {
 
     private final String header;
@@ -38,8 +34,12 @@ public final class MessageContent implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageContent)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MessageContent)) {
+            return false;
+        }
         MessageContent other = (MessageContent) o;
         return Objects.equals(header, other.header)
                 && Objects.equals(rawText, other.rawText)

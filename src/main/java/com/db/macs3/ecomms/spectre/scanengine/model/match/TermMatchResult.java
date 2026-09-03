@@ -9,8 +9,6 @@ import java.util.Objects;
  * feature's {@code .hdb} database) across a single message — potentially
  * spanning subject, message body, and/or multiple attachments, and
  * potentially more than one occurrence within any of those.
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class TermMatchResult implements Serializable {
 
@@ -42,8 +40,12 @@ public final class TermMatchResult implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof TermMatchResult)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof TermMatchResult)) {
+            return false;
+        }
         TermMatchResult other = (TermMatchResult) o;
         return Objects.equals(termId, other.termId)
                 && Objects.equals(termRegexPattern, other.termRegexPattern)

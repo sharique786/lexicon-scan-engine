@@ -15,10 +15,8 @@ import java.util.Objects;
  *
  * <p>See {@code FeatureGroupingService} for how raw view rows are grouped
  * into these, and {@code DecisionTreeEvaluator} for how they are evaluated
- * in order (NoiseReduction → Disclaimer → Lexicon — requirement 2.f) with
- * the noise-reduction short-circuit rule (requirement 2.g).
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * (NoiseReduction → Disclaimer → Lexicon, with a noise-reduction
+ * short-circuit rule).
  */
 public final class FeatureGroup implements Serializable {
 
@@ -75,8 +73,12 @@ public final class FeatureGroup implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof FeatureGroup)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof FeatureGroup)) {
+            return false;
+        }
         FeatureGroup other = (FeatureGroup) o;
         return isNoiseReduction == other.isNoiseReduction
                 && Objects.equals(featureId, other.featureId)

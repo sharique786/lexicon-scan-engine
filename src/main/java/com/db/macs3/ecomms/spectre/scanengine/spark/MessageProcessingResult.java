@@ -10,8 +10,8 @@ import java.util.Objects;
 /**
  * The per-message result of {@link PartitionProcessor} — either a
  * successfully-built set of output rows, or an error to be recorded in
- * {@code pipeline_record_audit} (requirement 3, "Other errors": a single
- * message's processing failure must not fail the whole job).
+ * {@code pipeline_record_audit}, so that a single message's processing
+ * failure never fails the whole job.
  *
  * <p>Exactly one of ({@link #summaryRow}, {@link #featureHitSummaryRow}) vs
  * {@link #errorMessage} is meaningful for a given instance — see
@@ -19,7 +19,8 @@ import java.util.Objects;
  * message with nothing surviving disclaimer suppression, or one
  * short-circuited by noise reduction — see {@code OutputRowBuilder#buildDetailRow}).
  *
- * <p>Java 11 class (not a record — this project targets Java 11).
+ * <p>Serializable: this is the element type Spark's {@code mapPartitions}
+ * output {@code Dataset} carries via {@code Encoders.kryo}.
  */
 public final class MessageProcessingResult implements Serializable {
 
@@ -80,8 +81,12 @@ public final class MessageProcessingResult implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageProcessingResult)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MessageProcessingResult)) {
+            return false;
+        }
         MessageProcessingResult other = (MessageProcessingResult) o;
         return restricted == other.restricted
                 && Objects.equals(messageId, other.messageId)

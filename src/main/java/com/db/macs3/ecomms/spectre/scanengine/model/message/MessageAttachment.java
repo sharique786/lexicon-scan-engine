@@ -10,8 +10,6 @@ import java.util.Objects;
  * schema (no {@code raw_text} alternative) — it is treated as already free
  * of HTML by the upstream Msg Transformer job, so no HTML-stripping/offset-
  * mapping is applied when scanning it (contrast {@link MessageContent#rawText}).
- *
- * <p>Java 11 class (not a record — this project targets Java 11).
  */
 public final class MessageAttachment implements Serializable {
 
@@ -43,8 +41,12 @@ public final class MessageAttachment implements Serializable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof MessageAttachment)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof MessageAttachment)) {
+            return false;
+        }
         MessageAttachment other = (MessageAttachment) o;
         return Objects.equals(attachmentId, other.attachmentId)
                 && Objects.equals(parentAttachmentId, other.parentAttachmentId)

@@ -16,11 +16,6 @@ import java.io.Serializable;
  * constants this reads by) — every other class works with
  * {@link FeatureDecisionRow} directly and has no knowledge of the
  * underlying column names at all.
- *
- * <p>Not independently executable-verified in this project's development
- * sandbox (no live Spark/BigQuery connectivity here) — see
- * {@code GcsClient} class Javadoc for the same caveat, which applies
- * identically to every class in this package.
  */
 public final class ViewRowConverter implements Serializable {
 
