@@ -476,9 +476,12 @@ every entry name actually found in the zip — never a silent partial load.
 | `pipeline_record_audit` | One row per **failed** message | Per-message processing failures — the whole job does not fail on one message's error |
 
 `lexicon-hit-restricted`'s rows are also mirrored to a single CSV file at
-`gs://<environment_bkt>/<policy_engine_id>/<process_id>/restricted/<pipeline_exec_id>.csv`
+`gs://<hdb-gcs-bucket>/<policy_engine_id>/<process_id>/restricted/<pipeline_exec_id>.csv`
 (nested columns flattened to JSON strings, since CSV has no native nested
-representation).
+representation; `hdb-gcs-bucket` — the `DataprocConfig` YAML's
+`spectre.engine.hyperscan.hdb-gcs-bucket` — is reused here for the CSV
+mirror the same way the old `environment-bucket` Spring property served
+both purposes; see "Configuration" below).
 
 ### `term_dtls.term_id` population — the specific column this fix addresses
 
@@ -505,16 +508,31 @@ schema change" above), not a single synthetic "matched" flag.
 
 ## Configuration
 
+Composer submits 7 `--key=value` Dataproc job arguments now (an earlier
+revision took two positional GCS JSON file paths instead — see "Version
+history"):
+
+```
+--process_id=913b68f9-0f62-4f51-a9c1-c9aa0d84c01c
+--pipeline_exec_id=2026-09-03_4-101
+--trigger_type=policy-alert-test
+--policy_engine_id=101
+--dataset_details=[{"dataset_id":"006e3f06-045d-4f94-a9bd-780e603ef81f","dataset_partition_value":"2026-06-18"}]
+--feature_partition_value=2026-07-16
+--config_file_path=gs://<bucket>/tmp/orchestrator_v2/.../dataproc-config-<hash>.yml
+```
+
 | Source | Carries |
 |---|---|
-| `RuntimeArgs` (JSON, Airflow-supplied) | `dataset_details[]`, `feature_partition_value`, `pipeline_exec_id`, `policy_engine_id`, `process_id`, `trigger_type` |
-| `BqTableConfig` (JSON on GCS, path passed as a Dataproc submit argument) | Fully-qualified view/table identifiers |
-| `application.yml` / `application-test.yml` (Spring) | GCS buckets, cache sizing, audit identity strings |
+| `RuntimeArgs` (parsed from the 6 `--key=value` args above via `RuntimeArgs.parseCliArgs`) | `dataset_details[]`, `feature_partition_value`, `pipeline_exec_id`, `policy_engine_id`, `process_id`, `trigger_type`, `config_file_path` |
+| `DataprocConfig` (YAML on GCS, path is `--config_file_path`) | `spectre.engine.hyperscan` (Hyperscan zip-bundle bucket/prefix), `spectre.engine.messages` (AVRO message bucket/prefix), `spectre.engine.bigquery` → `BqTableConfig` (fully-qualified view/output-table identifiers) |
+| `application.yml` / `application-test.yml` (Spring) | Cache sizing, audit identity strings |
 | `SPECTRE_MAX_ATTACHMENT_SIZE_BYTES` (env var) | Skip attachments larger than this; unset = unlimited |
 
 Confirmed values: `trigger_type` is `policy-alert-live` (always exactly one
 `dataset_details` entry) or `policy-alert-test` (can have several — read
-and unioned per entry).
+and unioned per entry). `dataset_details`' value is itself inline JSON, not
+a separate file — parsed the same way it always was.
 
 ---
 
@@ -1048,8 +1066,13 @@ gcloud dataproc jobs submit spark \
   --class=com.db.macs3.ecomms.spectre.scanengine.spark.ScanEngineApplication \
   --properties="<see Suggested Spark configuration above>" \
   -- \
-  gs://<bucket>/runtime-args/<process_id>.json \
-  gs://<bucket>/config/bq-table-config.json
+  --process_id=913b68f9-0f62-4f51-a9c1-c9aa0d84c01c \
+  --pipeline_exec_id=2026-09-03_4-101 \
+  --trigger_type=policy-alert-test \
+  --policy_engine_id=101 \
+  --dataset_details=[{"dataset_id":"006e3f06-045d-4f94-a9bd-780e603ef81f","dataset_partition_value":"2026-06-18"}] \
+  --feature_partition_value=2026-07-16 \
+  --config_file_path=gs://<bucket>/tmp/orchestrator_v2/.../dataproc-config-<hash>.yml
 ```
 
 ### Other design notes worth knowing

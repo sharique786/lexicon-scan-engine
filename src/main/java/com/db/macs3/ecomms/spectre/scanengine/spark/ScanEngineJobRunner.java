@@ -4,6 +4,7 @@ import com.db.macs3.ecomms.spectre.scanengine.avro.MessageAvroReader;
 import com.db.macs3.ecomms.spectre.scanengine.bq.FeatureDecisionViewReader;
 import com.db.macs3.ecomms.spectre.scanengine.bq.OutputTableWriter;
 import com.db.macs3.ecomms.spectre.scanengine.config.BqTableConfig;
+import com.db.macs3.ecomms.spectre.scanengine.config.DataprocConfig;
 import com.db.macs3.ecomms.spectre.scanengine.config.RuntimeArgs;
 import com.db.macs3.ecomms.spectre.scanengine.config.ScanEngineProperties;
 import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
@@ -12,7 +13,6 @@ import com.db.macs3.ecomms.spectre.scanengine.gcs.HyperscanPathResolver;
 import com.db.macs3.ecomms.spectre.scanengine.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.PipelineRecordAuditRow;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.PipelineStageAuditRow;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.FilterFunction;
@@ -51,7 +51,11 @@ import java.util.stream.Collectors;
  *
  * <h2>Wiring order</h2>
  * <ol>
- *   <li>Parse {@link RuntimeArgs} + {@link BqTableConfig}</li>
+ *   <li>Parse {@link RuntimeArgs} from the 7 {@code --key=value} Dataproc submit
+ *       arguments, then read the {@link DataprocConfig} YAML its
+ *       {@code --config_file_path} points to for {@link BqTableConfig} and the
+ *       Hyperscan/message GCS bucket locations — see {@link RuntimeArgs} class
+ *       Javadoc for the full argument list</li>
  *   <li>Write the {@code IN_PROGRESS} {@code pipeline_stage_audit} row</li>
  *   <li>Resolve the Hyperscan base path — ONE GCS listing call (see {@code HyperscanPathResolver})</li>
  *   <li>Read + union the view across every {@code dataset_details} entry, filtered —
@@ -86,7 +90,6 @@ import java.util.stream.Collectors;
 public class ScanEngineJobRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ScanEngineJobRunner.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final GcsClient gcsClient;
     private final ScanEngineProperties properties;
@@ -97,19 +100,20 @@ public class ScanEngineJobRunner {
     }
 
     /**
-     * @param args {@code [0]} = path to the {@link RuntimeArgs} JSON,
-     *              {@code [1]} = path to the {@link BqTableConfig} JSON —
-     *              both GCS paths
+     * @param args the 7 {@code --key=value} Dataproc submit arguments Composer
+     *              now supplies — see {@link RuntimeArgs} class Javadoc for the
+     *              full list and a sample invocation. {@code --config_file_path}
+     *              is a GCS path to a {@link DataprocConfig} YAML file, read
+     *              here to obtain the {@link BqTableConfig} (its
+     *              {@code spectre.engine.bigquery} section) plus the Hyperscan/
+     *              message GCS bucket locations {@link #runPipeline} needs.
      */
     public void run(String[] args) throws Exception {
-        if (args.length < 2) {
-            throw new IllegalArgumentException(
-                    "Usage: ScanEngineApplication <runtime-args-gcs-path> <bq-table-config-gcs-path>");
-        }
-
-        RuntimeArgs runtimeArgs = JSON.readValue(gcsClient.readTextFile(args[0]), RuntimeArgs.class);
-        BqTableConfig tableConfig = BqTableConfig.parse(
-                new ByteArrayInputStream(gcsClient.readTextFile(args[1]).getBytes(StandardCharsets.UTF_8)));
+        RuntimeArgs runtimeArgs = RuntimeArgs.parseCliArgs(args);
+        DataprocConfig dataprocConfig = DataprocConfig.parseYaml(
+                new ByteArrayInputStream(gcsClient.readTextFile(runtimeArgs.configFilePath())
+                        .getBytes(StandardCharsets.UTF_8)));
+        BqTableConfig tableConfig = dataprocConfig.bigquery();
 
         // spark.serializer is a "static" config — only takes effect if set before the
         // SparkContext is actually constructed, via SparkSession.builder().config(...), never
@@ -124,7 +128,7 @@ public class ScanEngineJobRunner {
         writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, null, BqColumns.JobStatus.IN_PROGRESS, null, null);
 
         try {
-            runPipeline(spark, runtimeArgs, tableConfig);
+            runPipeline(spark, runtimeArgs, tableConfig, dataprocConfig);
             writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, Instant.now(),
                     BqColumns.JobStatus.SUCCESS, null, null);
         } catch (Exception e) {
@@ -189,11 +193,13 @@ public class ScanEngineJobRunner {
         conf.set(SparkConfigKeys.FILES_MAX_PARTITION_BYTES, "67108864"); // 64MB
     }
 
-    private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig) {
+    private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig,
+                              DataprocConfig dataprocConfig) {
 
         // 1. Resolve the Hyperscan base path — one GCS listing call total for this whole run.
+        DataprocConfig.HyperscanGcsConfig hyperscanConfig = dataprocConfig.hyperscan();
         String hyperscanBasePath = HyperscanPathResolver.resolveBasePath(
-                properties.getEnvironmentBucket(), runtimeArgs.policyEngineId(),
+                hyperscanConfig.hdbGcsBucket(), hyperscanConfig.hdbGcsPrefix(), runtimeArgs.policyEngineId(),
                 gcsClient::listImmediateChildDirectories);
 
         // 2. Read + union the view across every dataset_details entry.
@@ -230,11 +236,12 @@ public class ScanEngineJobRunner {
 
         // 4. Read + union AVRO messages, restricted to the view's own message_id set.
         Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
-        String messageBucket = properties.resolveMessageBucket(runtimeArgs);
+        DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
         List<Dataset<Row>> perDatasetMessages = new ArrayList<>();
         for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
             perDatasetMessages.add(MessageAvroReader.readDataset(
-                    spark, gcsClient, messageBucket, datasetDetail.datasetId(), relevantMessageIds));
+                    spark, gcsClient, messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(),
+                    datasetDetail.datasetId(), relevantMessageIds));
         }
         Dataset<Row> messages = perDatasetMessages.getFirst();
         for (int datasetIndex = 1; datasetIndex < perDatasetMessages.size(); datasetIndex++) {
@@ -256,11 +263,11 @@ public class ScanEngineJobRunner {
         ).cache();
 
         // 7. Split and write.
-        writeOutputs(spark, tableConfig, runtimeArgs, results);
+        writeOutputs(spark, tableConfig, runtimeArgs, hyperscanConfig.hdbGcsBucket(), results);
     }
 
-    private void writeOutputs(SparkSession spark, BqTableConfig tableConfig,
-                               RuntimeArgs runtimeArgs, Dataset<MessageProcessingResult> results) {
+    private void writeOutputs(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
+                               String csvMirrorBucket, Dataset<MessageProcessingResult> results) {
         // Explicit FilterFunction typing: a bare lambda here is ambiguous between Dataset's Java
         // API (FilterFunction<T>) and its Scala API (Function1<T, Object>), both of which are
         // structurally compatible with a T -> boolean lambda.
@@ -276,7 +283,7 @@ public class ScanEngineJobRunner {
                 .filter(result -> result.restricted() && result.detailRow() != null)
                 .map(result -> OutputTableWriter.toRow(result.detailRow()));
         OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, restrictedDetailRows, true);
-        writeRestrictedCsvMirror(spark, runtimeArgs, restrictedDetailRows);
+        writeRestrictedCsvMirror(spark, runtimeArgs, csvMirrorBucket, restrictedDetailRows);
 
         JavaRDD<Row> unrestrictedDetailRows = successes.javaRDD()
                 .filter(result -> !result.restricted() && result.detailRow() != null)
@@ -298,8 +305,9 @@ public class ScanEngineJobRunner {
     }
 
     /** Mirrors the restricted detail rows to a single CSV file on GCS. */
-    private void writeRestrictedCsvMirror(SparkSession spark, RuntimeArgs runtimeArgs, JavaRDD<Row> restrictedDetailRows) {
-        String csvPath = "gs://" + properties.getEnvironmentBucket() + "/" + runtimeArgs.policyEngineId()
+    private void writeRestrictedCsvMirror(SparkSession spark, RuntimeArgs runtimeArgs, String csvMirrorBucket,
+                                           JavaRDD<Row> restrictedDetailRows) {
+        String csvPath = "gs://" + csvMirrorBucket + "/" + runtimeArgs.policyEngineId()
                 + "/" + runtimeArgs.processId() + "/restricted/" + runtimeArgs.pipelineExecId() + ".csv";
         Dataset<Row> restrictedDetailDataset = spark.createDataFrame(restrictedDetailRows, OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA);
         // Spark's own CSV writer cannot represent nested array/struct columns directly — the

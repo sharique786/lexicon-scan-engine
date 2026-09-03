@@ -25,17 +25,19 @@ public final class MessageAvroReader {
     private MessageAvroReader() {}
 
     /**
-     * @param baseBucket           the resolved live/test message bucket (see
-     *                              {@code ScanEngineProperties#resolveMessageBucket})
-     * @param datasetId              which {@code coreapp-trans/<dataset_id>/} folder to read
+     * @param baseBucket           {@code DataprocConfig.messages().msgGcsBucket()}
+     * @param datasetPathPrefix     {@code DataprocConfig.messages().msgGcsPrefix()} — e.g.
+     *                              {@code "coreapp-trans"}, without a trailing slash
+     * @param datasetId              which {@code <datasetPathPrefix>/<dataset_id>/} folder to read
      * @param relevantMessageIds     restrict to these ids only — the view's own
      *                              {@code message_id} set
      * @throws NoAvroFilesFoundException if neither the {@code restricted/} nor
      *          {@code unrestricted/} subfolder has any {@code .avro} file
      */
     public static Dataset<Row> readDataset(SparkSession spark, GcsClient gcsClient, String baseBucket,
-                                            String datasetId, Dataset<Row> relevantMessageIds) {
-        String datasetPrefix = AvroConstants.COREAPP_TRANS_PREFIX + datasetId + "/";
+                                            String datasetPathPrefix, String datasetId,
+                                            Dataset<Row> relevantMessageIds) {
+        String datasetPrefix = datasetPathPrefix + "/" + datasetId + "/";
         String restrictedPrefix = datasetPrefix + AvroConstants.RESTRICTED_SUBFOLDER;
         String unrestrictedPrefix = datasetPrefix + AvroConstants.UNRESTRICTED_SUBFOLDER;
         String restrictedPath = "gs://" + baseBucket + "/" + restrictedPrefix;

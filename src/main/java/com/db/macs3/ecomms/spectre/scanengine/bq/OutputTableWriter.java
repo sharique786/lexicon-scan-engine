@@ -77,7 +77,7 @@ public final class OutputTableWriter {
 
     public static void writeLexiconHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
         Dataset<Row> dataset = spark.createDataFrame(rows, LEXICON_HIT_SUMMARY_SCHEMA);
-        writeAppend(dataset, config.fullyQualifiedTable(config.lexiconHitSummaryTable()));
+        writeAppend(dataset, config.bqOutputHitSummary());
     }
 
     // ── lexicon-hit-restricted / lexicon-hit-unrestricted (shared schema) ───
@@ -113,8 +113,8 @@ public final class OutputTableWriter {
 
     public static void writeLexiconHitDetail(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows, boolean restricted) {
         Dataset<Row> dataset = spark.createDataFrame(rows, LEXICON_HIT_DETAIL_SCHEMA);
-        String tableName = restricted ? config.lexiconHitRestrictedTable() : config.lexiconHitUnrestrictedTable();
-        writeAppend(dataset, config.fullyQualifiedTable(tableName));
+        String fullyQualifiedTable = restricted ? config.bqOutputHitRestricted() : config.bqOutputHitUnrestricted();
+        writeAppend(dataset, fullyQualifiedTable);
     }
 
     // ── feature-hit-summary ──────────────────────────────────────────────────
@@ -157,7 +157,7 @@ public final class OutputTableWriter {
 
     public static void writeFeatureHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
         Dataset<Row> dataset = spark.createDataFrame(rows, FEATURE_HIT_SUMMARY_SCHEMA);
-        writeAppend(dataset, config.fullyQualifiedTable(config.featureHitSummaryTable()));
+        writeAppend(dataset, config.bqOutputFeatureHitSummary());
     }
 
     // ── pipeline_stage_audit ─────────────────────────────────────────────────
@@ -194,7 +194,7 @@ public final class OutputTableWriter {
         // scaling concern (contrast the per-message tables above, always written from an
         // already-distributed Dataset).
         Dataset<Row> dataset = spark.createDataFrame(List.of(toRow(row)), PIPELINE_STAGE_AUDIT_SCHEMA);
-        writeAppend(dataset, config.fullyQualifiedTable(config.pipelineStageAuditTable()));
+        writeAppend(dataset, config.bqOutputStageAudit());
     }
 
     // ── pipeline_record_audit ────────────────────────────────────────────────
@@ -221,7 +221,7 @@ public final class OutputTableWriter {
 
     public static void writePipelineRecordAudit(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
         Dataset<Row> dataset = spark.createDataFrame(rows, PIPELINE_RECORD_AUDIT_SCHEMA);
-        writeAppend(dataset, config.fullyQualifiedTable(config.pipelineRecordAuditTable()));
+        writeAppend(dataset, config.bqOutputRecordAudit());
     }
 
     // ── shared write path ────────────────────────────────────────────────────

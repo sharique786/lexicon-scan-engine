@@ -8,11 +8,16 @@ import java.util.List;
 /**
  * Resolves the Lexicon Compile Service's per-feature zip bundle GCS path
  * template:
- * {@code gs://<environment_bkt>/policy_test/<YYYY-MM-DD_HH-MM-SS_<policy_engine_id>>/lex-hyperscan/<feature>.zip}
+ * {@code gs://<hdb-gcs-bucket>/<hdb-gcs-prefix>/<YYYY-MM-DD_HH-MM-SS_<policy_engine_id>>/lex-hyperscan/<feature>.zip}
  *
- * <p>The {@code policy_test} segment is used regardless of trigger type
- * (live or test); the timestamp segment is resolved via a GCS wildcard
- * listing rather than being supplied as a runtime parameter.
+ * <p>{@code hdb-gcs-bucket}/{@code hdb-gcs-prefix} come from the
+ * {@code DataprocConfig} YAML's {@code spectre.engine.hyperscan} section
+ * (see that class) — the {@code policy_test} segment was previously a
+ * hardcoded constant here, used regardless of trigger type (live or test);
+ * it is now environment-supplied instead, since a folder naming convention
+ * baked into this engine's own source was never really a constant, just
+ * previously unconfigurable. The timestamp segment is still resolved via a
+ * GCS wildcard listing rather than being supplied as a runtime parameter.
  *
  * <p>Each feature's zip bundle contains both the compiled {@code .hdb} and
  * its {@code compile-results.json} metadata as entries — see
@@ -36,7 +41,6 @@ import java.util.List;
  */
 public final class HyperscanPathResolver {
 
-    private static final String POLICY_SEGMENT = "policy_test";
     private static final String HDB_SUBFOLDER = "lex-hyperscan";
 
     /**
@@ -56,28 +60,31 @@ public final class HyperscanPathResolver {
     private HyperscanPathResolver() {}
 
     /**
-     * Resolves {@code gs://<environmentBucket>/policy_test/<resolved-timestamp>_<policyEngineId>/lex-hyperscan/}.
+     * Resolves {@code gs://<hdbGcsBucket>/<hdbGcsPrefix>/<resolved-timestamp>_<policyEngineId>/lex-hyperscan/}.
      * When more than one folder matches {@code *_<policyEngineId>} (e.g. left
      * over from a previous run), the LEXICOGRAPHICALLY GREATEST match is used
      * — the {@code YYYY-MM-DD_HH-MM-SS} format sorts lexicographically in
      * chronological order, so this picks the most recent compile.
      *
+     * @param hdbGcsBucket   {@code DataprocConfig.hyperscan().hdbGcsBucket()}
+     * @param hdbGcsPrefix   {@code DataprocConfig.hyperscan().hdbGcsPrefix()} — e.g. {@code "policy_test"}
      * @throws HyperscanFileNotFoundException if no folder matches {@code *_<policyEngineId>}
      */
-    public static String resolveBasePath(String environmentBucket, String policyEngineId, GcsDirectoryLister lister) {
-        String prefix = POLICY_SEGMENT + "/";
-        List<String> children = lister.listImmediateChildDirectories(environmentBucket, prefix);
+    public static String resolveBasePath(String hdbGcsBucket, String hdbGcsPrefix, String policyEngineId,
+                                          GcsDirectoryLister lister) {
+        String prefix = hdbGcsPrefix + "/";
+        List<String> children = lister.listImmediateChildDirectories(hdbGcsBucket, prefix);
 
         String suffix = "_" + policyEngineId;
         String resolvedFolder = children.stream()
                 .filter(name -> name.endsWith(suffix))
                 .max(Comparator.naturalOrder())
                 .orElseThrow(() -> new HyperscanFileNotFoundException(
-                        "No hyperscan compile folder found under gs://" + environmentBucket + "/" + prefix
+                        "No hyperscan compile folder found under gs://" + hdbGcsBucket + "/" + prefix
                         + "matching '*" + suffix + "' — cannot resolve any .hdb file paths for policyEngineId="
                         + policyEngineId + ". Checked " + children.size() + " candidate folder(s)."));
 
-        return "gs://" + environmentBucket + "/" + POLICY_SEGMENT + "/" + resolvedFolder + "/" + HDB_SUBFOLDER + "/";
+        return "gs://" + hdbGcsBucket + "/" + hdbGcsPrefix + "/" + resolvedFolder + "/" + HDB_SUBFOLDER + "/";
     }
 
     /**

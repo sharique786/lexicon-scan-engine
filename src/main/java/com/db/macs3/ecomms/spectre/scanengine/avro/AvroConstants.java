@@ -6,7 +6,6 @@ final class AvroConstants {
     private AvroConstants() {}
 
     static final String FORMAT = "avro";
-    static final String COREAPP_TRANS_PREFIX = "coreapp-trans/";
     static final String RESTRICTED_SUBFOLDER = "restricted/";
     static final String UNRESTRICTED_SUBFOLDER = "unrestricted/";
     static final String COLUMN_DATASET_ID = "dataset_id";

@@ -17,8 +17,17 @@ class HyperscanPathResolverTest {
     void resolvesSingleMatch() {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) ->
                 List.of("2026-08-16_10-00-00_101", "2026-08-15_09-00-00_202");
-        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
         assertThat(basePath).isEqualTo("gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/");
+    }
+
+    @Test
+    @DisplayName("resolves under a non-default configured prefix, not a hardcoded one")
+    void resolvesUnderConfiguredPrefix() {
+        HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) ->
+                List.of("2026-08-16_10-00-00_101");
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "custom_prefix", "101", lister);
+        assertThat(basePath).isEqualTo("gs://my-bucket/custom_prefix/2026-08-16_10-00-00_101/lex-hyperscan/");
     }
 
     @Test
@@ -29,7 +38,7 @@ class HyperscanPathResolverTest {
             listCalls.add(bucket + "/" + prefix);
             return List.of("2026-08-16_10-00-00_101");
         };
-        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
         HyperscanPathResolver.buildZipPath(basePath, "feature-a");
         HyperscanPathResolver.buildZipPath(basePath, "feature-b");
         HyperscanPathResolver.buildZipPath(basePath, "feature-c");
@@ -41,7 +50,7 @@ class HyperscanPathResolverTest {
     void picksLatestOnMultipleMatches() {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) -> List.of(
                 "2026-08-14_08-00-00_101", "2026-08-16_10-00-00_101", "2026-08-15_09-00-00_101");
-        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister);
+        String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
         assertThat(basePath).contains("2026-08-16_10-00-00_101");
     }
 
@@ -49,7 +58,7 @@ class HyperscanPathResolverTest {
     @DisplayName("throws HyperscanFileNotFoundException when no folder matches (requirement 3.a)")
     void throwsWhenNoMatch() {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) -> List.of("2026-08-16_10-00-00_999");
-        assertThatThrownBy(() -> HyperscanPathResolver.resolveBasePath("my-bucket", "101", lister))
+        assertThatThrownBy(() -> HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister))
                 .isInstanceOf(HyperscanPathResolver.HyperscanFileNotFoundException.class)
                 .hasMessageContaining("101");
     }

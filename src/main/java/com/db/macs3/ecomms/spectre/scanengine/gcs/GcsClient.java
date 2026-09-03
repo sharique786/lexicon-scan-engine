@@ -50,6 +50,20 @@ public final class GcsClient implements Serializable {
 
     private transient Storage storage;
 
+    /** Default constructor — the real, lazily-initialised {@link Storage} client (production/Spring use). */
+    public GcsClient() {}
+
+    /**
+     * Test-only constructor — injects a pre-built {@link Storage} (a Mockito mock in every
+     * current caller) so this class's own request/response-shaping logic (path parsing, which
+     * {@code BlobListOption}s are passed, directory-vs-file filtering, stream wrapping) can be
+     * exercised without a live GCS connection. Package-private: only {@code GcsClientTest}, in
+     * this same package, uses it.
+     */
+    GcsClient(Storage storage) {
+        this.storage = storage;
+    }
+
     private Storage storage() {
         if (storage == null) {
             storage = StorageOptions.getDefaultInstance().getService();
