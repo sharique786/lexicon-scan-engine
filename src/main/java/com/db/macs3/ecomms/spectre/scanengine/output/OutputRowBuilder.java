@@ -15,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,6 +49,7 @@ public final class OutputRowBuilder {
      * carry (see {@link #buildDetailRow}, which uses the suppressed set).
      */
     public static LexiconHitSummaryRow buildSummaryRow(String messageId, String processId, String pipelineExecId,
+                                                         LocalDate datasetPartitionValue,
                                                          MessageEvaluationResult evaluation,
                                                          String createdBy, Instant createdTs) {
         List<LexiconHitSummaryRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
@@ -81,7 +83,8 @@ public final class OutputRowBuilder {
                     termDtls));
         }
 
-        return new LexiconHitSummaryRow(messageId, processId, pipelineExecId, evaluatedLexicons, createdBy, createdTs);
+        return new LexiconHitSummaryRow(
+                messageId, processId, pipelineExecId, datasetPartitionValue, evaluatedLexicons, createdBy, createdTs);
     }
 
     // ── lexicon-hit-restricted / lexicon-hit-unrestricted (shared shape) ────
@@ -89,7 +92,7 @@ public final class OutputRowBuilder {
     /**
      * Builds the {@code lexicon-hit-restricted}/{@code -unrestricted} row
      * for one message, using the disclaimer-SUPPRESSED match set (see
-     * {@link MessageEvaluationResult#finalLexiconMatchesByFeatureId()}).
+     * {@link MessageEvaluationResult finalLexiconMatchesByFeatureId()}).
      *
      * @return null when there is nothing to report — the message was
      *          short-circuited by noise reduction, or every Lexicon-category
@@ -101,7 +104,7 @@ public final class OutputRowBuilder {
      *          {@code evaluated_lexicons} array.
      */
     public static LexiconHitDetailRow buildDetailRow(String messageId, String processId, String pipelineExecId,
-                                                       String datasetPartitionValue,
+                                                       LocalDate datasetPartitionValue,
                                                        MessageEvaluationResult evaluation,
                                                        String createdBy, Instant createdTs) {
         if (evaluation.getFinalLexiconMatchesByFeatureId().isEmpty()) {
@@ -172,7 +175,7 @@ public final class OutputRowBuilder {
      *                              column — taken from the first evaluated group's first member,
      *                              since it is a per-message (not per-group) property in practice
      */
-    public static FeatureHitSummaryRow buildFeatureHitSummaryRow(String messageId, String datasetPartitionValue,
+    public static FeatureHitSummaryRow buildFeatureHitSummaryRow(String messageId, LocalDate datasetPartitionValue,
                                                                    String pipelineExecId, String processId,
                                                                    String featureTaggingType,
                                                                    MessageEvaluationResult evaluation,

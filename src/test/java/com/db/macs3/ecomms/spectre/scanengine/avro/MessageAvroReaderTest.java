@@ -41,7 +41,7 @@ class MessageAvroReaderTest {
                 .thenReturn(List.of());
 
         assertThatThrownBy(() -> MessageAvroReader.readDataset(
-                null, gcsClient, "my-msg-bucket", "coreapp-trans", "ds1", null))
+                null, gcsClient, "my-msg-bucket", "coreapp-trans", "ds1", "2026-06-18", null))
                 .isInstanceOf(MessageAvroReader.NoAvroFilesFoundException.class)
                 .hasMessageContaining("ds1")
                 .hasMessageContaining("gs://my-msg-bucket/coreapp-trans/ds1/restricted/")
@@ -57,7 +57,7 @@ class MessageAvroReaderTest {
                 .thenReturn(List.of());
 
         assertThatThrownBy(() -> MessageAvroReader.readDataset(
-                null, gcsClient, "my-msg-bucket", "custom-prefix", "ds-xyz", null))
+                null, gcsClient, "my-msg-bucket", "custom-prefix", "ds-xyz", "2026-06-18", null))
                 .isInstanceOf(MessageAvroReader.NoAvroFilesFoundException.class);
     }
 }

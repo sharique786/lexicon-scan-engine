@@ -3,6 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.output;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,7 +29,7 @@ public class LexiconHitDetailRow implements Serializable {
     private String messageId;
     private String processId;
     private String pipelineExecId;
-    private String datasetPartitionValue;
+    private LocalDate datasetPartitionValue;
     private List<EvaluatedLexicon> evaluatedLexicons;
     private String createdBy;
     private Instant createdTs;
@@ -37,14 +38,15 @@ public class LexiconHitDetailRow implements Serializable {
      * @param messageId                  the message this row is for
      * @param processId                   the process run this row belongs to
      * @param pipelineExecId              the pipeline execution this row belongs to
-     * @param datasetPartitionValue      the Airflow-supplied partition this message's dataset was read under
+     * @param datasetPartitionValue      {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                                    dataset this message came from — see {@code ScanMessage} class Javadoc
      * @param evaluatedLexicons            one entry per Lexicon-category group that had at least
      *                                    one surviving (post-suppression) match
      * @param createdBy                    the writing job's identity
      * @param createdTs                     write time, UTC
      */
     public LexiconHitDetailRow(String messageId, String processId, String pipelineExecId,
-                                String datasetPartitionValue, List<EvaluatedLexicon> evaluatedLexicons,
+                                LocalDate datasetPartitionValue, List<EvaluatedLexicon> evaluatedLexicons,
                                 String createdBy, Instant createdTs) {
         this.messageId = messageId;
         this.processId = processId;
@@ -61,8 +63,8 @@ public class LexiconHitDetailRow implements Serializable {
     public void setProcessId(String processId) { this.processId = processId; }
     public String getPipelineExecId() { return pipelineExecId; }
     public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
-    public String getDatasetPartitionValue() { return datasetPartitionValue; }
-    public void setDatasetPartitionValue(String datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
+    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public List<EvaluatedLexicon> getEvaluatedLexicons() { return evaluatedLexicons; }
     public void setEvaluatedLexicons(List<EvaluatedLexicon> evaluatedLexicons) { this.evaluatedLexicons = evaluatedLexicons; }
     public String getCreatedBy() { return createdBy; }

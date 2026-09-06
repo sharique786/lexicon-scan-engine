@@ -3,6 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.output;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 
@@ -23,7 +24,7 @@ public class FeatureHitSummaryRow implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private String messageId;
-    private String datasetPartitionValue;
+    private LocalDate datasetPartitionValue;
     private String pipelineExecId;
     private String processId;
     private String featureHitType;
@@ -33,7 +34,8 @@ public class FeatureHitSummaryRow implements Serializable {
 
     /**
      * @param messageId                  the message this row is for
-     * @param datasetPartitionValue      the Airflow-supplied partition this message's dataset was read under
+     * @param datasetPartitionValue      {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                                    dataset this message came from — see {@code ScanMessage} class Javadoc
      * @param pipelineExecId               the pipeline execution this row belongs to
      * @param processId                     the process run this row belongs to
      * @param featureHitType                carried verbatim from the view's {@code feature_tagging_type}
@@ -44,7 +46,7 @@ public class FeatureHitSummaryRow implements Serializable {
      * @param createdBy                      the writing job's identity
      * @param createdTs                       write time, UTC
      */
-    public FeatureHitSummaryRow(String messageId, String datasetPartitionValue, String pipelineExecId,
+    public FeatureHitSummaryRow(String messageId, LocalDate datasetPartitionValue, String pipelineExecId,
                                  String processId, String featureHitType, List<Feature> features,
                                  String createdBy, Instant createdTs) {
         this.messageId = messageId;
@@ -59,8 +61,8 @@ public class FeatureHitSummaryRow implements Serializable {
 
     public String getMessageId() { return messageId; }
     public void setMessageId(String messageId) { this.messageId = messageId; }
-    public String getDatasetPartitionValue() { return datasetPartitionValue; }
-    public void setDatasetPartitionValue(String datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
+    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public String getPipelineExecId() { return pipelineExecId; }
     public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
     public String getProcessId() { return processId; }

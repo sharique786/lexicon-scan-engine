@@ -79,6 +79,7 @@ public final class BqColumns {
         public static final String MESSAGE_ID       = "message_id";
         public static final String PROCESS_ID        = "process_id";
         public static final String PIPELINE_EXEC_ID = "pipeline_exec_id";
+        public static final String DATASET_PARTITION_VALUE = "dataset_partition_value";
         public static final String EVALUATED_LEXICONS = "evaluated_lexicons";
         public static final String CREATED_BY         = "created_by";
         public static final String CREATED_TS          = "created_ts";

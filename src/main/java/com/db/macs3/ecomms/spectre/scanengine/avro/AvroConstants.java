@@ -8,7 +8,7 @@ final class AvroConstants {
     static final String FORMAT = "avro";
     static final String RESTRICTED_SUBFOLDER = "restricted/";
     static final String UNRESTRICTED_SUBFOLDER = "unrestricted/";
-    static final String COLUMN_DATASET_ID = "dataset_id";
+    static final String COLUMN_DATASET_PARTITION_VALUE = "dataset_partition_value";
     static final String COLUMN_RESTRICTED = "restricted";
 
     static final String FIELD_MESSAGE_ID = "message_id";

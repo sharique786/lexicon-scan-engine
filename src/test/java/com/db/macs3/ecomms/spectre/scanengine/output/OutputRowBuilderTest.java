@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OutputRowBuilderTest {
 
     private static final Instant NOW = Instant.parse("2026-08-17T10:00:00Z");
+    private static final LocalDate DATASET_PARTITION_VALUE = LocalDate.parse("2026-08-16");
 
     private static FeatureDecisionRow row(String featureId, String featureType, String featuresToApply, String defJson) {
         return new FeatureDecisionRow("proc-1", "msg-101", "part-1", "Lexicon-Tagging",
@@ -67,7 +69,7 @@ class OutputRowBuilderTest {
         @DisplayName("has one evaluated_lexicons entry per evaluated group (disclaimer + lexicon)")
         void hasOneEntryPerGroup() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
-                    "msg-101", "proc-1", "pipe-1", buildRealisticEvaluation(), "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row.getEvaluatedLexicons()).hasSize(2);
         }
 
@@ -76,7 +78,7 @@ class OutputRowBuilderTest {
                      "regexMatchHitCount as the raw per-term match occurrence count")
         void aggregatesDisclaimerCounts() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
-                    "msg-101", "proc-1", "pipe-1", buildRealisticEvaluation(), "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             var disclaimerEntry = row.getEvaluatedLexicons().stream()
                     .filter(e -> e.getId().equals("2")).findFirst().orElseThrow();
             assertThat(disclaimerEntry.getTotalTermsCount()).isEqualTo(5);
@@ -88,7 +90,7 @@ class OutputRowBuilderTest {
         @DisplayName("uses RAW (pre-suppression) counts — summary reflects everything checked, not just alerts")
         void usesPreSuppressionCounts() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
-                    "msg-101", "proc-1", "pipe-1", buildRealisticEvaluation(), "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             var lexiconEntry = row.getEvaluatedLexicons().stream()
                     .filter(e -> e.getId().equals("1")).findFirst().orElseThrow();
             assertThat(lexiconEntry.getRegexHitCount()).isEqualTo(2);
@@ -115,7 +117,7 @@ class OutputRowBuilderTest {
             MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-101", groups, scanner);
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
-                    "msg-101", "proc-1", "pipe-1", evaluation, "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
 
             var termDtl = summaryRow.getEvaluatedLexicons().get(0).getTermDtls().get(0);
             assertThat(termDtl.getTermId()).isEqualTo("lexicon_market_cond-2::1");
@@ -131,7 +133,7 @@ class OutputRowBuilderTest {
         @DisplayName("only includes groups with surviving (post-suppression) matches")
         void onlyIncludesSurvivingGroups() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
-                    "msg-101", "proc-1", "pipe-1", "partition-1", buildRealisticEvaluation(), "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row).isNotNull();
             assertThat(row.getEvaluatedLexicons()).hasSize(1); // disclaimer group excluded entirely
         }
@@ -140,7 +142,7 @@ class OutputRowBuilderTest {
         @DisplayName("the suppressed term is gone; only the surviving term remains")
         void suppressedTermIsGone() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
-                    "msg-101", "proc-1", "pipe-1", "partition-1", buildRealisticEvaluation(), "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row.getEvaluatedLexicons().get(0).getTermDtls()).hasSize(1);
             assertThat(row.getEvaluatedLexicons().get(0).getTermDtls().get(0).getTermId())
                     .isEqualTo("lexicon_market_cond-1::2");
@@ -150,7 +152,7 @@ class OutputRowBuilderTest {
         @DisplayName("matched_text JSON contains the hit_details_hs wrapper with correct text/position")
         void matchedTextJsonIsCorrect() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
-                    "msg-101", "proc-1", "pipe-1", "partition-1", buildRealisticEvaluation(), "scan-engine", NOW);
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             String matchedTextJson = row.getEvaluatedLexicons().get(0).getTermDtls().get(0).getMatchedText();
             assertThat(matchedTextJson).contains("hit_details_hs");
             assertThat(matchedTextJson).contains("\"bomb\"");
@@ -176,7 +178,7 @@ class OutputRowBuilderTest {
             assertThat(nrEval.isShortCircuited()).isTrue(); // sanity check the premise before checking the row builder
 
             LexiconHitDetailRow nullRow = OutputRowBuilder.buildDetailRow(
-                    "msg-102", "proc-1", "pipe-1", "partition-1", nrEval, "scan-engine", NOW);
+                    "msg-102", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, nrEval, "scan-engine", NOW);
             assertThat(nullRow).isNull();
         }
     }
@@ -189,7 +191,7 @@ class OutputRowBuilderTest {
         @DisplayName("has one entry per evaluated group with correctly resolved hit status")
         void hasCorrectHitStatus() {
             FeatureHitSummaryRow row = OutputRowBuilder.buildFeatureHitSummaryRow(
-                    "msg-101", "partition-1", "pipe-1", "proc-1", "Lexicon-Tagging",
+                    "msg-101", DATASET_PARTITION_VALUE, "pipe-1", "proc-1", "Lexicon-Tagging",
                     buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row.getFeatures()).hasSize(2);
             var disclaimerFeature = row.getFeatures().stream().filter(f -> f.getId() == 2L).findFirst().orElseThrow();

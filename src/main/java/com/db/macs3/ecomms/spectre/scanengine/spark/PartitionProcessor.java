@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -151,7 +152,8 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     private MessageProcessingResult processOneRow(Row row, FeatureScanOrchestrator orchestrator) {
         boolean restricted = row.getAs(JoinedRowColumns.RESTRICTED);
         String datasetPartitionValue = row.getAs(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT);
-        ScanMessage message = MessageRowConverter.fromRow(row, row.getAs(JoinedRowColumns.DATASET_ID), restricted);
+        LocalDate datasetPartitionValueDate = LocalDate.parse(datasetPartitionValue);
+        ScanMessage message = MessageRowConverter.fromRow(row, datasetPartitionValue, restricted);
 
         try {
             List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
@@ -173,11 +175,11 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             Instant now = Instant.now();
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
-                    message.getMessageId(), processId, pipelineExecId, evaluation, createdBy, now);
+                    message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
             LexiconHitDetailRow detailRow = OutputRowBuilder.buildDetailRow(
-                    message.getMessageId(), processId, pipelineExecId, datasetPartitionValue, evaluation, createdBy, now);
+                    message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
             FeatureHitSummaryRow featureHitSummaryRow = OutputRowBuilder.buildFeatureHitSummaryRow(
-                    message.getMessageId(), datasetPartitionValue, pipelineExecId, processId, featureTaggingType,
+                    message.getMessageId(), datasetPartitionValueDate, pipelineExecId, processId, featureTaggingType,
                     evaluation, createdBy, now);
 
             return MessageProcessingResult.success(

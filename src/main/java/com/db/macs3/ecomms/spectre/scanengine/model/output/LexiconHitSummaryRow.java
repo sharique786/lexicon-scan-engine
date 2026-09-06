@@ -3,6 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.output;
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 
@@ -36,23 +37,28 @@ public class LexiconHitSummaryRow implements Serializable {
     private String messageId;
     private String processId;
     private String pipelineExecId;
+    private LocalDate datasetPartitionValue;
     private List<EvaluatedLexicon> evaluatedLexicons;
     private String createdBy;
     private Instant createdTs;
 
     /**
-     * @param messageId          the message this summary is for
-     * @param processId            the process run this row belongs to
-     * @param pipelineExecId       the pipeline execution this row belongs to
-     * @param evaluatedLexicons    one entry per evaluated feature group
-     * @param createdBy             the writing job's identity
-     * @param createdTs              write time, UTC
+     * @param messageId              the message this summary is for
+     * @param processId                the process run this row belongs to
+     * @param pipelineExecId           the pipeline execution this row belongs to
+     * @param datasetPartitionValue    {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                                dataset this message came from — see {@code ScanMessage} class Javadoc
+     * @param evaluatedLexicons        one entry per evaluated feature group
+     * @param createdBy                 the writing job's identity
+     * @param createdTs                  write time, UTC
      */
     public LexiconHitSummaryRow(String messageId, String processId, String pipelineExecId,
-                                 List<EvaluatedLexicon> evaluatedLexicons, String createdBy, Instant createdTs) {
+                                 LocalDate datasetPartitionValue, List<EvaluatedLexicon> evaluatedLexicons,
+                                 String createdBy, Instant createdTs) {
         this.messageId = messageId;
         this.processId = processId;
         this.pipelineExecId = pipelineExecId;
+        this.datasetPartitionValue = datasetPartitionValue;
         this.evaluatedLexicons = evaluatedLexicons;
         this.createdBy = createdBy;
         this.createdTs = createdTs;
@@ -64,6 +70,8 @@ public class LexiconHitSummaryRow implements Serializable {
     public void setProcessId(String processId) { this.processId = processId; }
     public String getPipelineExecId() { return pipelineExecId; }
     public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
+    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public List<EvaluatedLexicon> getEvaluatedLexicons() { return evaluatedLexicons; }
     public void setEvaluatedLexicons(List<EvaluatedLexicon> evaluatedLexicons) { this.evaluatedLexicons = evaluatedLexicons; }
     public String getCreatedBy() { return createdBy; }
@@ -83,6 +91,7 @@ public class LexiconHitSummaryRow implements Serializable {
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(processId, other.processId)
                 && Objects.equals(pipelineExecId, other.pipelineExecId)
+                && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)
                 && Objects.equals(evaluatedLexicons, other.evaluatedLexicons)
                 && Objects.equals(createdBy, other.createdBy)
                 && Objects.equals(createdTs, other.createdTs);
@@ -90,13 +99,15 @@ public class LexiconHitSummaryRow implements Serializable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(messageId, processId, pipelineExecId, evaluatedLexicons, createdBy, createdTs);
+        return Objects.hash(messageId, processId, pipelineExecId, datasetPartitionValue, evaluatedLexicons,
+                createdBy, createdTs);
     }
 
     @Override
     public String toString() {
         return "LexiconHitSummaryRow[messageId=" + messageId + ", processId=" + processId
-                + ", pipelineExecId=" + pipelineExecId + ", evaluatedLexicons=" + evaluatedLexicons
+                + ", pipelineExecId=" + pipelineExecId + ", datasetPartitionValue=" + datasetPartitionValue
+                + ", evaluatedLexicons=" + evaluatedLexicons
                 + ", createdBy=" + createdBy + ", createdTs=" + createdTs + "]";
     }
 

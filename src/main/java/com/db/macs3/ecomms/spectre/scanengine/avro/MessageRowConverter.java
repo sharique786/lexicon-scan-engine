@@ -19,23 +19,23 @@ import java.util.List;
  * {@code processing.*}), so every other class works with {@link ScanMessage}
  * directly.
  *
- * <p>{@code datasetId}/{@code restricted} are NOT present in the AVRO itself
- * — they are supplied by the caller ({@code MessageAvroReader}, which knows
- * which dataset/subfolder a given file was read from), not read from
- * {@code row}.
+ * <p>{@code datasetPartitionValue}/{@code restricted} are NOT present in the
+ * AVRO itself — they are supplied by the caller ({@code MessageAvroReader},
+ * which knows which dataset/subfolder a given file was read from), not read
+ * from {@code row}.
  */
 public final class MessageRowConverter implements Serializable {
 
     private MessageRowConverter() {}
 
-    public static ScanMessage fromRow(Row row, String datasetId, boolean restricted) {
+    public static ScanMessage fromRow(Row row, String datasetPartitionValue, boolean restricted) {
         String messageId = getStringOrNull(row, AvroConstants.FIELD_MESSAGE_ID);
         MessageSource source = readSource(row);
         MessageContent content = readContent(row);
         List<MessageAttachment> attachments = readAttachments(row);
         MessageProcessing processing = readProcessing(row);
 
-        return new ScanMessage(messageId, source, content, attachments, processing, datasetId, restricted);
+        return new ScanMessage(messageId, source, content, attachments, processing, datasetPartitionValue, restricted);
     }
 
     private static MessageSource readSource(Row row) {

@@ -31,7 +31,7 @@ public class ScanMessage implements Serializable {
     private MessageContent content;
     private List<MessageAttachment> attachments;
     private MessageProcessing processing;
-    private String datasetId;
+    private String datasetPartitionValue;
     private boolean restricted;
 
     /**
@@ -41,8 +41,12 @@ public class ScanMessage implements Serializable {
      * @param attachments   zero or more attached files' extracted text
      * @param processing    {@code run_date}/{@code run_hour} — used to resolve which
      *                       AVRO partition this message was read from
-     * @param datasetId              which Airflow-supplied dataset this message came from —
-     *                                 populated by the reader, not present in the AVRO itself
+     * @param datasetPartitionValue  {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for
+     *                                 the dataset this message came from — populated by the reader
+     *                                 ({@code MessageAvroReader}), not present in the AVRO itself;
+     *                                 this is the source of the {@code dataset_partition_value}
+     *                                 column all 4 per-message output tables carry (see
+     *                                 {@code OutputRowBuilder})
      * @param restricted             true if this message was read from a {@code restricted/}
      *                                 GCS subfolder, false if {@code unrestricted/} — populated
      *                                 by the reader from the source file path, not present in
@@ -52,13 +56,13 @@ public class ScanMessage implements Serializable {
      */
     public ScanMessage(String messageId, MessageSource source, MessageContent content,
                         List<MessageAttachment> attachments, MessageProcessing processing,
-                        String datasetId, boolean restricted) {
+                        String datasetPartitionValue, boolean restricted) {
         this.messageId = messageId;
         this.source = source;
         this.content = content;
         this.attachments = attachments;
         this.processing = processing;
-        this.datasetId = datasetId;
+        this.datasetPartitionValue = datasetPartitionValue;
         this.restricted = restricted;
     }
 
@@ -72,8 +76,8 @@ public class ScanMessage implements Serializable {
     public void setAttachments(List<MessageAttachment> attachments) { this.attachments = attachments; }
     public MessageProcessing getProcessing() { return processing; }
     public void setProcessing(MessageProcessing processing) { this.processing = processing; }
-    public String getDatasetId() { return datasetId; }
-    public void setDatasetId(String datasetId) { this.datasetId = datasetId; }
+    public String getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(String datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public boolean isRestricted() { return restricted; }
     public void setRestricted(boolean restricted) { this.restricted = restricted; }
 
@@ -97,18 +101,18 @@ public class ScanMessage implements Serializable {
                 && Objects.equals(content, other.content)
                 && Objects.equals(attachments, other.attachments)
                 && Objects.equals(processing, other.processing)
-                && Objects.equals(datasetId, other.datasetId);
+                && Objects.equals(datasetPartitionValue, other.datasetPartitionValue);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(messageId, source, content, attachments, processing, datasetId, restricted);
+        return Objects.hash(messageId, source, content, attachments, processing, datasetPartitionValue, restricted);
     }
 
     @Override
     public String toString() {
         return "ScanMessage[messageId=" + messageId + ", source=" + source + ", content=" + content
                 + ", attachments=" + attachments + ", processing=" + processing
-                + ", datasetId=" + datasetId + ", restricted=" + restricted + "]";
+                + ", datasetPartitionValue=" + datasetPartitionValue + ", restricted=" + restricted + "]";
     }
 }

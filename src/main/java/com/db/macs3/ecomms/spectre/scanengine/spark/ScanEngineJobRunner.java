@@ -241,7 +241,7 @@ public class ScanEngineJobRunner {
         for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
             perDatasetMessages.add(MessageAvroReader.readDataset(
                     spark, gcsClient, messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(),
-                    datasetDetail.datasetId(), relevantMessageIds));
+                    datasetDetail.datasetId(), datasetDetail.datasetPartitionValue(), relevantMessageIds));
         }
         Dataset<Row> messages = perDatasetMessages.getFirst();
         for (int datasetIndex = 1; datasetIndex < perDatasetMessages.size(); datasetIndex++) {
@@ -253,7 +253,8 @@ public class ScanEngineJobRunner {
         Dataset<Row> joined = messages.join(groupedView, BqColumns.View.MESSAGE_ID)
                 .withColumn(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT, functions.lit(runtimeArgs.pipelineExecId()))
                 .withColumn(JoinedRowColumns.CREATED_BY_FOR_OUTPUT, functions.lit(properties.getCreatedBy()))
-                .withColumn(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT, functions.col(JoinedRowColumns.DATASET_ID));
+                .withColumn(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT,
+                        functions.col(JoinedRowColumns.DATASET_PARTITION_VALUE));
 
         // 6. mapPartitions — the only place Hyperscan databases are loaded.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
