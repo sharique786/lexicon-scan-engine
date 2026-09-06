@@ -353,22 +353,74 @@ class TermExpressionMetadataTest {
         }
 
         @Test
-        @DisplayName("An AND NOT-shaped resolvedPatterns term with a patternMapping also populated throws")
-        void andNotShapeWithPatternMappingThrows() {
+        @DisplayName("An AND NOT-shaped resolvedPatterns term with a patternMapping matching its own ids is accepted")
+        void andNotShapeWithMatchingPatternMappingIsAccepted() {
+            // Confirmed against a real compile-results.json: patternMapping legitimately documents
+            // the required/excluded id formula (e.g. "((11&12&13)&!14)") alongside plain
+            // requiredExpressionIds/excludedExpressionIds for a real AND NOT term — it is not, by
+            // itself, evidence of native COMBINATION (only hyperscanExpressionId is).
             String json = """
                 {"results": [
                   {"termId": "%s::7", "compilationStatus": "PASS",
-                   "regexPattern": ["reqleaf", "exclleaf"],
+                   "regexPattern": ["reqleaf"], "exclusionRegex": ["exclleaf"],
                    "requiresExclusionCheck": true,
                    "resolvedPatterns": "reqleaf AND NOT (exclleaf)",
                    "requiredExpressionIds": [30], "excludedExpressionIds": [31],
-                   "patternMapping": "(30&31)"}
+                   "patternMapping": "(30&!31)"}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(30);
+
+            assertThat(entry).isNotNull();
+            assertThat(entry.resolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
+        }
+
+        @Test
+        @DisplayName("An AND NOT-shaped resolvedPatterns term whose patternMapping references the wrong ids throws")
+        void andNotShapeWithMismatchedPatternMappingThrows() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::7", "compilationStatus": "PASS",
+                   "regexPattern": ["reqleaf"], "exclusionRegex": ["exclleaf"],
+                   "requiresExclusionCheck": true,
+                   "resolvedPatterns": "reqleaf AND NOT (exclleaf)",
+                   "requiredExpressionIds": [30], "excludedExpressionIds": [31],
+                   "patternMapping": "(30&!99)"}
                 ]}
                 """.formatted(FEATURE);
 
             assertThatThrownBy(() -> TermExpressionMetadata.parse(FEATURE, json))
                     .isInstanceOf(TermExpressionMetadata.TermMetadataParseException.class)
                     .hasMessageContaining("patternMapping");
+        }
+
+        @Test
+        @DisplayName("An AND NOT resolvedPatterns term with required leaves in regexPattern and the excluded leaf "
+                + "in exclusionRegex (the real Compile Service shape) parses")
+        void andNotResolvedPatternsWithSeparateExclusionRegexField() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::10", "compilationStatus": "PASS",
+                   "regexPattern": ["a", "b", "c"],
+                   "exclusionRegex": ["d"],
+                   "requiresExclusionCheck": true,
+                   "resolvedPatterns": "a NEAR{2} b NEAR{2} c AND NOT (d)",
+                   "requiredExpressionIds": [11, 12, 13], "excludedExpressionIds": [14],
+                   "patternMapping": "((11&12&13)&!14)"}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(11);
+
+            assertThat(entry).isNotNull();
+            assertThat(entry.termNumber()).isEqualTo(10);
+            assertThat(entry.resolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
+            ResolvedPatternTree.AndNot andNot = (ResolvedPatternTree.AndNot) entry.resolvedPatternTree();
+            assertThat(((ResolvedPatternTree.Chain) andNot.required()).leaves()).hasSize(3);
+            assertThat(((ResolvedPatternTree.Chain) andNot.excluded()).leaves()).hasSize(1);
         }
 
         @Test

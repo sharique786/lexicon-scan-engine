@@ -9,8 +9,12 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Parses and indexes one feature's per-term expression-id metadata — the
@@ -238,7 +242,8 @@ public final class TermExpressionMetadata implements Serializable {
 
         ResolvedPatternTree tree = null;
         if (termResult.resolvedPatterns() != null && !termResult.resolvedPatterns().isBlank()) {
-            tree = ResolvedPatternTree.build(feature, termResult.termId(), termResult.resolvedPatterns(), leaves);
+            List<String> treeLeaves = withExclusionLeaves(leaves, termResult.exclusionRegex());
+            tree = ResolvedPatternTree.build(feature, termResult.termId(), termResult.resolvedPatterns(), treeLeaves);
             validateShapeAgreement(feature, termResult, tree, requiresExclusion);
         }
 
@@ -294,6 +299,28 @@ public final class TermExpressionMetadata implements Serializable {
     }
 
     /**
+     * For an AND-NOT-shaped {@code resolvedPatterns} term, the Compile Service reports the required
+     * side's leaves in {@code regexPattern}/{@code translatedPattern} and the excluded side's leaf(s)
+     * SEPARATELY in {@code exclusionRegex} — confirmed against a real compile-results.json, not
+     * documented anywhere before this. {@link ResolvedPatternTree#build} zips {@code resolvedPatterns}'
+     * shape against ONE flat leaf list in left-to-right order (required chain first, then the excluded
+     * chain), so the two fields must be concatenated in that order before zipping — passing
+     * {@code regexPattern} alone leaves the zip cursor short exactly by however many leaves
+     * {@code exclusionRegex} was holding.
+     */
+    private static List<String> withExclusionLeaves(List<String> requiredLeaves, List<String> exclusionLeaves) {
+        if (exclusionLeaves == null || exclusionLeaves.isEmpty()) {
+            return requiredLeaves;
+        }
+        List<String> combined = new ArrayList<>();
+        if (requiredLeaves != null) {
+            combined.addAll(requiredLeaves);
+        }
+        combined.addAll(exclusionLeaves);
+        return combined;
+    }
+
+    /**
      * Cross-checks a {@code resolvedPatterns}-bearing term's shape against
      * its declared {@code requiresExclusionCheck}, {@code hyperscanExpressionId},
      * and {@code patternMapping} siblings — these are all supposed to agree on
@@ -319,9 +346,19 @@ public final class TermExpressionMetadata implements Serializable {
 
     /**
      * An AND NOT term must never carry a native {@code hyperscanExpressionId}
-     * or {@code patternMapping} — both would mean the {@code .hdb} used
-     * native {@code COMBINATION} for this term, contradicting the AND NOT
-     * id scheme this class relies on.
+     * — that would mean the {@code .hdb} used native {@code COMBINATION} for
+     * this term, contradicting the AND NOT id scheme this class relies on.
+     *
+     * <p>{@code patternMapping} is NOT evidence of native COMBINATION by
+     * itself — confirmed against a real compile-results.json, contradicting
+     * this class's own earlier (undocumented-elsewhere) assumption that its
+     * mere presence implied one: a real AND-NOT-shaped {@code resolvedPatterns}
+     * term legitimately carries a {@code patternMapping} such as
+     * {@code "((11&12&13)&!14)"} purely as a human-readable rendering of the
+     * required/excluded id formula, alongside plain, individually-reportable
+     * {@code requiredExpressionIds}/{@code excludedExpressionIds} — not a
+     * native combination. When present it is still validated, just against
+     * this term's own ids rather than rejected outright.
      */
     private static void validateAndNotShapeHasNoNativeCombination(String feature, TermResultJson termResult) {
         if (termResult.hyperscanExpressionId() != null) {
@@ -330,12 +367,47 @@ public final class TermExpressionMetadata implements Serializable {
                     + "resolvedPatterns) but also has a native hyperscanExpressionId="
                     + termResult.hyperscanExpressionId() + " populated — malformed compile-results JSON.");
         }
-        if (termResult.patternMapping() != null && !termResult.patternMapping().isBlank()) {
-            throw new TermMetadataParseException(
-                    "Term '" + termResult.termId() + "' in feature '" + feature + "' is an AND NOT term (per "
-                    + "resolvedPatterns) but also has a patternMapping value (" + termResult.patternMapping()
-                    + ") populated — malformed compile-results JSON.");
+        validateAndNotPatternMappingMatchesIds(feature, termResult);
+    }
+
+    /**
+     * When present on an AND-NOT-shaped {@code resolvedPatterns} term,
+     * {@code patternMapping}'s ids must be exactly this term's own
+     * {@code requiredExpressionIds} ∪ {@code excludedExpressionIds} — the
+     * same "trust but verify" treatment {@link #validatePatternMappingCount}
+     * gives the plain-chain case, adapted since an AND NOT id formula names
+     * ids directly rather than just counting leaves.
+     */
+    private static void validateAndNotPatternMappingMatchesIds(String feature, TermResultJson termResult) {
+        String mapping = termResult.patternMapping();
+        if (mapping == null || mapping.isBlank()) {
+            return;
         }
+        Set<Integer> mappingIds = extractIds(mapping);
+        Set<Integer> expectedIds = new HashSet<>();
+        if (termResult.requiredExpressionIds() != null) {
+            expectedIds.addAll(termResult.requiredExpressionIds());
+        }
+        if (termResult.excludedExpressionIds() != null) {
+            expectedIds.addAll(termResult.excludedExpressionIds());
+        }
+        if (!mappingIds.equals(expectedIds)) {
+            throw new TermMetadataParseException(
+                    "Term '" + termResult.termId() + "' in feature '" + feature + "': patternMapping '" + mapping
+                    + "' references ids " + mappingIds + " but requiredExpressionIds/excludedExpressionIds give "
+                    + expectedIds + " — malformed compile-results JSON.");
+        }
+    }
+
+    private static final Pattern ID_PATTERN = Pattern.compile("\\d+");
+
+    private static Set<Integer> extractIds(String mapping) {
+        Set<Integer> ids = new HashSet<>();
+        Matcher matcher = ID_PATTERN.matcher(mapping);
+        while (matcher.find()) {
+            ids.add(Integer.parseInt(matcher.group()));
+        }
+        return ids;
     }
 
     /**
@@ -435,6 +507,7 @@ public final class TermExpressionMetadata implements Serializable {
             @JsonProperty("regexPattern") List<String> regexPattern,
             @JsonProperty("requiresExclusionCheck") Boolean requiresExclusionCheck,
             @JsonProperty("resolvedPatterns") String resolvedPatterns,
+            @JsonProperty("exclusionRegex") List<String> exclusionRegex,
             @JsonProperty("hyperscanExpressionId") Integer hyperscanExpressionId,
             @JsonProperty("requiredExpressionIds") List<Integer> requiredExpressionIds,
             @JsonProperty("excludedExpressionIds") List<Integer> excludedExpressionIds,
