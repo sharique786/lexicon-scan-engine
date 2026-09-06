@@ -78,14 +78,14 @@ public final class HtmlStrippingService {
         public OffsetMap offsetMap() { return offsetMap; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof StripResult)) {
+            if (!(obj instanceof StripResult)) {
                 return false;
             }
-            StripResult other = (StripResult) o;
+            StripResult other = (StripResult) obj;
             return java.util.Objects.equals(strippedText, other.strippedText)
                     && java.util.Objects.equals(offsetMap, other.offsetMap);
         }

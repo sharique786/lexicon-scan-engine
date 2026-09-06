@@ -55,14 +55,14 @@ public class ModelConfigDtls implements Serializable {
     public void setMaxOutputToken(Integer maxOutputToken) { this.maxOutputToken = maxOutputToken; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof ModelConfigDtls)) {
+        if (!(obj instanceof ModelConfigDtls)) {
             return false;
         }
-        ModelConfigDtls other = (ModelConfigDtls) o;
+        ModelConfigDtls other = (ModelConfigDtls) obj;
         return Objects.equals(modelName, other.modelName)
                 && Objects.equals(temprature, other.temprature)
                 && Objects.equals(topP, other.topP)

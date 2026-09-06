@@ -48,14 +48,14 @@ public class MessageAttachment implements Serializable {
     public void setCleanText(String cleanText) { this.cleanText = cleanText; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MessageAttachment)) {
+        if (!(obj instanceof MessageAttachment)) {
             return false;
         }
-        MessageAttachment other = (MessageAttachment) o;
+        MessageAttachment other = (MessageAttachment) obj;
         return Objects.equals(attachmentId, other.attachmentId)
                 && Objects.equals(parentAttachmentId, other.parentAttachmentId)
                 && Objects.equals(fileName, other.fileName)

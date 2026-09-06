@@ -115,9 +115,9 @@ final class ResolvedPatternAreaEvaluator {
         if (leafIndex == occurrencesPerLeaf.size()) {
             int start = chosen[0].startChar();
             int end = chosen[0].endChar();
-            for (LeafOccurrence o : chosen) {
-                start = Math.min(start, o.startChar());
-                end = Math.max(end, o.endChar());
+            for (LeafOccurrence obj : chosen) {
+                start = Math.min(start, obj.startChar());
+                end = Math.max(end, obj.endChar());
             }
             collected.add(new MatchSpan(start, end, areaOriginalText.substring(start, end)));
             return;

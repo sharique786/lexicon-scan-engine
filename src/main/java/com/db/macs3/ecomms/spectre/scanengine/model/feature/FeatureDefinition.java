@@ -81,14 +81,14 @@ public class FeatureDefinition implements Serializable {
     public void setBody(Body body) { this.body = body; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof FeatureDefinition)) {
+        if (!(obj instanceof FeatureDefinition)) {
             return false;
         }
-        FeatureDefinition other = (FeatureDefinition) o;
+        FeatureDefinition other = (FeatureDefinition) obj;
         return isNoiseReduction == other.isNoiseReduction
                 && Objects.equals(featureId, other.featureId)
                 && Objects.equals(featureName, other.featureName)
@@ -163,14 +163,14 @@ public class FeatureDefinition implements Serializable {
         }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof Body)) {
+            if (!(obj instanceof Body)) {
                 return false;
             }
-            Body other = (Body) o;
+            Body other = (Body) obj;
             return Objects.equals(id, other.id)
                     && Objects.equals(lexiconName, other.lexiconName)
                     && Objects.equals(objectId, other.objectId)

@@ -62,14 +62,14 @@ public class GroupEvaluationResult implements Serializable {
     public void setHit(boolean hit) { isHit = hit; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof GroupEvaluationResult)) {
+        if (!(obj instanceof GroupEvaluationResult)) {
             return false;
         }
-        GroupEvaluationResult other = (GroupEvaluationResult) o;
+        GroupEvaluationResult other = (GroupEvaluationResult) obj;
         return isHit == other.isHit
                 && Objects.equals(group, other.group)
                 && Objects.equals(memberMatches, other.memberMatches)

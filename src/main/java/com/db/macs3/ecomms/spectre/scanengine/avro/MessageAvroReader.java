@@ -76,7 +76,10 @@ public final class MessageAvroReader {
     }
 
     private static Dataset<Row> readAndTag(SparkSession spark, String path, String datasetPartitionValue, boolean restricted) {
-        return spark.read().format(AvroConstants.FORMAT).load(path)
+        return spark.read()
+                .format(AvroConstants.FORMAT)
+                .option("pathGlobFilter", "*.avro")
+                .load(path)
                 .withColumn(AvroConstants.COLUMN_DATASET_PARTITION_VALUE, functions.lit(datasetPartitionValue))
                 .withColumn(AvroConstants.COLUMN_RESTRICTED, functions.lit(restricted));
     }

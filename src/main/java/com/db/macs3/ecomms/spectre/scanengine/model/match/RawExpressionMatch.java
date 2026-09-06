@@ -51,14 +51,14 @@ public class RawExpressionMatch implements Serializable {
     public void setMatches(List<AreaMatch> matches) { this.matches = matches; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof RawExpressionMatch)) {
+        if (!(obj instanceof RawExpressionMatch)) {
             return false;
         }
-        RawExpressionMatch other = (RawExpressionMatch) o;
+        RawExpressionMatch other = (RawExpressionMatch) obj;
         return expressionId == other.expressionId
                 && Objects.equals(matchedPatternText, other.matchedPatternText)
                 && Objects.equals(matches, other.matches);

@@ -149,14 +149,14 @@ public final class RuntimeArgs implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof RuntimeArgs)) {
+        if (!(obj instanceof RuntimeArgs)) {
             return false;
         }
-        RuntimeArgs other = (RuntimeArgs) o;
+        RuntimeArgs other = (RuntimeArgs) obj;
         return Objects.equals(datasetDetails, other.datasetDetails)
                 && Objects.equals(featurePartitionValue, other.featurePartitionValue)
                 && Objects.equals(pipelineExecId, other.pipelineExecId)
@@ -196,14 +196,14 @@ public final class RuntimeArgs implements Serializable {
         public String datasetPartitionValue() { return datasetPartitionValue; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof DatasetDetail)) {
+            if (!(obj instanceof DatasetDetail)) {
                 return false;
             }
-            DatasetDetail other = (DatasetDetail) o;
+            DatasetDetail other = (DatasetDetail) obj;
             return Objects.equals(datasetId, other.datasetId)
                     && Objects.equals(datasetPartitionValue, other.datasetPartitionValue);
         }

@@ -42,6 +42,7 @@ import java.util.List;
 public final class HyperscanPathResolver {
 
     private static final String HDB_SUBFOLDER = "lex-hyperscan";
+    private static final String OUTPUT_SUBFOLDER = "output";
 
     /**
      * Lists the immediate child "directory" names one level under a GCS
@@ -84,7 +85,8 @@ public final class HyperscanPathResolver {
                         + "matching '*" + suffix + "' — cannot resolve any .hdb file paths for policyEngineId="
                         + policyEngineId + ". Checked " + children.size() + " candidate folder(s)."));
 
-        return "gs://" + hdbGcsBucket + "/" + hdbGcsPrefix + "/" + resolvedFolder + "/" + HDB_SUBFOLDER + "/";
+        return "gs://" + hdbGcsBucket + "/" + hdbGcsPrefix + "/" + resolvedFolder
+                + "/" + OUTPUT_SUBFOLDER + "/" + HDB_SUBFOLDER + "/";
     }
 
     /**

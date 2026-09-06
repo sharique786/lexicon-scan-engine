@@ -60,14 +60,14 @@ public class MatchSpan implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MatchSpan)) {
+        if (!(obj instanceof MatchSpan)) {
             return false;
         }
-        MatchSpan other = (MatchSpan) o;
+        MatchSpan other = (MatchSpan) obj;
         return startCharIndex == other.startCharIndex
                 && endCharIndex == other.endCharIndex
                 && Objects.equals(matchedText, other.matchedText);

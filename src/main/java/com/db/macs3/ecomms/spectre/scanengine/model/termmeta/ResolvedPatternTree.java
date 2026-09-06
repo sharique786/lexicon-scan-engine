@@ -87,14 +87,14 @@ public sealed interface ResolvedPatternTree {
         public void setDistances(List<Integer> distances) { this.distances = distances; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof Chain)) {
+            if (!(obj instanceof Chain)) {
                 return false;
             }
-            Chain other = (Chain) o;
+            Chain other = (Chain) obj;
             return Objects.equals(leaves, other.leaves)
                     && Objects.equals(operators, other.operators)
                     && Objects.equals(distances, other.distances);
@@ -132,14 +132,14 @@ public sealed interface ResolvedPatternTree {
         public void setExcluded(ResolvedPatternTree excluded) { this.excluded = excluded; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof AndNot)) {
+            if (!(obj instanceof AndNot)) {
                 return false;
             }
-            AndNot other = (AndNot) o;
+            AndNot other = (AndNot) obj;
             return Objects.equals(required, other.required) && Objects.equals(excluded, other.excluded);
         }
 

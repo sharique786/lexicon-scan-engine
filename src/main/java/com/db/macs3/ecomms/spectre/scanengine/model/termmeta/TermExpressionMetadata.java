@@ -249,14 +249,14 @@ public class TermExpressionMetadata implements Serializable {
         }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof TermEntry)) {
+            if (!(obj instanceof TermEntry)) {
                 return false;
             }
-            TermEntry other = (TermEntry) o;
+            TermEntry other = (TermEntry) obj;
             return termNumber == other.termNumber
                     && requiresExclusionCheck == other.requiresExclusionCheck
                     && Objects.equals(termRegexPattern, other.termRegexPattern)

@@ -86,14 +86,14 @@ public class MessageEvaluationResult implements Serializable {
     public void setSuppressedLexiconMatchCount(int suppressedLexiconMatchCount) { this.suppressedLexiconMatchCount = suppressedLexiconMatchCount; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MessageEvaluationResult)) {
+        if (!(obj instanceof MessageEvaluationResult)) {
             return false;
         }
-        MessageEvaluationResult other = (MessageEvaluationResult) o;
+        MessageEvaluationResult other = (MessageEvaluationResult) obj;
         return shortCircuited == other.shortCircuited
                 && suppressedLexiconMatchCount == other.suppressedLexiconMatchCount
                 && Objects.equals(messageId, other.messageId)

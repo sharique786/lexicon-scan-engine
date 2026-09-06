@@ -128,14 +128,14 @@ public final class DataprocConfig implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof DataprocConfig)) {
+        if (!(obj instanceof DataprocConfig)) {
             return false;
         }
-        DataprocConfig other = (DataprocConfig) o;
+        DataprocConfig other = (DataprocConfig) obj;
         return Objects.equals(projectId, other.projectId) && Objects.equals(region, other.region)
                 && Objects.equals(clusterName, other.clusterName)
                 && Objects.equals(workflowTimeoutSeconds, other.workflowTimeoutSeconds)
@@ -166,8 +166,8 @@ public final class DataprocConfig implements Serializable {
         public EngineConfig engine() { return engine; }
 
         @Override
-        public boolean equals(Object o) {
-            return this == o || (o instanceof SpectreConfig other && Objects.equals(engine, other.engine));
+        public boolean equals(Object obj) {
+            return this == obj || (obj instanceof SpectreConfig other && Objects.equals(engine, other.engine));
         }
 
         @Override
@@ -198,8 +198,8 @@ public final class DataprocConfig implements Serializable {
         public BqTableConfig bigquery() { return bigquery; }
 
         @Override
-        public boolean equals(Object o) {
-            return this == o || (o instanceof EngineConfig other
+        public boolean equals(Object obj) {
+            return this == obj || (obj instanceof EngineConfig other
                     && Objects.equals(hyperscan, other.hyperscan) && Objects.equals(messages, other.messages)
                     && Objects.equals(bigquery, other.bigquery));
         }
@@ -235,8 +235,8 @@ public final class DataprocConfig implements Serializable {
         public String hdbGcsPrefix() { return hdbGcsPrefix; }
 
         @Override
-        public boolean equals(Object o) {
-            return this == o || (o instanceof HyperscanGcsConfig other
+        public boolean equals(Object obj) {
+            return this == obj || (obj instanceof HyperscanGcsConfig other
                     && Objects.equals(hdbGcsBucket, other.hdbGcsBucket) && Objects.equals(hdbGcsPrefix, other.hdbGcsPrefix));
         }
 
@@ -271,8 +271,8 @@ public final class DataprocConfig implements Serializable {
         public String msgGcsPrefix() { return msgGcsPrefix; }
 
         @Override
-        public boolean equals(Object o) {
-            return this == o || (o instanceof MessagesGcsConfig other
+        public boolean equals(Object obj) {
+            return this == obj || (obj instanceof MessagesGcsConfig other
                     && Objects.equals(msgGcsBucket, other.msgGcsBucket) && Objects.equals(msgGcsPrefix, other.msgGcsPrefix));
         }
 

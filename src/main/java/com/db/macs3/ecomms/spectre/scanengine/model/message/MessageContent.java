@@ -41,14 +41,14 @@ public class MessageContent implements Serializable {
     public void setCleanText(String cleanText) { this.cleanText = cleanText; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MessageContent)) {
+        if (!(obj instanceof MessageContent)) {
             return false;
         }
-        MessageContent other = (MessageContent) o;
+        MessageContent other = (MessageContent) obj;
         return Objects.equals(header, other.header)
                 && Objects.equals(rawText, other.rawText)
                 && Objects.equals(subject, other.subject)

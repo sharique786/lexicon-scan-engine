@@ -137,14 +137,14 @@ public class FeatureDecisionRow implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof FeatureDecisionRow)) {
+        if (!(obj instanceof FeatureDecisionRow)) {
             return false;
         }
-        FeatureDecisionRow other = (FeatureDecisionRow) o;
+        FeatureDecisionRow other = (FeatureDecisionRow) obj;
         return Objects.equals(processId, other.processId)
                 && Objects.equals(messageId, other.messageId)
                 && Objects.equals(datasetPartition, other.datasetPartition)

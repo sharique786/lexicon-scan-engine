@@ -179,14 +179,14 @@ public class PipelineStageAuditRow implements Serializable {
     public void setRerunProcessId(String rerunProcessId) { this.rerunProcessId = rerunProcessId; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof PipelineStageAuditRow)) {
+        if (!(obj instanceof PipelineStageAuditRow)) {
             return false;
         }
-        PipelineStageAuditRow other = (PipelineStageAuditRow) o;
+        PipelineStageAuditRow other = (PipelineStageAuditRow) obj;
         return Objects.equals(processId, other.processId) && Objects.equals(triggerType, other.triggerType)
                 && Objects.equals(evalTestId, other.evalTestId) && Objects.equals(pipelineExecId, other.pipelineExecId)
                 && Objects.equals(stageName, other.stageName)

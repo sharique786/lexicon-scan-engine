@@ -82,14 +82,14 @@ public class FeatureGroup implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof FeatureGroup)) {
+        if (!(obj instanceof FeatureGroup)) {
             return false;
         }
-        FeatureGroup other = (FeatureGroup) o;
+        FeatureGroup other = (FeatureGroup) obj;
         return isNoiseReduction == other.isNoiseReduction
                 && Objects.equals(featureId, other.featureId)
                 && Objects.equals(featureName, other.featureName)

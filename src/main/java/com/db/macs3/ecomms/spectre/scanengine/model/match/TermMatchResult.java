@@ -46,14 +46,14 @@ public class TermMatchResult implements Serializable {
     public void setMatches(List<AreaMatch> matches) { this.matches = matches; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof TermMatchResult)) {
+        if (!(obj instanceof TermMatchResult)) {
             return false;
         }
-        TermMatchResult other = (TermMatchResult) o;
+        TermMatchResult other = (TermMatchResult) obj;
         return Objects.equals(termId, other.termId)
                 && Objects.equals(termRegexPattern, other.termRegexPattern)
                 && Objects.equals(matches, other.matches);

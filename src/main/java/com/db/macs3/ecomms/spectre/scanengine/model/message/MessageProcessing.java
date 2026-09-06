@@ -31,14 +31,14 @@ public class MessageProcessing implements Serializable {
     public void setRunHour(String runHour) { this.runHour = runHour; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MessageProcessing)) {
+        if (!(obj instanceof MessageProcessing)) {
             return false;
         }
-        MessageProcessing other = (MessageProcessing) o;
+        MessageProcessing other = (MessageProcessing) obj;
         return Objects.equals(runDate, other.runDate) && Objects.equals(runHour, other.runHour);
     }
 

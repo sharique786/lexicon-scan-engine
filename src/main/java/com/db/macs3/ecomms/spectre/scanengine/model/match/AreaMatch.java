@@ -56,14 +56,14 @@ public class AreaMatch implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof AreaMatch)) {
+        if (!(obj instanceof AreaMatch)) {
             return false;
         }
-        AreaMatch other = (AreaMatch) o;
+        AreaMatch other = (AreaMatch) obj;
         return area == other.area
                 && Objects.equals(attachmentId, other.attachmentId)
                 && Objects.equals(span, other.span);

@@ -82,14 +82,14 @@ public class LexiconHitDetailRow implements Serializable {
     public void setCreatedTs(Instant createdTs) { this.createdTs = createdTs; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof LexiconHitDetailRow)) {
+        if (!(obj instanceof LexiconHitDetailRow)) {
             return false;
         }
-        LexiconHitDetailRow other = (LexiconHitDetailRow) o;
+        LexiconHitDetailRow other = (LexiconHitDetailRow) obj;
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(processId, other.processId)
                 && Objects.equals(pipelineExecId, other.pipelineExecId)
@@ -136,14 +136,14 @@ public class LexiconHitDetailRow implements Serializable {
         public void setTermDtls(List<TermDtl> termDtls) { this.termDtls = termDtls; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof EvaluatedLexicon)) {
+            if (!(obj instanceof EvaluatedLexicon)) {
                 return false;
             }
-            EvaluatedLexicon other = (EvaluatedLexicon) o;
+            EvaluatedLexicon other = (EvaluatedLexicon) obj;
             return Objects.equals(id, other.id) && Objects.equals(termDtls, other.termDtls);
         }
 
@@ -181,14 +181,14 @@ public class LexiconHitDetailRow implements Serializable {
             public void setMatchedText(String matchedText) { this.matchedText = matchedText; }
 
             @Override
-            public boolean equals(Object o) {
-                if (this == o) {
+            public boolean equals(Object obj) {
+                if (this == obj) {
                     return true;
                 }
-                if (!(o instanceof TermDtl)) {
+                if (!(obj instanceof TermDtl)) {
                     return false;
                 }
-                TermDtl other = (TermDtl) o;
+                TermDtl other = (TermDtl) obj;
                 return Objects.equals(termId, other.termId) && Objects.equals(matchedText, other.matchedText);
             }
 

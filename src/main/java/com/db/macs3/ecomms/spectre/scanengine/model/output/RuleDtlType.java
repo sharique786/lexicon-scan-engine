@@ -39,14 +39,14 @@ public class RuleDtlType implements Serializable {
     public void setRuleId(String ruleId) { this.ruleId = ruleId; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof RuleDtlType)) {
+        if (!(obj instanceof RuleDtlType)) {
             return false;
         }
-        RuleDtlType other = (RuleDtlType) o;
+        RuleDtlType other = (RuleDtlType) obj;
         return Objects.equals(ruleVersion, other.ruleVersion)
                 && Objects.equals(ruleName, other.ruleName)
                 && Objects.equals(ruleId, other.ruleId);

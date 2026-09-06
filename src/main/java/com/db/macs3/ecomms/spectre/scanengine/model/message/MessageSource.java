@@ -38,14 +38,14 @@ public class MessageSource implements Serializable {
     public void setSrcSysConvId(String srcSysConvId) { this.srcSysConvId = srcSysConvId; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MessageSource)) {
+        if (!(obj instanceof MessageSource)) {
             return false;
         }
-        MessageSource other = (MessageSource) o;
+        MessageSource other = (MessageSource) obj;
         return Objects.equals(channelName, other.channelName)
                 && Objects.equals(sourceName, other.sourceName)
                 && Objects.equals(srcSysName, other.srcSysName)

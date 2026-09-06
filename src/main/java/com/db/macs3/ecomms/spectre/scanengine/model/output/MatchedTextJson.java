@@ -49,14 +49,14 @@ public class MatchedTextJson implements Serializable {
     public void setHitDetailsHs(List<HitDetail> hitDetailsHs) { this.hitDetailsHs = hitDetailsHs; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MatchedTextJson)) {
+        if (!(obj instanceof MatchedTextJson)) {
             return false;
         }
-        return Objects.equals(hitDetailsHs, ((MatchedTextJson) o).hitDetailsHs);
+        return Objects.equals(hitDetailsHs, ((MatchedTextJson) obj).hitDetailsHs);
     }
 
     @Override
@@ -104,14 +104,14 @@ public class MatchedTextJson implements Serializable {
         public void setAttachmentText(List<AttachmentTextHit> attachmentText) { this.attachmentText = attachmentText; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof HitDetail)) {
+            if (!(obj instanceof HitDetail)) {
                 return false;
             }
-            HitDetail other = (HitDetail) o;
+            HitDetail other = (HitDetail) obj;
             return Objects.equals(messageId, other.messageId)
                     && Objects.equals(msgText, other.msgText)
                     && Objects.equals(subject, other.subject)
@@ -164,14 +164,14 @@ public class MatchedTextJson implements Serializable {
         public void setLength(int length) { this.length = length; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof TextHit)) {
+            if (!(obj instanceof TextHit)) {
                 return false;
             }
-            TextHit other = (TextHit) o;
+            TextHit other = (TextHit) obj;
             return start == other.start && length == other.length && Objects.equals(text, other.text);
         }
 
@@ -209,14 +209,14 @@ public class MatchedTextJson implements Serializable {
         public void setAttText(List<TextHit> attText) { this.attText = attText; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof AttachmentTextHit)) {
+            if (!(obj instanceof AttachmentTextHit)) {
                 return false;
             }
-            AttachmentTextHit other = (AttachmentTextHit) o;
+            AttachmentTextHit other = (AttachmentTextHit) obj;
             return Objects.equals(attachmentId, other.attachmentId) && Objects.equals(attText, other.attText);
         }
 

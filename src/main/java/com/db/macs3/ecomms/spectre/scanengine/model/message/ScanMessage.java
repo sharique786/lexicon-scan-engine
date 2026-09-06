@@ -87,14 +87,14 @@ public class ScanMessage implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof ScanMessage)) {
+        if (!(obj instanceof ScanMessage)) {
             return false;
         }
-        ScanMessage other = (ScanMessage) o;
+        ScanMessage other = (ScanMessage) obj;
         return restricted == other.restricted
                 && Objects.equals(messageId, other.messageId)
                 && Objects.equals(source, other.source)

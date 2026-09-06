@@ -89,14 +89,14 @@ public class FeatureHitSummaryRow implements Serializable {
     public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof FeatureHitSummaryRow)) {
+        if (!(obj instanceof FeatureHitSummaryRow)) {
             return false;
         }
-        FeatureHitSummaryRow other = (FeatureHitSummaryRow) o;
+        FeatureHitSummaryRow other = (FeatureHitSummaryRow) obj;
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(features, other.features)
                 && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)
@@ -168,14 +168,14 @@ public class FeatureHitSummaryRow implements Serializable {
         public void setSubFeatures(List<SubFeature> subFeatures) { this.subFeatures = subFeatures; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof Feature)) {
+            if (!(obj instanceof Feature)) {
                 return false;
             }
-            Feature other = (Feature) o;
+            Feature other = (Feature) obj;
             return id == other.id
                     && Objects.equals(isNoiseReduction, other.isNoiseReduction)
                     && Objects.equals(hitStatus, other.hitStatus)
@@ -227,14 +227,14 @@ public class FeatureHitSummaryRow implements Serializable {
         public void setHitStatus(Boolean hitStatus) { this.hitStatus = hitStatus; }
 
         @Override
-        public boolean equals(Object o) {
-            if (this == o) {
+        public boolean equals(Object obj) {
+            if (this == obj) {
                 return true;
             }
-            if (!(o instanceof SubFeature)) {
+            if (!(obj instanceof SubFeature)) {
                 return false;
             }
-            SubFeature other = (SubFeature) o;
+            SubFeature other = (SubFeature) obj;
             return Objects.equals(hitStatus, other.hitStatus) && Objects.equals(type, other.type)
                     && Objects.equals(name, other.name);
         }

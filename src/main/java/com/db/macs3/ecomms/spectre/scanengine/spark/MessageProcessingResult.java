@@ -80,14 +80,14 @@ public final class MessageProcessingResult implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof MessageProcessingResult)) {
+        if (!(obj instanceof MessageProcessingResult)) {
             return false;
         }
-        MessageProcessingResult other = (MessageProcessingResult) o;
+        MessageProcessingResult other = (MessageProcessingResult) obj;
         return restricted == other.restricted
                 && Objects.equals(messageId, other.messageId)
                 && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)

@@ -104,14 +104,14 @@ public final class BqTableConfig implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) {
+    public boolean equals(Object obj) {
+        if (this == obj) {
             return true;
         }
-        if (!(o instanceof BqTableConfig)) {
+        if (!(obj instanceof BqTableConfig)) {
             return false;
         }
-        BqTableConfig other = (BqTableConfig) o;
+        BqTableConfig other = (BqTableConfig) obj;
         return Objects.equals(bqProject, other.bqProject) && Objects.equals(bqDataset, other.bqDataset)
                 && Objects.equals(bqViewName, other.bqViewName)
                 && Objects.equals(bqFeatureMaster, other.bqFeatureMaster)
