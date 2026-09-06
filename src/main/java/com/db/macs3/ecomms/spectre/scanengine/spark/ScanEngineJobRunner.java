@@ -202,14 +202,9 @@ public class ScanEngineJobRunner {
                 hyperscanConfig.hdbGcsBucket(), hyperscanConfig.hdbGcsPrefix(), runtimeArgs.policyEngineId(),
                 gcsClient::listImmediateChildDirectories);
 
-        // 2. Read + union the view across every dataset_details entry.
-        List<Dataset<Row>> perDatasetView = new ArrayList<>();
-        for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
-            perDatasetView.add(FeatureDecisionViewReader.readFiltered(
-                    spark, tableConfig, datasetDetail.datasetPartitionValue(), runtimeArgs.featurePartitionValue(),
-                    runtimeArgs.processId()));
-        }
-        Dataset<Row> viewRows = FeatureDecisionViewReader.unionAll(spark, perDatasetView).cache();
+        // 2. Read the view in one query covering every dataset_details entry.
+        Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(
+                spark, tableConfig, runtimeArgs).cache();
 
         // 3. Resolve every DISTINCT feature referenced to its .zip bundle path, and broadcast the
         //    resulting small (feature -> path) map — see class Javadoc "Driver load". The
