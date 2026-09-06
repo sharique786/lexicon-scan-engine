@@ -28,6 +28,13 @@ import java.util.Objects;
  * group short-circuit means every later group (further NoiseReduction, the
  * Disclaimer group, all Lexicon groups) simply has no entry at all here,
  * since {@code DecisionTreeEvaluator} never evaluated them.
+ *
+ * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
+ * schema verbatim (rechecked against the live table): {@code evaluated_lexicons}
+ * precedes {@code dataset_partition_value}; {@link EvaluatedLexicon#getTotalTermsCount}/
+ * {@link EvaluatedLexicon#getRegexHitCount}/{@link EvaluatedLexicon.TermDtl#getRegexMatchHitCount}
+ * are NULLABLE (hence boxed {@link Long}, not primitive {@code long}) even
+ * though this engine always computes a real value for them today.
  */
 public class LexiconHitSummaryRow implements Serializable {
 
@@ -37,8 +44,8 @@ public class LexiconHitSummaryRow implements Serializable {
     private String messageId;
     private String processId;
     private String pipelineExecId;
-    private LocalDate datasetPartitionValue;
     private List<EvaluatedLexicon> evaluatedLexicons;
+    private LocalDate datasetPartitionValue;
     private String createdBy;
     private Instant createdTs;
 
@@ -46,20 +53,20 @@ public class LexiconHitSummaryRow implements Serializable {
      * @param messageId              the message this summary is for
      * @param processId                the process run this row belongs to
      * @param pipelineExecId           the pipeline execution this row belongs to
+     * @param evaluatedLexicons        one entry per evaluated feature group
      * @param datasetPartitionValue    {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
      *                                dataset this message came from — see {@code ScanMessage} class Javadoc
-     * @param evaluatedLexicons        one entry per evaluated feature group
      * @param createdBy                 the writing job's identity
      * @param createdTs                  write time, UTC
      */
     public LexiconHitSummaryRow(String messageId, String processId, String pipelineExecId,
-                                 LocalDate datasetPartitionValue, List<EvaluatedLexicon> evaluatedLexicons,
+                                 List<EvaluatedLexicon> evaluatedLexicons, LocalDate datasetPartitionValue,
                                  String createdBy, Instant createdTs) {
         this.messageId = messageId;
         this.processId = processId;
         this.pipelineExecId = pipelineExecId;
-        this.datasetPartitionValue = datasetPartitionValue;
         this.evaluatedLexicons = evaluatedLexicons;
+        this.datasetPartitionValue = datasetPartitionValue;
         this.createdBy = createdBy;
         this.createdTs = createdTs;
     }
@@ -70,10 +77,10 @@ public class LexiconHitSummaryRow implements Serializable {
     public void setProcessId(String processId) { this.processId = processId; }
     public String getPipelineExecId() { return pipelineExecId; }
     public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
-    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
-    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public List<EvaluatedLexicon> getEvaluatedLexicons() { return evaluatedLexicons; }
     public void setEvaluatedLexicons(List<EvaluatedLexicon> evaluatedLexicons) { this.evaluatedLexicons = evaluatedLexicons; }
+    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public Instant getCreatedTs() { return createdTs; }
@@ -91,23 +98,23 @@ public class LexiconHitSummaryRow implements Serializable {
         return Objects.equals(messageId, other.messageId)
                 && Objects.equals(processId, other.processId)
                 && Objects.equals(pipelineExecId, other.pipelineExecId)
-                && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)
                 && Objects.equals(evaluatedLexicons, other.evaluatedLexicons)
+                && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)
                 && Objects.equals(createdBy, other.createdBy)
                 && Objects.equals(createdTs, other.createdTs);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(messageId, processId, pipelineExecId, datasetPartitionValue, evaluatedLexicons,
+        return Objects.hash(messageId, processId, pipelineExecId, evaluatedLexicons, datasetPartitionValue,
                 createdBy, createdTs);
     }
 
     @Override
     public String toString() {
         return "LexiconHitSummaryRow[messageId=" + messageId + ", processId=" + processId
-                + ", pipelineExecId=" + pipelineExecId + ", datasetPartitionValue=" + datasetPartitionValue
-                + ", evaluatedLexicons=" + evaluatedLexicons
+                + ", pipelineExecId=" + pipelineExecId + ", evaluatedLexicons=" + evaluatedLexicons
+                + ", datasetPartitionValue=" + datasetPartitionValue
                 + ", createdBy=" + createdBy + ", createdTs=" + createdTs + "]";
     }
 
@@ -118,19 +125,21 @@ public class LexiconHitSummaryRow implements Serializable {
 
         private String id;
         private String name;
-        private long totalTermsCount;
-        private long regexHitCount;
+        private Long totalTermsCount;
+        private Long regexHitCount;
         private List<TermDtl> termDtls;
 
         /**
          * @param id                 the group's {@code feature_id}
          * @param name                the group's {@code feature_name}
-         * @param totalTermsCount    sum of every member's {@code feature_definition.body.totalTermsCount}
+         * @param totalTermsCount    sum of every member's {@code feature_definition.body.totalTermsCount} —
+         *                            NULLABLE per the delivered schema
          * @param regexHitCount       count of DISTINCT {@code term_id}s that matched across every
-         *                             member of this group (the length of {@link #getTermDtls})
+         *                             member of this group (the length of {@link #getTermDtls}) —
+         *                             NULLABLE per the delivered schema
          * @param termDtls             one entry per distinct term that matched, across every member
          */
-        public EvaluatedLexicon(String id, String name, long totalTermsCount, long regexHitCount,
+        public EvaluatedLexicon(String id, String name, Long totalTermsCount, Long regexHitCount,
                                  List<TermDtl> termDtls) {
             this.id = id;
             this.name = name;
@@ -143,10 +152,10 @@ public class LexiconHitSummaryRow implements Serializable {
         public void setId(String id) { this.id = id; }
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
-        public long getTotalTermsCount() { return totalTermsCount; }
-        public void setTotalTermsCount(long totalTermsCount) { this.totalTermsCount = totalTermsCount; }
-        public long getRegexHitCount() { return regexHitCount; }
-        public void setRegexHitCount(long regexHitCount) { this.regexHitCount = regexHitCount; }
+        public Long getTotalTermsCount() { return totalTermsCount; }
+        public void setTotalTermsCount(Long totalTermsCount) { this.totalTermsCount = totalTermsCount; }
+        public Long getRegexHitCount() { return regexHitCount; }
+        public void setRegexHitCount(Long regexHitCount) { this.regexHitCount = regexHitCount; }
         public List<TermDtl> getTermDtls() { return termDtls; }
         public void setTermDtls(List<TermDtl> termDtls) { this.termDtls = termDtls; }
 
@@ -159,8 +168,8 @@ public class LexiconHitSummaryRow implements Serializable {
                 return false;
             }
             EvaluatedLexicon other = (EvaluatedLexicon) o;
-            return totalTermsCount == other.totalTermsCount
-                    && regexHitCount == other.regexHitCount
+            return Objects.equals(totalTermsCount, other.totalTermsCount)
+                    && Objects.equals(regexHitCount, other.regexHitCount)
                     && Objects.equals(id, other.id)
                     && Objects.equals(name, other.name)
                     && Objects.equals(termDtls, other.termDtls);
@@ -185,7 +194,7 @@ public class LexiconHitSummaryRow implements Serializable {
 
         private String termId;
         private String termRegexPattern;
-        private long regexMatchHitCount;
+        private Long regexMatchHitCount;
 
         /**
          * @param termId                  {@code <feature>::<index>} — see {@code TermIdBuilder}
@@ -195,9 +204,10 @@ public class LexiconHitSummaryRow implements Serializable {
          *                                across every scanned area (subject, message body, each
          *                                attachment), not just distinct areas. For example, a
          *                                pattern matching 5 separate times across the message
-         *                                body records {@code 5} here.
+         *                                body records {@code 5} here. NULLABLE per the delivered
+         *                                schema.
          */
-        public TermDtl(String termId, String termRegexPattern, long regexMatchHitCount) {
+        public TermDtl(String termId, String termRegexPattern, Long regexMatchHitCount) {
             this.termId = termId;
             this.termRegexPattern = termRegexPattern;
             this.regexMatchHitCount = regexMatchHitCount;
@@ -207,8 +217,8 @@ public class LexiconHitSummaryRow implements Serializable {
         public void setTermId(String termId) { this.termId = termId; }
         public String getTermRegexPattern() { return termRegexPattern; }
         public void setTermRegexPattern(String termRegexPattern) { this.termRegexPattern = termRegexPattern; }
-        public long getRegexMatchHitCount() { return regexMatchHitCount; }
-        public void setRegexMatchHitCount(long regexMatchHitCount) { this.regexMatchHitCount = regexMatchHitCount; }
+        public Long getRegexMatchHitCount() { return regexMatchHitCount; }
+        public void setRegexMatchHitCount(Long regexMatchHitCount) { this.regexMatchHitCount = regexMatchHitCount; }
 
         @Override
         public boolean equals(Object o) {
@@ -219,7 +229,7 @@ public class LexiconHitSummaryRow implements Serializable {
                 return false;
             }
             TermDtl other = (TermDtl) o;
-            return regexMatchHitCount == other.regexMatchHitCount
+            return Objects.equals(regexMatchHitCount, other.regexMatchHitCount)
                     && Objects.equals(termId, other.termId)
                     && Objects.equals(termRegexPattern, other.termRegexPattern);
         }

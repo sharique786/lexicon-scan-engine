@@ -79,12 +79,12 @@ public final class OutputRowBuilder {
                     groupResult.getGroup().getFeatureId(),
                     groupResult.getGroup().getFeatureName(),
                     totalTermsCount,
-                    termDtls.size(),
+                    (long) termDtls.size(),
                     termDtls));
         }
 
         return new LexiconHitSummaryRow(
-                messageId, processId, pipelineExecId, datasetPartitionValue, evaluatedLexicons, createdBy, createdTs);
+                messageId, processId, pipelineExecId, evaluatedLexicons, datasetPartitionValue, createdBy, createdTs);
     }
 
     // ── lexicon-hit-restricted / lexicon-hit-unrestricted (shared shape) ────
@@ -122,7 +122,7 @@ public final class OutputRowBuilder {
         }
 
         return new LexiconHitDetailRow(
-                messageId, processId, pipelineExecId, datasetPartitionValue, evaluatedLexicons, createdBy, createdTs);
+                messageId, processId, pipelineExecId, evaluatedLexicons, datasetPartitionValue, createdBy, createdTs);
     }
 
     /**
@@ -201,9 +201,11 @@ public final class OutputRowBuilder {
                     subFeatures));
         }
 
+        // FeatureHitSummaryRow's constructor argument order matches the delivered schema's field
+        // order, which does NOT match this method's own parameter order — see that class's Javadoc.
         return new FeatureHitSummaryRow(
-                messageId, datasetPartitionValue, pipelineExecId, processId, featureTaggingType,
-                features, createdBy, createdTs);
+                messageId, features, datasetPartitionValue, featureTaggingType,
+                createdBy, createdTs, processId, pipelineExecId);
     }
 
     private static long parseFeatureId(String featureId) {

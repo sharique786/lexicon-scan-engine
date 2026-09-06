@@ -20,6 +20,15 @@ import java.util.Objects;
  * {@code OutputRowBuilder} — since this table exists specifically to carry
  * {@link EvaluatedLexicon.TermDtl#getMatchedText} detail for genuine hits, not
  * a broad per-group summary.
+ *
+ * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
+ * schema verbatim (rechecked against the live table, both restricted and
+ * unrestricted — identical shape): {@code evaluated_lexicons} precedes
+ * {@code dataset_partition_value}; {@link EvaluatedLexicon.TermDtl#getMatchedText}
+ * is NULLABLE (the BigQuery column's declared type is JSON — Spark carries it
+ * as a {@code StringType} holding valid JSON text, since Spark has no
+ * first-class JSON type the BigQuery connector maps this to; BigQuery itself
+ * coerces the JSON-text string into the destination JSON column on write).
  */
 public class LexiconHitDetailRow implements Serializable {
 
@@ -29,8 +38,8 @@ public class LexiconHitDetailRow implements Serializable {
     private String messageId;
     private String processId;
     private String pipelineExecId;
-    private LocalDate datasetPartitionValue;
     private List<EvaluatedLexicon> evaluatedLexicons;
+    private LocalDate datasetPartitionValue;
     private String createdBy;
     private Instant createdTs;
 
@@ -38,21 +47,21 @@ public class LexiconHitDetailRow implements Serializable {
      * @param messageId                  the message this row is for
      * @param processId                   the process run this row belongs to
      * @param pipelineExecId              the pipeline execution this row belongs to
-     * @param datasetPartitionValue      {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
-     *                                    dataset this message came from — see {@code ScanMessage} class Javadoc
      * @param evaluatedLexicons            one entry per Lexicon-category group that had at least
      *                                    one surviving (post-suppression) match
+     * @param datasetPartitionValue      {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                                    dataset this message came from — see {@code ScanMessage} class Javadoc
      * @param createdBy                    the writing job's identity
      * @param createdTs                     write time, UTC
      */
     public LexiconHitDetailRow(String messageId, String processId, String pipelineExecId,
-                                LocalDate datasetPartitionValue, List<EvaluatedLexicon> evaluatedLexicons,
+                                List<EvaluatedLexicon> evaluatedLexicons, LocalDate datasetPartitionValue,
                                 String createdBy, Instant createdTs) {
         this.messageId = messageId;
         this.processId = processId;
         this.pipelineExecId = pipelineExecId;
-        this.datasetPartitionValue = datasetPartitionValue;
         this.evaluatedLexicons = evaluatedLexicons;
+        this.datasetPartitionValue = datasetPartitionValue;
         this.createdBy = createdBy;
         this.createdTs = createdTs;
     }
@@ -63,10 +72,10 @@ public class LexiconHitDetailRow implements Serializable {
     public void setProcessId(String processId) { this.processId = processId; }
     public String getPipelineExecId() { return pipelineExecId; }
     public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
-    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
-    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public List<EvaluatedLexicon> getEvaluatedLexicons() { return evaluatedLexicons; }
     public void setEvaluatedLexicons(List<EvaluatedLexicon> evaluatedLexicons) { this.evaluatedLexicons = evaluatedLexicons; }
+    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public Instant getCreatedTs() { return createdTs; }

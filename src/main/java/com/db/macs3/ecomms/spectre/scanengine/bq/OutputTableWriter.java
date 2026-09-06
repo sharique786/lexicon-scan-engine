@@ -65,24 +65,27 @@ public final class OutputTableWriter {
     private static final StructType TERM_DTL_SUMMARY_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_REGEX_PATTERN, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.REGEX_MATCH_HIT_COUNT, DataTypes.LongType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.REGEX_MATCH_HIT_COUNT, DataTypes.LongType, true),
     });
     private static final StructType EVALUATED_LEXICON_SUMMARY_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.NAME, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.TOTAL_TERMS_COUNT, DataTypes.LongType, false),
-            DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.REGEX_HIT_COUNT, DataTypes.LongType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.TOTAL_TERMS_COUNT, DataTypes.LongType, true),
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.REGEX_HIT_COUNT, DataTypes.LongType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.TERM_DTLS,
                     DataTypes.createArrayType(TERM_DTL_SUMMARY_TYPE), false),
     });
+    // Field order and NOT NULL/NULLABLE mode rechecked against the live BigQuery table —
+    // evaluated_lexicons precedes dataset_partition_value; total_terms_count/regex_hit_count/
+    // created_by are NULLABLE (not REQUIRED as an earlier revision of this schema had them).
     public static final StructType LEXICON_HIT_SUMMARY_SCHEMA = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitSummary.MESSAGE_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.PROCESS_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.PIPELINE_EXEC_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.LexiconHitSummary.DATASET_PARTITION_VALUE, DataTypes.DateType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EVALUATED_LEXICONS,
                     DataTypes.createArrayType(EVALUATED_LEXICON_SUMMARY_TYPE), false),
-            DataTypes.createStructField(BqColumns.LexiconHitSummary.CREATED_BY, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.DATASET_PARTITION_VALUE, DataTypes.DateType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.CREATED_BY, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.CREATED_TS, DataTypes.TimestampType, false),
     });
 
@@ -94,8 +97,8 @@ public final class OutputTableWriter {
                         .collect(Collectors.toList()))
         )).collect(Collectors.toList());
         return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),
-                java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
-                lexicons, summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
+                lexicons, java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
+                summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
     }
 
     public static void writeLexiconHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
@@ -107,21 +110,26 @@ public final class OutputTableWriter {
 
     private static final StructType TERM_DTL_DETAIL_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitDetail.TermDtl.TERM_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.LexiconHitDetail.TermDtl.MATCHED_TEXT, DataTypes.StringType, false), // JSON column type: string content
+            // BigQuery's declared type is JSON; Spark has no first-class JSON type, so this carries
+            // the same value as a StringType holding valid JSON text — BigQuery coerces it into the
+            // destination JSON column on write. NULLABLE per the delivered schema (was REQUIRED).
+            DataTypes.createStructField(BqColumns.LexiconHitDetail.TermDtl.MATCHED_TEXT, DataTypes.StringType, true),
     });
     private static final StructType EVALUATED_LEXICON_DETAIL_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitDetail.EvaluatedLexicon.ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.EvaluatedLexicon.TERM_DTLS,
                     DataTypes.createArrayType(TERM_DTL_DETAIL_TYPE), false),
     });
+    // Field order rechecked against the live BigQuery table (both restricted and unrestricted —
+    // identical shape): evaluated_lexicons precedes dataset_partition_value.
     public static final StructType LEXICON_HIT_DETAIL_SCHEMA = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitDetail.MESSAGE_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.PROCESS_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.PIPELINE_EXEC_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.LexiconHitDetail.DATASET_PARTITION_VALUE, DataTypes.DateType, false),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS,
                     DataTypes.createArrayType(EVALUATED_LEXICON_DETAIL_TYPE), false),
-            DataTypes.createStructField(BqColumns.LexiconHitDetail.CREATED_BY, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitDetail.DATASET_PARTITION_VALUE, DataTypes.DateType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitDetail.CREATED_BY, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.CREATED_TS, DataTypes.TimestampType, false),
     });
 
@@ -131,8 +139,8 @@ public final class OutputTableWriter {
                         termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList()))
         )).collect(Collectors.toList());
         return RowFactory.create(detailRow.getMessageId(), detailRow.getProcessId(), detailRow.getPipelineExecId(),
-                java.sql.Date.valueOf(detailRow.getDatasetPartitionValue()),
-                lexicons, detailRow.getCreatedBy(), Timestamp.from(detailRow.getCreatedTs()));
+                lexicons, java.sql.Date.valueOf(detailRow.getDatasetPartitionValue()),
+                detailRow.getCreatedBy(), Timestamp.from(detailRow.getCreatedTs()));
     }
 
     public static void writeLexiconHitDetail(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows, boolean restricted) {
@@ -146,37 +154,44 @@ public final class OutputTableWriter {
     private static final StructType SUB_FEATURE_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.FeatureHitSummary.SubFeature.TYPE, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.FeatureHitSummary.SubFeature.NAME, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.SubFeature.HIT_STATUS, DataTypes.BooleanType, false),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.SubFeature.HIT_STATUS, DataTypes.BooleanType, true),
     });
     private static final StructType FEATURE_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.ID, DataTypes.LongType, false),
             DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.NAME, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.TYPE, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.IS_NOISE_REDUCTION, DataTypes.BooleanType, false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.HIT_STATUS, DataTypes.BooleanType, false),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.IS_NOISE_REDUCTION, DataTypes.BooleanType, true),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.HIT_STATUS, DataTypes.BooleanType, true),
             DataTypes.createStructField(BqColumns.FeatureHitSummary.Feature.SUB_FEATURES,
                     DataTypes.createArrayType(SUB_FEATURE_TYPE), false),
     });
+    // Field order and NOT NULL/NULLABLE mode rechecked against the live BigQuery table — notably
+    // different from the other two tables above: features precedes dataset_partition_value, and
+    // process_id/pipeline_exec_id come LAST, after created_by/created_ts. created_by/created_ts
+    // are NULLABLE here (unlike lexicon-hit-summary/-detail, where created_ts is REQUIRED). Do not
+    // "fix" this ordering to match the other tables — see FeatureHitSummaryRow class Javadoc.
     public static final StructType FEATURE_HIT_SUMMARY_SCHEMA = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.FeatureHitSummary.MESSAGE_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.DATASET_PARTITION_VALUE, DataTypes.DateType, false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.PIPELINE_EXEC_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.PROCESS_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.FEATURE_HIT_TYPE, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.FeatureHitSummary.FEATURES, DataTypes.createArrayType(FEATURE_TYPE), false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.CREATED_BY, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.FeatureHitSummary.CREATED_TS, DataTypes.TimestampType, false),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.DATASET_PARTITION_VALUE, DataTypes.DateType, false),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.FEATURE_HIT_TYPE, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.CREATED_BY, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.CREATED_TS, DataTypes.TimestampType, true),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.PROCESS_ID, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.FeatureHitSummary.PIPELINE_EXEC_ID, DataTypes.StringType, false),
     });
 
     public static Row toRow(FeatureHitSummaryRow summaryRow) {
         List<Row> features = summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
-                feature.getId(), feature.getName(), feature.getType(), feature.isNoiseReduction(), feature.isHitStatus(),
+                feature.getId(), feature.getName(), feature.getType(), feature.getIsNoiseReduction(), feature.getHitStatus(),
                 toNestedArrayValue(feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
-                        subFeature.getType(), subFeature.getName(), subFeature.isHitStatus())).collect(Collectors.toList()))
+                        subFeature.getType(), subFeature.getName(), subFeature.getHitStatus())).collect(Collectors.toList()))
         )).collect(Collectors.toList());
-        return RowFactory.create(summaryRow.getMessageId(), java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
-                summaryRow.getPipelineExecId(), summaryRow.getProcessId(), summaryRow.getFeatureHitType(), features,
-                summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
+        return RowFactory.create(summaryRow.getMessageId(), features,
+                java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()), summaryRow.getFeatureHitType(),
+                summaryRow.getCreatedBy(),
+                summaryRow.getCreatedTs() == null ? null : Timestamp.from(summaryRow.getCreatedTs()),
+                summaryRow.getProcessId(), summaryRow.getPipelineExecId());
     }
 
     public static void writeFeatureHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {

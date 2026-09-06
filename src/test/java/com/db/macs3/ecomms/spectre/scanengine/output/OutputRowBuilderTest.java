@@ -195,7 +195,7 @@ class OutputRowBuilderTest {
                     buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row.getFeatures()).hasSize(2);
             var disclaimerFeature = row.getFeatures().stream().filter(f -> f.getId() == 2L).findFirst().orElseThrow();
-            assertThat(disclaimerFeature.isHitStatus()).isTrue();
+            assertThat(disclaimerFeature.getHitStatus()).isTrue();
             assertThat(disclaimerFeature.getSubFeatures()).isEmpty(); // single-member group
         }
     }
