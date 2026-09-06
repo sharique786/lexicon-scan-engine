@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,11 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("DecisionTreeEvaluator")
 class DecisionTreeEvaluatorTest {
 
+    private static final LocalDate SOME_DATE = LocalDate.parse("2026-08-16");
+
     private static FeatureDecisionRow row(String featureId, String featureType, String featuresToApply,
                                            String isNoiseReduction, String operator) {
-        return new FeatureDecisionRow("proc-1", "msg-101", "part-1", "Lexicon-Tagging",
-                featureType, featureId, featureId + "-name", "lexicon", featuresToApply,
-                isNoiseReduction, operator, "{}", "2026-08-16", "101");
+        return new FeatureDecisionRow("proc-1", "msg-101", SOME_DATE, "Lexicon-Tagging",
+                featureType, Long.parseLong(featureId), featureId + "-name", "lexicon", featuresToApply,
+                isNoiseReduction, operator, "{}", SOME_DATE, "101");
     }
 
     private static TermMatchResult oneMatch(String termId, MatchArea area, int start, int end, String text) {

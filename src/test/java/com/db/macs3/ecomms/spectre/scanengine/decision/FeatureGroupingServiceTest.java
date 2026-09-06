@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,12 +15,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("FeatureGroupingService")
 class FeatureGroupingServiceTest {
 
+    private static final LocalDate SOME_DATE = LocalDate.parse("2026-08-16");
+
     private static FeatureDecisionRow row(String featureId, String featureType, String featureName,
                                            String subFeatureType, String featuresToApply,
                                            String isNoiseReduction, String operator) {
-        return new FeatureDecisionRow("proc-1", "msg-101", "part-1", "Lexicon-Tagging",
-                featureType, featureId, featureName, subFeatureType, featuresToApply,
-                isNoiseReduction, operator, "{}", "2026-08-16", "101");
+        return new FeatureDecisionRow("proc-1", "msg-101", SOME_DATE, "Lexicon-Tagging",
+                featureType, Long.parseLong(featureId), featureName, subFeatureType, featuresToApply,
+                isNoiseReduction, operator, "{}", SOME_DATE, "101");
     }
 
     @Nested

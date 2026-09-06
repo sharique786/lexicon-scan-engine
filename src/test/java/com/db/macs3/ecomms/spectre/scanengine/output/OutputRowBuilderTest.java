@@ -29,9 +29,9 @@ class OutputRowBuilderTest {
     private static final LocalDate DATASET_PARTITION_VALUE = LocalDate.parse("2026-08-16");
 
     private static FeatureDecisionRow row(String featureId, String featureType, String featuresToApply, String defJson) {
-        return new FeatureDecisionRow("proc-1", "msg-101", "part-1", "Lexicon-Tagging",
-                featureType, featureId, featureId + "-name", null, featuresToApply,
-                "N", null, defJson, "2026-08-16", "101");
+        return new FeatureDecisionRow("proc-1", "msg-101", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
+                featureType, Long.parseLong(featureId), featureId + "-name", null, featuresToApply,
+                "N", null, defJson, DATASET_PARTITION_VALUE, "101");
     }
 
     private static String defJson(String feature, int totalTerms, int minHits) {
@@ -163,9 +163,9 @@ class OutputRowBuilderTest {
         @DisplayName("returns null for a short-circuited message — nothing to write, not an empty row")
         void returnsNullWhenShortCircuited() {
             List<FeatureDecisionRow> nrRows = List.of(
-                    new FeatureDecisionRow("proc-1", "msg-102", "part-1", "Lexicon-Tagging",
-                            "NoiseReduction", "9", "9-name", null, "spam-1",
-                            "Y", null, defJson("spam-1", 3, 1), "2026-08-16", "101"),
+                    new FeatureDecisionRow("proc-1", "msg-102", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
+                            "NoiseReduction", 9L, "9-name", null, "spam-1",
+                            "Y", null, defJson("spam-1", 3, 1), DATASET_PARTITION_VALUE, "101"),
                     row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1))
             );
             List<FeatureGroup> nrGroups = FeatureGroupingService.groupAndOrder(nrRows);

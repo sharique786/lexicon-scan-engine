@@ -16,6 +16,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -110,10 +111,12 @@ class FeatureScanOrchestratorTest {
         return new HyperscanBundleLoader(Map.of(feature, zipPath), path -> new ByteArrayInputStream(zipBytes), 10);
     }
 
+    private static final LocalDate SOME_DATE = LocalDate.parse("2026-08-16");
+
     private static FeatureDecisionRow row(String featureId, String featuresToApply, String defJson) {
-        return new FeatureDecisionRow("proc-1", "msg-101", "part-1", "Lexicon-Tagging",
-                "lexicon", featureId, featureId + "-name", null, featuresToApply,
-                "N", null, defJson, "2026-08-16", "101");
+        return new FeatureDecisionRow("proc-1", "msg-101", SOME_DATE, "Lexicon-Tagging",
+                "lexicon", Long.parseLong(featureId), featureId + "-name", null, featuresToApply,
+                "N", null, defJson, SOME_DATE, "101");
     }
 
     private static String defJson(String feature, String... scopes) {

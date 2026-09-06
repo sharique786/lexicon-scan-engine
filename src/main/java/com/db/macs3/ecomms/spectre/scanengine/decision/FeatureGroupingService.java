@@ -50,10 +50,13 @@ public final class FeatureGroupingService {
         }
 
         // LinkedHashMap preserves first-seen featureId order, which is what determines
-        // relative ordering WITHIN a processing category below.
+        // relative ordering WITHIN a processing category below. The view's own feature_id
+        // column is LONG (see FeatureDecisionRow class Javadoc); converted to String here,
+        // the one place it's needed — FeatureGroup#getFeatureId() matches the delivered
+        // lexicon-hit-summary/-detail schema's evaluated_lexicons.id, which is STRING.
         Map<String, List<FeatureDecisionRow>> byFeatureId = new LinkedHashMap<>();
         for (FeatureDecisionRow row : rowsForOneMessage) {
-            byFeatureId.computeIfAbsent(row.getFeatureId(), k -> new ArrayList<>()).add(row);
+            byFeatureId.computeIfAbsent(String.valueOf(row.getFeatureId()), k -> new ArrayList<>()).add(row);
         }
 
         List<FeatureGroup> groups = new ArrayList<>(byFeatureId.size());

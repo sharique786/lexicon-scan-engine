@@ -4,6 +4,7 @@ import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.util.Objects;
 
 /**
@@ -16,6 +17,20 @@ import java.util.Objects;
  * <p>{@link Serializable} — this class travels inside Spark's shuffle/join
  * machinery (grouped by {@code messageId} against the AVRO message dataset),
  * so every field must itself be serialisable; all fields here are.
+ *
+ * <p><b>Data types rechecked against the live view (this revision):</b>
+ * {@link #getDatasetPartition}/{@link #getFeaturePartitionValue} are DATE
+ * columns, and {@link #getFeatureId} is a LONG (INTEGER) column — NOT plain
+ * STRING, despite the rest of this row being string-typed. {@link ViewRowConverter
+ * ViewRowConverter} previously read every column via {@code row.getString(...)},
+ * which throws {@code ClassCastException} for these three at real-query time
+ * (never caught by the unit tests, which construct this class directly rather
+ * than through a real Spark {@code Row}). {@link #getFeatureId} stays a
+ * {@code Long} here — {@code FeatureGroupingService} converts it to the
+ * {@code String} {@link com.db.macs3.ecomms.spectre.scanengine.model.decision.FeatureGroup#getFeatureId()}
+ * needs (that field's own delivered schema, confirmed separately, is STRING)
+ * at the one point that conversion is needed; every field in this class
+ * stays a faithful, unconverted mirror of the view's own column type.
  */
 public class FeatureDecisionRow implements Serializable {
 
@@ -24,17 +39,17 @@ public class FeatureDecisionRow implements Serializable {
 
     private String processId;
     private String messageId;
-    private String datasetPartition;
+    private LocalDate datasetPartition;
     private String featureTaggingType;
     private String featureType;
-    private String featureId;
+    private Long featureId;
     private String featureName;
     private String subFeatureType;
     private String featuresToApply;
     private String isNoiseReduction;
     private String operator;
     private String featureDefinitionJson;
-    private String featurePartitionValue;
+    private LocalDate featurePartitionValue;
     private String policyEngineId;
 
     /**
@@ -42,13 +57,14 @@ public class FeatureDecisionRow implements Serializable {
      * @param messageId               joins to the AVRO message dataset's {@code message_id}
      * @param datasetPartition        the view's own partition column (distinct from the
      *                                 Airflow-supplied {@code dataset_partition_value} used to
-     *                                 query the view — see {@code FeatureDecisionViewReader})
+     *                                 query the view — see {@code FeatureDecisionViewReader}); DATE
      * @param featureTaggingType      e.g. {@code "Lexicon-Tagging"} — carried through to
      *                                 {@code feature-hit-summary.feature_hit_type} verbatim
      * @param featureType              {@link com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns.FeatureType} —
      *                                 {@code lexicon}, {@code composite}, {@code disclaimer}, or {@code NoiseReduction}
      * @param featureId                groups rows belonging to the same (possibly composite) feature —
-     *                                 see {@code FeatureGroupingService}
+     *                                 see {@code FeatureGroupingService}; LONG (INTEGER) in the view,
+     *                                 not STRING
      * @param featureName              the feature's display name (parent name for a composite grouping)
      * @param subFeatureType           non-null (currently always {@code "lexicon"}) when this row is
      *                                 one sub-feature of a composite/NoiseReduction grouping
@@ -62,14 +78,14 @@ public class FeatureDecisionRow implements Serializable {
      *                                 sharing the same {@code featureId} (composite/NoiseReduction only)
      * @param featureDefinitionJson    raw JSON string — parsed on demand via
      *                                 {@link com.db.macs3.ecomms.spectre.scanengine.model.feature.FeatureDefinition#parse}
-     * @param featurePartitionValue    the feature-master partition this row was tagged under
+     * @param featurePartitionValue    the feature-master partition this row was tagged under; DATE
      * @param policyEngineId           the policy engine this feature belongs to
      */
-    public FeatureDecisionRow(String processId, String messageId, String datasetPartition,
-                               String featureTaggingType, String featureType, String featureId,
+    public FeatureDecisionRow(String processId, String messageId, LocalDate datasetPartition,
+                               String featureTaggingType, String featureType, Long featureId,
                                String featureName, String subFeatureType, String featuresToApply,
                                String isNoiseReduction, String operator, String featureDefinitionJson,
-                               String featurePartitionValue, String policyEngineId) {
+                               LocalDate featurePartitionValue, String policyEngineId) {
         this.processId = processId;
         this.messageId = messageId;
         this.datasetPartition = datasetPartition;
@@ -90,14 +106,14 @@ public class FeatureDecisionRow implements Serializable {
     public void setProcessId(String processId) { this.processId = processId; }
     public String getMessageId() { return messageId; }
     public void setMessageId(String messageId) { this.messageId = messageId; }
-    public String getDatasetPartition() { return datasetPartition; }
-    public void setDatasetPartition(String datasetPartition) { this.datasetPartition = datasetPartition; }
+    public LocalDate getDatasetPartition() { return datasetPartition; }
+    public void setDatasetPartition(LocalDate datasetPartition) { this.datasetPartition = datasetPartition; }
     public String getFeatureTaggingType() { return featureTaggingType; }
     public void setFeatureTaggingType(String featureTaggingType) { this.featureTaggingType = featureTaggingType; }
     public String getFeatureType() { return featureType; }
     public void setFeatureType(String featureType) { this.featureType = featureType; }
-    public String getFeatureId() { return featureId; }
-    public void setFeatureId(String featureId) { this.featureId = featureId; }
+    public Long getFeatureId() { return featureId; }
+    public void setFeatureId(Long featureId) { this.featureId = featureId; }
     public String getFeatureName() { return featureName; }
     public void setFeatureName(String featureName) { this.featureName = featureName; }
     public String getSubFeatureType() { return subFeatureType; }
@@ -110,8 +126,8 @@ public class FeatureDecisionRow implements Serializable {
     public void setOperator(String operator) { this.operator = operator; }
     public String getFeatureDefinitionJson() { return featureDefinitionJson; }
     public void setFeatureDefinitionJson(String featureDefinitionJson) { this.featureDefinitionJson = featureDefinitionJson; }
-    public String getFeaturePartitionValue() { return featurePartitionValue; }
-    public void setFeaturePartitionValue(String featurePartitionValue) { this.featurePartitionValue = featurePartitionValue; }
+    public LocalDate getFeaturePartitionValue() { return featurePartitionValue; }
+    public void setFeaturePartitionValue(LocalDate featurePartitionValue) { this.featurePartitionValue = featurePartitionValue; }
     public String getPolicyEngineId() { return policyEngineId; }
     public void setPolicyEngineId(String policyEngineId) { this.policyEngineId = policyEngineId; }
 
