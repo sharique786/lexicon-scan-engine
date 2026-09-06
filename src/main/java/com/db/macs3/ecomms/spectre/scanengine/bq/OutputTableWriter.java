@@ -39,6 +39,27 @@ public final class OutputTableWriter {
 
     private OutputTableWriter() {}
 
+    /**
+     * Converts a {@code List<Row>} bound for an ARRAY field NESTED inside a
+     * struct that is itself an array element (e.g. {@code evaluated_lexicons[].term_dtls[]},
+     * {@code features[].sub_features[]}) to a genuine {@code scala.collection.Seq}.
+     *
+     * <p>{@code spark.createDataFrame(JavaRDD<Row>, StructType)}'s generated
+     * row serializer only tolerates a plain {@code java.util.List} for an
+     * ARRAY field at the TOP level of the outer row — for an ARRAY field
+     * nested one level deeper (inside a struct that is itself inside an
+     * array), the codegen'd {@code MapObjects} expects
+     * {@code scala.collection.Seq} and throws {@code ClassCastException:
+     * class java.util.ArrayList cannot be cast to class scala.collection.Seq}
+     * if handed a plain {@code java.util.List} instead — confirmed via a real
+     * production stack trace. Every OUTER array field below (e.g.
+     * {@code evaluated_lexicons}, {@code features}) stays a plain
+     * {@code List<Row>}; only the INNER one needs this conversion.
+     */
+    private static scala.collection.Seq<Row> toNestedArrayValue(List<Row> rows) {
+        return scala.jdk.CollectionConverters.ListHasAsScala(rows).asScala().toSeq();
+    }
+
     // ── lexicon-hit-summary ──────────────────────────────────────────────────
 
     private static final StructType TERM_DTL_SUMMARY_TYPE = DataTypes.createStructType(new StructField[]{
@@ -68,9 +89,9 @@ public final class OutputTableWriter {
     public static Row toRow(LexiconHitSummaryRow summaryRow) {
         List<Row> lexicons = summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
                 lexicon.getId(), lexicon.getName(), lexicon.getTotalTermsCount(), lexicon.getRegexHitCount(),
-                lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
                         termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount()))
-                        .collect(Collectors.toList())
+                        .collect(Collectors.toList()))
         )).collect(Collectors.toList());
         return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),
                 java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
@@ -106,8 +127,8 @@ public final class OutputTableWriter {
 
     public static Row toRow(LexiconHitDetailRow detailRow) {
         List<Row> lexicons = detailRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
-                lexicon.getId(), lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
-                        termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList())
+                lexicon.getId(), toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                        termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList()))
         )).collect(Collectors.toList());
         return RowFactory.create(detailRow.getMessageId(), detailRow.getProcessId(), detailRow.getPipelineExecId(),
                 java.sql.Date.valueOf(detailRow.getDatasetPartitionValue()),
@@ -150,8 +171,8 @@ public final class OutputTableWriter {
     public static Row toRow(FeatureHitSummaryRow summaryRow) {
         List<Row> features = summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
                 feature.getId(), feature.getName(), feature.getType(), feature.isNoiseReduction(), feature.isHitStatus(),
-                feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
-                        subFeature.getType(), subFeature.getName(), subFeature.isHitStatus())).collect(Collectors.toList())
+                toNestedArrayValue(feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
+                        subFeature.getType(), subFeature.getName(), subFeature.isHitStatus())).collect(Collectors.toList()))
         )).collect(Collectors.toList());
         return RowFactory.create(summaryRow.getMessageId(), java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
                 summaryRow.getPipelineExecId(), summaryRow.getProcessId(), summaryRow.getFeatureHitType(), features,

@@ -152,10 +152,30 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     private MessageProcessingResult processOneRow(Row row, FeatureScanOrchestrator orchestrator) {
         boolean restricted = row.getAs(JoinedRowColumns.RESTRICTED);
         String datasetPartitionValue = row.getAs(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT);
-        LocalDate datasetPartitionValueDate = LocalDate.parse(datasetPartitionValue);
         ScanMessage message = MessageRowConverter.fromRow(row, datasetPartitionValue, restricted);
 
         try {
+            // dataset_partition_value is REQUIRED (NOT NULL, DATE) on all 4 output tables — a null/
+            // malformed value here must fail THIS message only (caught below), not the whole partition
+            // task the way an uncaught LocalDate.parse failure outside this try block would. Same for
+            // message_id: the BigQuery schema requires it, and a null here would otherwise slip all the
+            // way to the BQ write stage before failing, taking the ENTIRE batch of rows down with a
+            // cryptic Catalyst EXPRESSION_ENCODING_FAILED error instead of being isolated to one message.
+            if (message.getMessageId() == null || message.getMessageId().isBlank()) {
+                throw new IllegalStateException("AVRO record has a null/blank message_id — cannot process");
+            }
+            if (datasetPartitionValue == null || datasetPartitionValue.isBlank()) {
+                throw new IllegalStateException(
+                        "dataset_partition_value_for_output is null/blank for message_id=" + message.getMessageId());
+            }
+            LocalDate datasetPartitionValueDate;
+            try {
+                datasetPartitionValueDate = LocalDate.parse(datasetPartitionValue);
+            } catch (java.time.format.DateTimeParseException e) {
+                throw new IllegalStateException("dataset_partition_value_for_output='" + datasetPartitionValue
+                        + "' is not a valid ISO date for message_id=" + message.getMessageId(), e);
+            }
+
             List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
             List<FeatureDecisionRow> viewRows = new ArrayList<>(featureRows.size());
             for (Row featureRow : featureRows) {
@@ -172,6 +192,20 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             String pipelineExecId = row.getAs(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT);
             String featureTaggingType = viewRows.getFirst().getFeatureTaggingType();
             String createdBy = row.getAs(JoinedRowColumns.CREATED_BY_FOR_OUTPUT);
+            // process_id/pipeline_exec_id/created_by are REQUIRED on every output table — same
+            // fail-this-message-only reasoning as the message_id/dataset_partition_value checks above.
+            if (processId == null || processId.isBlank()) {
+                throw new IllegalStateException(
+                        "view row has a null/blank process_id for message_id=" + message.getMessageId());
+            }
+            if (pipelineExecId == null || pipelineExecId.isBlank()) {
+                throw new IllegalStateException(
+                        "pipeline_exec_id_for_output is null/blank for message_id=" + message.getMessageId());
+            }
+            if (createdBy == null || createdBy.isBlank()) {
+                throw new IllegalStateException(
+                        "created_by_for_output is null/blank for message_id=" + message.getMessageId());
+            }
             Instant now = Instant.now();
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
