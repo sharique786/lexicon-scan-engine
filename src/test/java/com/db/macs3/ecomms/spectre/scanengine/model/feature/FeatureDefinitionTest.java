@@ -18,28 +18,34 @@ class FeatureDefinitionTest {
 
     private static final String SAMPLE_JSON =
             "{"
-            + "  \"featureName\": \"lexicon_market_cond_1\","
-            + "  \"featureType\": \"Lexicon\","
-            + "  \"isNoiseReduction\": false,"
             + "  \"body\": {"
-            + "    \"feature\": \"lexicon_market_cond-1\","
+            + "    \"id\": 1,"
+            + "    \"lexiconName\": \"lexicon_market_cond-1\","
+            + "    \"objectId\": 2,"
             + "    \"totalTermsCount\": 10,"
             + "    \"minimumHits\": 3,"
             + "    \"scope\": [\"Message Body\", \"Attachment\"]"
-            + "  }"
+            + "  },"
+            + "  \"featureId\": \"1\","
+            + "  \"featureName\": \"lexicon_market_cond_1\","
+            + "  \"featureType\": \"Lexicon\","
+            + "  \"isNoiseReduction\": false"
             + "}";
 
     private static final String MIXED_CASE_SCOPE_JSON =
             "{"
-            + "  \"featureName\": \"lexicon_market_cond_2\","
-            + "  \"featureType\": \"Lexicon\","
-            + "  \"isNoiseReduction\": true,"
             + "  \"body\": {"
-            + "    \"feature\": \"lexicon_market_cond-2\","
+            + "    \"id\": 2,"
+            + "    \"lexiconName\": \"lexicon_market_cond-2\","
+            + "    \"objectId\": 3,"
             + "    \"totalTermsCount\": 20,"
             + "    \"minimumHits\": 5,"
             + "    \"scope\": [\"subject\", \"Message Body\"]"
-            + "  }"
+            + "  },"
+            + "  \"featureId\": \"2\","
+            + "  \"featureName\": \"lexicon_market_cond_2\","
+            + "  \"featureType\": \"Lexicon\","
+            + "  \"isNoiseReduction\": true"
             + "}";
 
     @Nested
@@ -50,31 +56,40 @@ class FeatureDefinitionTest {
         @DisplayName("parses root-level fields correctly")
         void parsesRootFields() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.featureName()).isEqualTo("lexicon_market_cond_1");
-            assertThat(fd.featureType()).isEqualTo("Lexicon");
+            assertThat(fd.getFeatureId()).isEqualTo("1");
+            assertThat(fd.getFeatureName()).isEqualTo("lexicon_market_cond_1");
+            assertThat(fd.getFeatureType()).isEqualTo("Lexicon");
             assertThat(fd.isNoiseReduction()).isFalse();
         }
 
         @Test
-        @DisplayName("body.feature is parsed verbatim, hyphen and all — never re-derived from featureName")
-        void parsesBodyFeatureVerbatim() {
+        @DisplayName("body.lexiconName is parsed verbatim, hyphen and all — never re-derived from featureName")
+        void parsesBodyLexiconNameVerbatim() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.body().feature()).isEqualTo("lexicon_market_cond-1");
+            assertThat(fd.getBody().getLexiconName()).isEqualTo("lexicon_market_cond-1");
+        }
+
+        @Test
+        @DisplayName("parses body.id and body.objectId")
+        void parsesBodyIds() {
+            FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
+            assertThat(fd.getBody().getId()).isEqualTo(1);
+            assertThat(fd.getBody().getObjectId()).isEqualTo(2);
         }
 
         @Test
         @DisplayName("parses totalTermsCount and minimumHits")
         void parsesCounts() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.body().totalTermsCount()).isEqualTo(10);
-            assertThat(fd.body().minimumHits()).isEqualTo(3);
+            assertThat(fd.getBody().getTotalTermsCount()).isEqualTo(10);
+            assertThat(fd.getBody().getMinimumHits()).isEqualTo(3);
         }
 
         @Test
         @DisplayName("parses the scope array")
         void parsesScope() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.body().scope()).containsExactly("Message Body", "Attachment");
+            assertThat(fd.getBody().getScope()).containsExactly("Message Body", "Attachment");
         }
     }
 
@@ -86,30 +101,30 @@ class FeatureDefinitionTest {
         @DisplayName("hasScope matches exact case")
         void matchesExactCase() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.body().hasScope("Message Body")).isTrue();
+            assertThat(fd.getBody().hasScope("Message Body")).isTrue();
         }
 
         @Test
         @DisplayName("hasScope matches different case (lowercase 'attachment' vs stored 'Attachment')")
         void matchesDifferentCase() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.body().hasScope("attachment")).isTrue();
+            assertThat(fd.getBody().hasScope("attachment")).isTrue();
         }
 
         @Test
         @DisplayName("hasScope returns false for a scope value not present")
         void returnsFalseForAbsentScope() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
-            assertThat(fd.body().hasScope("subject")).isFalse();
+            assertThat(fd.getBody().hasScope("subject")).isFalse();
         }
 
         @Test
         @DisplayName("handles the sample data's own mixed casing: lowercase 'subject', title-case 'Message Body'")
         void handlesSampleDataMixedCasing() {
             FeatureDefinition fd = FeatureDefinition.parse(MIXED_CASE_SCOPE_JSON);
-            assertThat(fd.body().hasScope("subject")).isTrue();
-            assertThat(fd.body().hasScope("SUBJECT")).isTrue();
-            assertThat(fd.body().hasScope("Message Body")).isTrue();
+            assertThat(fd.getBody().hasScope("subject")).isTrue();
+            assertThat(fd.getBody().hasScope("SUBJECT")).isTrue();
+            assertThat(fd.getBody().hasScope("Message Body")).isTrue();
         }
     }
 
@@ -118,11 +133,11 @@ class FeatureDefinitionTest {
     class ErrorHandling {
 
         @Test
-        @DisplayName("throws on missing body.feature — every scanned feature must resolve to an .hdb filename")
-        void throwsOnMissingBodyFeature() {
+        @DisplayName("throws on missing body.lexiconName — every scanned feature must resolve to an .hdb filename")
+        void throwsOnMissingBodyLexiconName() {
             assertThatThrownBy(() -> FeatureDefinition.parse("{\"featureName\":\"x\",\"body\":{}}"))
                     .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class)
-                    .hasMessageContaining("body.feature");
+                    .hasMessageContaining("body.lexiconName");
         }
 
         @Test

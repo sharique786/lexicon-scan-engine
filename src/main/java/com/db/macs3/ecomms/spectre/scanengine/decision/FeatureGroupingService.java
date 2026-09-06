@@ -53,7 +53,7 @@ public final class FeatureGroupingService {
         // relative ordering WITHIN a processing category below.
         Map<String, List<FeatureDecisionRow>> byFeatureId = new LinkedHashMap<>();
         for (FeatureDecisionRow row : rowsForOneMessage) {
-            byFeatureId.computeIfAbsent(row.featureId(), k -> new ArrayList<>()).add(row);
+            byFeatureId.computeIfAbsent(row.getFeatureId(), k -> new ArrayList<>()).add(row);
         }
 
         List<FeatureGroup> groups = new ArrayList<>(byFeatureId.size());
@@ -69,7 +69,7 @@ public final class FeatureGroupingService {
         FeatureDecisionRow first = members.get(0);
         validateConsistency(featureId, members, first);
 
-        String operator = members.size() > 1 ? first.operator() : null;
+        String operator = members.size() > 1 ? first.getOperator() : null;
         if (members.size() > 1 && (operator == null || operator.isBlank())) {
             throw new IllegalArgumentException(
                     "featureId=" + featureId + " has " + members.size()
@@ -79,8 +79,8 @@ public final class FeatureGroupingService {
 
         return new FeatureGroup(
                 featureId,
-                first.featureName(),
-                first.featureType(),
+                first.getFeatureName(),
+                first.getFeatureType(),
                 first.isNoiseReductionFlag(),
                 operator,
                 members);
@@ -88,20 +88,20 @@ public final class FeatureGroupingService {
 
     private static void validateConsistency(String featureId, List<FeatureDecisionRow> members, FeatureDecisionRow first) {
         for (FeatureDecisionRow row : members) {
-            if (!sameValue(row.featureType(), first.featureType())) {
+            if (!sameValue(row.getFeatureType(), first.getFeatureType())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent featureType across its member rows: '"
-                        + first.featureType() + "' vs '" + row.featureType() + "'");
+                        + first.getFeatureType() + "' vs '" + row.getFeatureType() + "'");
             }
-            if (!sameValue(row.isNoiseReduction(), first.isNoiseReduction())) {
+            if (!sameValue(row.getIsNoiseReduction(), first.getIsNoiseReduction())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent is_noise_reduction across its member rows: '"
-                        + first.isNoiseReduction() + "' vs '" + row.isNoiseReduction() + "'");
+                        + first.getIsNoiseReduction() + "' vs '" + row.getIsNoiseReduction() + "'");
             }
-            if (members.size() > 1 && !sameValue(row.operator(), first.operator())) {
+            if (members.size() > 1 && !sameValue(row.getOperator(), first.getOperator())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent operator across its member rows: '"
-                        + first.operator() + "' vs '" + row.operator() + "'");
+                        + first.getOperator() + "' vs '" + row.getOperator() + "'");
             }
         }
     }

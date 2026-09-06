@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.message;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -9,14 +10,17 @@ import java.util.Objects;
  * <p>Attachment content is exposed only as {@code clean_text} in the source
  * schema (no {@code raw_text} alternative) — it is treated as already free
  * of HTML by the upstream Msg Transformer job, so no HTML-stripping/offset-
- * mapping is applied when scanning it (contrast {@link MessageContent#rawText}).
+ * mapping is applied when scanning it (contrast {@link MessageContent#getRawText}).
  */
-public final class MessageAttachment implements Serializable {
+public class MessageAttachment implements Serializable {
 
-    private final String attachmentId;
-    private final String parentAttachmentId;
-    private final String fileName;
-    private final String cleanText;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String attachmentId;
+    private String parentAttachmentId;
+    private String fileName;
+    private String cleanText;
 
     /**
      * @param attachmentId          this attachment's identifier
@@ -34,10 +38,14 @@ public final class MessageAttachment implements Serializable {
         this.cleanText = cleanText;
     }
 
-    public String attachmentId() { return attachmentId; }
-    public String parentAttachmentId() { return parentAttachmentId; }
-    public String fileName() { return fileName; }
-    public String cleanText() { return cleanText; }
+    public String getAttachmentId() { return attachmentId; }
+    public void setAttachmentId(String attachmentId) { this.attachmentId = attachmentId; }
+    public String getParentAttachmentId() { return parentAttachmentId; }
+    public void setParentAttachmentId(String parentAttachmentId) { this.parentAttachmentId = parentAttachmentId; }
+    public String getFileName() { return fileName; }
+    public void setFileName(String fileName) { this.fileName = fileName; }
+    public String getCleanText() { return cleanText; }
+    public void setCleanText(String cleanText) { this.cleanText = cleanText; }
 
     @Override
     public boolean equals(Object o) {

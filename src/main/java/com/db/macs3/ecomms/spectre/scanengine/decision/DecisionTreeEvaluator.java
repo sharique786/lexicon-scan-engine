@@ -93,7 +93,7 @@ public final class DecisionTreeEvaluator {
     private static List<AreaMatch> flattenSpans(List<TermMatchResult> termMatches) {
         List<AreaMatch> spans = new ArrayList<>();
         for (TermMatchResult termMatch : termMatches) {
-            spans.addAll(termMatch.matches());
+            spans.addAll(termMatch.getMatches());
         }
         return spans;
     }
@@ -107,13 +107,13 @@ public final class DecisionTreeEvaluator {
         Map<String, List<TermMatchResult>> finalByFeatureId = new LinkedHashMap<>();
         int totalSuppressed = 0;
         for (GroupEvaluationResult groupResult : evaluatedGroups) {
-            if (groupResult.group().isNoiseReduction() || groupResult.group().isDisclaimer()) {
+            if (groupResult.getGroup().isNoiseReduction() || groupResult.getGroup().isDisclaimer()) {
                 continue;
             }
             Suppression suppression = suppressDisclaimerOverlaps(flatten(groupResult), disclaimerSpans);
             totalSuppressed += suppression.suppressedCount();
             if (!suppression.kept().isEmpty()) {
-                finalByFeatureId.put(groupResult.group().featureId(), suppression.kept());
+                finalByFeatureId.put(groupResult.getGroup().getFeatureId(), suppression.kept());
             }
         }
         return new SuppressionOutcome(finalByFeatureId, totalSuppressed);
@@ -125,7 +125,7 @@ public final class DecisionTreeEvaluator {
         Map<FeatureDecisionRow, List<TermMatchResult>> memberMatches = new LinkedHashMap<>();
         Map<FeatureDecisionRow, Boolean> memberHit = new LinkedHashMap<>();
 
-        for (FeatureDecisionRow member : group.members()) {
+        for (FeatureDecisionRow member : group.getMembers()) {
             List<TermMatchResult> matches = scanner.scan(member);
             matches = matches == null ? List.of() : matches;
             memberMatches.put(member, matches);
@@ -149,11 +149,11 @@ public final class DecisionTreeEvaluator {
         if (!group.isMultiMember()) {
             return memberHit.values().iterator().next();
         }
-        boolean isOr = BqColumns.OPERATOR_OR.equalsIgnoreCase(group.operator());
-        boolean isAnd = BqColumns.OPERATOR_AND.equalsIgnoreCase(group.operator());
+        boolean isOr = BqColumns.OPERATOR_OR.equalsIgnoreCase(group.getOperator());
+        boolean isAnd = BqColumns.OPERATOR_AND.equalsIgnoreCase(group.getOperator());
         if (!isOr && !isAnd) {
             throw new IllegalStateException(
-                    "featureId=" + group.featureId() + " has an unrecognised operator: '" + group.operator()
+                    "featureId=" + group.getFeatureId() + " has an unrecognised operator: '" + group.getOperator()
                     + "' — expected OR or AND.");
         }
         if (isOr) {
@@ -164,7 +164,7 @@ public final class DecisionTreeEvaluator {
 
     private static List<TermMatchResult> flatten(GroupEvaluationResult result) {
         List<TermMatchResult> all = new ArrayList<>();
-        for (List<TermMatchResult> perMember : result.memberMatches().values()) {
+        for (List<TermMatchResult> perMember : result.getMemberMatches().values()) {
             all.addAll(perMember);
         }
         return all;
@@ -204,10 +204,10 @@ public final class DecisionTreeEvaluator {
 
         for (TermMatchResult termMatch : rawGroupMatches) {
             List<AreaMatch> survivingMatches = new ArrayList<>();
-            for (AreaMatch lexiconMatch : termMatch.matches()) {
+            for (AreaMatch lexiconMatch : termMatch.getMatches()) {
                 boolean suppressed = disclaimerSpans.stream().anyMatch(disclaimerMatch ->
                         sameAreaScope(lexiconMatch, disclaimerMatch)
-                                && lexiconMatch.span().isFullyContainedIn(disclaimerMatch.span()));
+                                && lexiconMatch.getSpan().isFullyContainedIn(disclaimerMatch.getSpan()));
                 if (suppressed) {
                     suppressedCount++;
                 } else {
@@ -215,7 +215,7 @@ public final class DecisionTreeEvaluator {
                 }
             }
             if (!survivingMatches.isEmpty()) {
-                kept.add(new TermMatchResult(termMatch.termId(), termMatch.termRegexPattern(), survivingMatches));
+                kept.add(new TermMatchResult(termMatch.getTermId(), termMatch.getTermRegexPattern(), survivingMatches));
             }
         }
 
@@ -224,11 +224,11 @@ public final class DecisionTreeEvaluator {
 
     /** True iff two matches are in the same coordinate space — same area, and same attachment if the area is ATTACHMENT. */
     private static boolean sameAreaScope(AreaMatch first, AreaMatch second) {
-        if (first.area() != second.area()) {
+        if (first.getArea() != second.getArea()) {
             return false;
         }
-        if (first.area() == MatchArea.ATTACHMENT) {
-            return first.attachmentId().equals(second.attachmentId());
+        if (first.getArea() == MatchArea.ATTACHMENT) {
+            return first.getAttachmentId().equals(second.getAttachmentId());
         }
         return true;
     }

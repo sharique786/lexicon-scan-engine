@@ -52,14 +52,14 @@ public final class OutputRowBuilder {
                                                          String createdBy, Instant createdTs) {
         List<LexiconHitSummaryRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
 
-        for (GroupEvaluationResult groupResult : evaluation.evaluatedGroups()) {
+        for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
             long totalTermsCount = 0;
             List<LexiconHitSummaryRow.TermDtl> termDtls = new ArrayList<>();
 
-            for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.memberMatches().entrySet()) {
+            for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.getMemberMatches().entrySet()) {
                 FeatureDecisionRow member = entry.getKey();
-                FeatureDefinition featureDefinition = FeatureDefinition.parse(member.featureDefinitionJson());
-                Integer memberTotalTerms = featureDefinition.body().totalTermsCount();
+                FeatureDefinition featureDefinition = FeatureDefinition.parse(member.getFeatureDefinitionJson());
+                Integer memberTotalTerms = featureDefinition.getBody().getTotalTermsCount();
                 totalTermsCount += memberTotalTerms == null ? 0 : memberTotalTerms;
 
                 for (TermMatchResult termMatch : entry.getValue()) {
@@ -67,15 +67,15 @@ public final class OutputRowBuilder {
                     // matched, across every scanned area (subject/body/each attachment) — the size
                     // of its AreaMatch list, NOT the distinct-term count (that is regexHitCount,
                     // below, at the EvaluatedLexicon level).
-                    long regexMatchHitCount = termMatch.matches().size();
+                    long regexMatchHitCount = termMatch.getMatches().size();
                     termDtls.add(new LexiconHitSummaryRow.TermDtl(
-                            termMatch.termId(), termMatch.termRegexPattern(), regexMatchHitCount));
+                            termMatch.getTermId(), termMatch.getTermRegexPattern(), regexMatchHitCount));
                 }
             }
 
             evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(
-                    groupResult.group().featureId(),
-                    groupResult.group().featureName(),
+                    groupResult.getGroup().getFeatureId(),
+                    groupResult.getGroup().getFeatureName(),
                     totalTermsCount,
                     termDtls.size(),
                     termDtls));
@@ -104,16 +104,16 @@ public final class OutputRowBuilder {
                                                        String datasetPartitionValue,
                                                        MessageEvaluationResult evaluation,
                                                        String createdBy, Instant createdTs) {
-        if (evaluation.finalLexiconMatchesByFeatureId().isEmpty()) {
+        if (evaluation.getFinalLexiconMatchesByFeatureId().isEmpty()) {
             return null;
         }
 
         List<LexiconHitDetailRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
-        for (Map.Entry<String, List<TermMatchResult>> entry : evaluation.finalLexiconMatchesByFeatureId().entrySet()) {
+        for (Map.Entry<String, List<TermMatchResult>> entry : evaluation.getFinalLexiconMatchesByFeatureId().entrySet()) {
             List<LexiconHitDetailRow.EvaluatedLexicon.TermDtl> termDtls = new ArrayList<>();
             for (TermMatchResult termMatch : entry.getValue()) {
-                String matchedTextJson = buildMatchedTextJson(messageId, termMatch.matches());
-                termDtls.add(new LexiconHitDetailRow.EvaluatedLexicon.TermDtl(termMatch.termId(), matchedTextJson));
+                String matchedTextJson = buildMatchedTextJson(messageId, termMatch.getMatches());
+                termDtls.add(new LexiconHitDetailRow.EvaluatedLexicon.TermDtl(termMatch.getTermId(), matchedTextJson));
             }
             evaluatedLexicons.add(new LexiconHitDetailRow.EvaluatedLexicon(entry.getKey(), termDtls));
         }
@@ -133,11 +133,11 @@ public final class OutputRowBuilder {
 
         for (AreaMatch areaMatch : matches) {
             MatchedTextJson.TextHit hit = new MatchedTextJson.TextHit(
-                    areaMatch.span().matchedText(), areaMatch.span().startCharIndex(), areaMatch.span().length());
-            switch (areaMatch.area()) {
+                    areaMatch.getSpan().getMatchedText(), areaMatch.getSpan().getStartCharIndex(), areaMatch.getSpan().length());
+            switch (areaMatch.getArea()) {
                 case MESSAGE_BODY -> msgText.add(hit);
                 case SUBJECT -> subject.add(hit);
-                case ATTACHMENT -> attachmentHits.computeIfAbsent(areaMatch.attachmentId(), unusedKey -> new ArrayList<>()).add(hit);
+                case ATTACHMENT -> attachmentHits.computeIfAbsent(areaMatch.getAttachmentId(), unusedKey -> new ArrayList<>()).add(hit);
             }
         }
 
@@ -179,21 +179,21 @@ public final class OutputRowBuilder {
                                                                    String createdBy, Instant createdTs) {
         List<FeatureHitSummaryRow.Feature> features = new ArrayList<>();
 
-        for (GroupEvaluationResult groupResult : evaluation.evaluatedGroups()) {
+        for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
             List<FeatureHitSummaryRow.SubFeature> subFeatures = new ArrayList<>();
-            if (groupResult.group().isMultiMember()) {
-                for (Map.Entry<FeatureDecisionRow, Boolean> entry : groupResult.memberHit().entrySet()) {
+            if (groupResult.getGroup().isMultiMember()) {
+                for (Map.Entry<FeatureDecisionRow, Boolean> entry : groupResult.getMemberHit().entrySet()) {
                     FeatureDecisionRow member = entry.getKey();
                     subFeatures.add(new FeatureHitSummaryRow.SubFeature(
-                            member.subFeatureType(), member.featuresToApply(), entry.getValue()));
+                            member.getSubFeatureType(), member.getFeaturesToApply(), entry.getValue()));
                 }
             }
 
             features.add(new FeatureHitSummaryRow.Feature(
-                    parseFeatureId(groupResult.group().featureId()),
-                    groupResult.group().featureName(),
-                    groupResult.group().featureType(),
-                    groupResult.group().isNoiseReduction(),
+                    parseFeatureId(groupResult.getGroup().getFeatureId()),
+                    groupResult.getGroup().getFeatureName(),
+                    groupResult.getGroup().getFeatureType(),
+                    groupResult.getGroup().isNoiseReduction(),
                     groupResult.isHit(),
                     subFeatures));
         }

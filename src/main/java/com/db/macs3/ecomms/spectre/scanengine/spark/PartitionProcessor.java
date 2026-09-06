@@ -139,8 +139,8 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
         for (Row featureRow : featureRows) {
             try {
-                String featureDefinitionJson = ViewRowConverter.fromRow(featureRow).featureDefinitionJson();
-                distinctFeaturesOut.add(FeatureDefinition.parse(featureDefinitionJson).body().feature());
+                String featureDefinitionJson = ViewRowConverter.fromRow(featureRow).getFeatureDefinitionJson();
+                distinctFeaturesOut.add(FeatureDefinition.parse(featureDefinitionJson).getBody().getLexiconName());
             } catch (RuntimeException e) {
                 log.debug("Could not parse a feature definition during prefetch lookahead — "
                         + "will be handled normally during real processing: {}", e.getMessage());
@@ -162,33 +162,33 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
 
             List<FeatureGroup> orderedGroups = FeatureGroupingService.groupAndOrder(viewRows);
             DecisionTreeEvaluator.FeatureRowScanner scanner = orchestrator.scannerFor(message);
-            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate(message.messageId(), orderedGroups, scanner);
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate(message.getMessageId(), orderedGroups, scanner);
 
-            String processId = viewRows.getFirst().processId();
+            String processId = viewRows.getFirst().getProcessId();
             // pipelineExecId/createdBy are not view columns — carried through as extra columns
             // attached during the join stage (see ScanEngineJobRunner), not read from the view itself.
             String pipelineExecId = row.getAs(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT);
-            String featureTaggingType = viewRows.getFirst().featureTaggingType();
+            String featureTaggingType = viewRows.getFirst().getFeatureTaggingType();
             String createdBy = row.getAs(JoinedRowColumns.CREATED_BY_FOR_OUTPUT);
             Instant now = Instant.now();
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
-                    message.messageId(), processId, pipelineExecId, evaluation, createdBy, now);
+                    message.getMessageId(), processId, pipelineExecId, evaluation, createdBy, now);
             LexiconHitDetailRow detailRow = OutputRowBuilder.buildDetailRow(
-                    message.messageId(), processId, pipelineExecId, datasetPartitionValue, evaluation, createdBy, now);
+                    message.getMessageId(), processId, pipelineExecId, datasetPartitionValue, evaluation, createdBy, now);
             FeatureHitSummaryRow featureHitSummaryRow = OutputRowBuilder.buildFeatureHitSummaryRow(
-                    message.messageId(), datasetPartitionValue, pipelineExecId, processId, featureTaggingType,
+                    message.getMessageId(), datasetPartitionValue, pipelineExecId, processId, featureTaggingType,
                     evaluation, createdBy, now);
 
             return MessageProcessingResult.success(
-                    message.messageId(), restricted, datasetPartitionValue, summaryRow, detailRow, featureHitSummaryRow);
+                    message.getMessageId(), restricted, datasetPartitionValue, summaryRow, detailRow, featureHitSummaryRow);
 
         } catch (Exception e) {
             // A single message's processing failure must NOT fail the whole job — recorded
             // here for pipeline_record_audit instead (see ScanEngineJobRunner.writeOutputs,
             // which writes every isError() result there).
-            log.warn("Processing failed for message_id={}: {}", message.messageId(), e.getMessage(), e);
-            return MessageProcessingResult.failure(message.messageId(), restricted, datasetPartitionValue, e.toString());
+            log.warn("Processing failed for message_id={}: {}", message.getMessageId(), e.getMessage(), e);
+            return MessageProcessingResult.failure(message.getMessageId(), restricted, datasetPartitionValue, e.toString());
         }
     }
 }

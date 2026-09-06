@@ -1,15 +1,19 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.message;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
 /** {@code message.content} block of the AVRO message schema. */
-public final class MessageContent implements Serializable {
+public class MessageContent implements Serializable {
 
-    private final String header;
-    private final String rawText;
-    private final String subject;
-    private final String cleanText;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String header;
+    private String rawText;
+    private String subject;
+    private String cleanText;
 
     /**
      * @param header      display header text, not scanned by this engine
@@ -27,10 +31,14 @@ public final class MessageContent implements Serializable {
         this.cleanText = cleanText;
     }
 
-    public String header() { return header; }
-    public String rawText() { return rawText; }
-    public String subject() { return subject; }
-    public String cleanText() { return cleanText; }
+    public String getHeader() { return header; }
+    public void setHeader(String header) { this.header = header; }
+    public String getRawText() { return rawText; }
+    public void setRawText(String rawText) { this.rawText = rawText; }
+    public String getSubject() { return subject; }
+    public void setSubject(String subject) { this.subject = subject; }
+    public String getCleanText() { return cleanText; }
+    public void setCleanText(String cleanText) { this.cleanText = cleanText; }
 
     @Override
     public boolean equals(Object o) {

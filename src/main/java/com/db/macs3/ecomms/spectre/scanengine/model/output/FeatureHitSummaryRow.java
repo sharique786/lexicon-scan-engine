@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.output;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.List;
@@ -10,22 +11,25 @@ import java.util.Objects;
  * evaluated feature group and its hit/no-hit outcome, including each
  * composite/NoiseReduction group's individual sub-feature outcomes.
  *
- * <p>{@link Feature#hitStatus} is the GROUP's overall resolved hit status
+ * <p>{@link Feature#isHitStatus} is the GROUP's overall resolved hit status
  * (OR = any sub-feature hit is Yes; AND = every sub-feature must hit for
  * Yes) — see {@code DecisionTreeEvaluator}'s {@code GroupEvaluationResult#isHit()}.
- * {@link SubFeature#hitStatus} is that ONE member's own individual hit
+ * {@link SubFeature#isHitStatus} is that ONE member's own individual hit
  * status, before the group's operator is applied.
  */
-public final class FeatureHitSummaryRow implements Serializable {
+public class FeatureHitSummaryRow implements Serializable {
 
-    private final String messageId;
-    private final String datasetPartitionValue;
-    private final String pipelineExecId;
-    private final String processId;
-    private final String featureHitType;
-    private final List<Feature> features;
-    private final String createdBy;
-    private final Instant createdTs;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String messageId;
+    private String datasetPartitionValue;
+    private String pipelineExecId;
+    private String processId;
+    private String featureHitType;
+    private List<Feature> features;
+    private String createdBy;
+    private Instant createdTs;
 
     /**
      * @param messageId                  the message this row is for
@@ -53,14 +57,22 @@ public final class FeatureHitSummaryRow implements Serializable {
         this.createdTs = createdTs;
     }
 
-    public String messageId() { return messageId; }
-    public String datasetPartitionValue() { return datasetPartitionValue; }
-    public String pipelineExecId() { return pipelineExecId; }
-    public String processId() { return processId; }
-    public String featureHitType() { return featureHitType; }
-    public List<Feature> features() { return features; }
-    public String createdBy() { return createdBy; }
-    public Instant createdTs() { return createdTs; }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
+    public String getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(String datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
+    public String getPipelineExecId() { return pipelineExecId; }
+    public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
+    public String getProcessId() { return processId; }
+    public void setProcessId(String processId) { this.processId = processId; }
+    public String getFeatureHitType() { return featureHitType; }
+    public void setFeatureHitType(String featureHitType) { this.featureHitType = featureHitType; }
+    public List<Feature> getFeatures() { return features; }
+    public void setFeatures(List<Feature> features) { this.features = features; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public Instant getCreatedTs() { return createdTs; }
+    public void setCreatedTs(Instant createdTs) { this.createdTs = createdTs; }
 
     @Override
     public boolean equals(Object o) {
@@ -95,14 +107,17 @@ public final class FeatureHitSummaryRow implements Serializable {
                 + ", createdBy=" + createdBy + ", createdTs=" + createdTs + "]";
     }
 
-    public static final class Feature implements Serializable {
+    public static class Feature implements Serializable {
 
-        private final long id;
-        private final String name;
-        private final String type;
-        private final boolean isNoiseReduction;
-        private final boolean hitStatus;
-        private final List<SubFeature> subFeatures;
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private long id;
+        private String name;
+        private String type;
+        private boolean isNoiseReduction;
+        private boolean hitStatus;
+        private List<SubFeature> subFeatures;
 
         /**
          * @param id                  the group's {@code feature_id}, parsed to an integer
@@ -123,12 +138,18 @@ public final class FeatureHitSummaryRow implements Serializable {
             this.subFeatures = subFeatures;
         }
 
-        public long id() { return id; }
-        public String name() { return name; }
-        public String type() { return type; }
+        public long getId() { return id; }
+        public void setId(long id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
         public boolean isNoiseReduction() { return isNoiseReduction; }
-        public boolean hitStatus() { return hitStatus; }
-        public List<SubFeature> subFeatures() { return subFeatures; }
+        public void setNoiseReduction(boolean noiseReduction) { isNoiseReduction = noiseReduction; }
+        public boolean isHitStatus() { return hitStatus; }
+        public void setHitStatus(boolean hitStatus) { this.hitStatus = hitStatus; }
+        public List<SubFeature> getSubFeatures() { return subFeatures; }
+        public void setSubFeatures(List<SubFeature> subFeatures) { this.subFeatures = subFeatures; }
 
         @Override
         public boolean equals(Object o) {
@@ -157,11 +178,14 @@ public final class FeatureHitSummaryRow implements Serializable {
         }
     }
 
-    public static final class SubFeature implements Serializable {
+    public static class SubFeature implements Serializable {
 
-        private final String type;
-        private final String name;
-        private final boolean hitStatus;
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private String type;
+        private String name;
+        private boolean hitStatus;
 
         /**
          * @param type          the member row's {@code sub_feature_type}
@@ -176,9 +200,12 @@ public final class FeatureHitSummaryRow implements Serializable {
             this.hitStatus = hitStatus;
         }
 
-        public String type() { return type; }
-        public String name() { return name; }
-        public boolean hitStatus() { return hitStatus; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public boolean isHitStatus() { return hitStatus; }
+        public void setHitStatus(boolean hitStatus) { this.hitStatus = hitStatus; }
 
         @Override
         public boolean equals(Object o) {

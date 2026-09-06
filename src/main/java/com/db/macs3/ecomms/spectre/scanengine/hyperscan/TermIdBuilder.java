@@ -1,16 +1,17 @@
 package com.db.macs3.ecomms.spectre.scanengine.hyperscan;
 
 /**
- * Builds {@code term_id} values: {@code <body.feature>::<index>}, where
- * {@code body.feature} is used VERBATIM (hyphens and all — it is never
- * normalised or re-cased) and {@code index} is the term's position within
- * that feature's compiled Hyperscan database.
+ * Builds {@code term_id} values: {@code <body.lexiconName>::<index>}, where
+ * {@code body.lexiconName} (renamed from {@code body.feature}) is used
+ * VERBATIM (hyphens and all — it is never normalised or re-cased) and
+ * {@code index} is the term's position within that feature's compiled
+ * Hyperscan database.
  *
  * <p>Example: {@code feature = "lexicon_market_cond-1"}, term at index
  * {@code 1} within that database → {@code term_id = "lexicon_market_cond-1::1"}.
  *
- * <p>The same {@code body.feature} value also names the GCS bundle
- * ({@code <body.feature>.zip}) the Lexicon Compile Service now writes for
+ * <p>The same {@code body.lexiconName} value also names the GCS bundle
+ * ({@code <body.lexiconName>.zip}) the Lexicon Compile Service now writes for
  * this feature, and the two entries {@link #hdbFileName}/{@link #termMetadataFileName}
  * expects to find INSIDE that zip — see {@code HyperscanBundleLoader}.
  */
@@ -21,7 +22,7 @@ public final class TermIdBuilder {
     private TermIdBuilder() {}
 
     /**
-     * @param feature    {@code feature_definition.body.feature}, verbatim
+     * @param feature    {@code feature_definition.body.lexiconName}, verbatim
      * @param termIndex   the term's position/expression-index within {@code feature}'s
      *                     compiled Hyperscan database
      * @return {@code <feature>::<termIndex>}

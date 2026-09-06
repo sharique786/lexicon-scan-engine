@@ -2,6 +2,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.view;
 
 import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -16,22 +17,25 @@ import java.util.Objects;
  * machinery (grouped by {@code messageId} against the AVRO message dataset),
  * so every field must itself be serialisable; all fields here are.
  */
-public final class FeatureDecisionRow implements Serializable {
+public class FeatureDecisionRow implements Serializable {
 
-    private final String processId;
-    private final String messageId;
-    private final String datasetPartition;
-    private final String featureTaggingType;
-    private final String featureType;
-    private final String featureId;
-    private final String featureName;
-    private final String subFeatureType;
-    private final String featuresToApply;
-    private final String isNoiseReduction;
-    private final String operator;
-    private final String featureDefinitionJson;
-    private final String featurePartitionValue;
-    private final String policyEngineId;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String processId;
+    private String messageId;
+    private String datasetPartition;
+    private String featureTaggingType;
+    private String featureType;
+    private String featureId;
+    private String featureName;
+    private String subFeatureType;
+    private String featuresToApply;
+    private String isNoiseReduction;
+    private String operator;
+    private String featureDefinitionJson;
+    private String featurePartitionValue;
+    private String policyEngineId;
 
     /**
      * @param processId              the process run this row belongs to
@@ -49,7 +53,7 @@ public final class FeatureDecisionRow implements Serializable {
      * @param subFeatureType           non-null (currently always {@code "lexicon"}) when this row is
      *                                 one sub-feature of a composite/NoiseReduction grouping
      * @param featuresToApply          the actual lexicon feature name for THIS row — this is what
-     *                                 gets looked up inside {@code feature_definition.body.feature}
+     *                                 gets looked up inside {@code feature_definition.body.lexiconName}
      *                                 to resolve the {@code .hdb} filename, NOT {@code featureName}
      *                                 (which may be a composite parent's display label)
      * @param isNoiseReduction         {@code "Y"} / {@code "N"} — string, not boolean, matching the
@@ -82,22 +86,36 @@ public final class FeatureDecisionRow implements Serializable {
         this.policyEngineId = policyEngineId;
     }
 
-    public String processId() { return processId; }
-    public String messageId() { return messageId; }
-    public String datasetPartition() { return datasetPartition; }
-    public String featureTaggingType() { return featureTaggingType; }
-    public String featureType() { return featureType; }
-    public String featureId() { return featureId; }
-    public String featureName() { return featureName; }
-    public String subFeatureType() { return subFeatureType; }
-    public String featuresToApply() { return featuresToApply; }
-    public String isNoiseReduction() { return isNoiseReduction; }
-    public String operator() { return operator; }
-    public String featureDefinitionJson() { return featureDefinitionJson; }
-    public String featurePartitionValue() { return featurePartitionValue; }
-    public String policyEngineId() { return policyEngineId; }
+    public String getProcessId() { return processId; }
+    public void setProcessId(String processId) { this.processId = processId; }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
+    public String getDatasetPartition() { return datasetPartition; }
+    public void setDatasetPartition(String datasetPartition) { this.datasetPartition = datasetPartition; }
+    public String getFeatureTaggingType() { return featureTaggingType; }
+    public void setFeatureTaggingType(String featureTaggingType) { this.featureTaggingType = featureTaggingType; }
+    public String getFeatureType() { return featureType; }
+    public void setFeatureType(String featureType) { this.featureType = featureType; }
+    public String getFeatureId() { return featureId; }
+    public void setFeatureId(String featureId) { this.featureId = featureId; }
+    public String getFeatureName() { return featureName; }
+    public void setFeatureName(String featureName) { this.featureName = featureName; }
+    public String getSubFeatureType() { return subFeatureType; }
+    public void setSubFeatureType(String subFeatureType) { this.subFeatureType = subFeatureType; }
+    public String getFeaturesToApply() { return featuresToApply; }
+    public void setFeaturesToApply(String featuresToApply) { this.featuresToApply = featuresToApply; }
+    public String getIsNoiseReduction() { return isNoiseReduction; }
+    public void setIsNoiseReduction(String isNoiseReduction) { this.isNoiseReduction = isNoiseReduction; }
+    public String getOperator() { return operator; }
+    public void setOperator(String operator) { this.operator = operator; }
+    public String getFeatureDefinitionJson() { return featureDefinitionJson; }
+    public void setFeatureDefinitionJson(String featureDefinitionJson) { this.featureDefinitionJson = featureDefinitionJson; }
+    public String getFeaturePartitionValue() { return featurePartitionValue; }
+    public void setFeaturePartitionValue(String featurePartitionValue) { this.featurePartitionValue = featurePartitionValue; }
+    public String getPolicyEngineId() { return policyEngineId; }
+    public void setPolicyEngineId(String policyEngineId) { this.policyEngineId = policyEngineId; }
 
-    /** @return true iff {@link #isNoiseReduction} is exactly {@code "Y"} (case-sensitive, matches upstream). */
+    /** @return true iff {@link #getIsNoiseReduction} is exactly {@code "Y"} (case-sensitive, matches upstream). */
     public boolean isNoiseReductionFlag() {
         return BqColumns.YES.equals(isNoiseReduction);
     }

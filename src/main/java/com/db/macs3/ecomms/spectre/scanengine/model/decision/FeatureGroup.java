@@ -3,6 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.decision;
 import com.db.macs3.ecomms.spectre.scanengine.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.scanengine.model.view.FeatureDecisionRow;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
@@ -11,30 +12,33 @@ import java.util.Objects;
  * All {@link FeatureDecisionRow}s for one message sharing the same
  * {@code featureId} — a single standalone lexicon/disclaimer feature, or a
  * composite/NoiseReduction feature grouping several lexicon sub-features
- * combined by {@link #operator}.
+ * combined by {@link #getOperator}.
  *
  * <p>See {@code FeatureGroupingService} for how raw view rows are grouped
  * into these, and {@code DecisionTreeEvaluator} for how they are evaluated
  * (NoiseReduction → Disclaimer → Lexicon, with a noise-reduction
  * short-circuit rule).
  */
-public final class FeatureGroup implements Serializable {
+public class FeatureGroup implements Serializable {
 
-    private final String featureId;
-    private final String featureName;
-    private final String featureType;
-    private final boolean isNoiseReduction;
-    private final String operator;
-    private final List<FeatureDecisionRow> members;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String featureId;
+    private String featureName;
+    private String featureType;
+    private boolean isNoiseReduction;
+    private String operator;
+    private List<FeatureDecisionRow> members;
 
     /**
-     * @param featureId          groups {@link #members} — all share this value
+     * @param featureId          groups {@link #getMembers} — all share this value
      * @param featureName         the (possibly composite/parent) display name
      * @param featureType          {@link BqColumns.FeatureType} value
      * @param isNoiseReduction     true iff ANY member row is flagged {@code is_noise_reduction=Y} —
      *                              in practice all members of one group share the same flag,
      *                              but this does not assume that
-     * @param operator              {@code OR}/{@code AND}, combining {@link #members} when there is
+     * @param operator              {@code OR}/{@code AND}, combining {@link #getMembers} when there is
      *                              more than one — null for a single-member group, where it is
      *                              meaningless (that one member's own hit status IS the group's)
      * @param members                one row per sub-feature actually applied under this
@@ -54,19 +58,25 @@ public final class FeatureGroup implements Serializable {
         this.members = members;
     }
 
-    public String featureId() { return featureId; }
-    public String featureName() { return featureName; }
-    public String featureType() { return featureType; }
+    public String getFeatureId() { return featureId; }
+    public void setFeatureId(String featureId) { this.featureId = featureId; }
+    public String getFeatureName() { return featureName; }
+    public void setFeatureName(String featureName) { this.featureName = featureName; }
+    public String getFeatureType() { return featureType; }
+    public void setFeatureType(String featureType) { this.featureType = featureType; }
     public boolean isNoiseReduction() { return isNoiseReduction; }
-    public String operator() { return operator; }
-    public List<FeatureDecisionRow> members() { return members; }
+    public void setNoiseReduction(boolean noiseReduction) { this.isNoiseReduction = noiseReduction; }
+    public String getOperator() { return operator; }
+    public void setOperator(String operator) { this.operator = operator; }
+    public List<FeatureDecisionRow> getMembers() { return members; }
+    public void setMembers(List<FeatureDecisionRow> members) { this.members = members; }
 
-    /** @return true iff {@link #featureType} is {@code disclaimer} (case-insensitive). */
+    /** @return true iff {@link #getFeatureType} is {@code disclaimer} (case-insensitive). */
     public boolean isDisclaimer() {
         return BqColumns.FeatureType.DISCLAIMER.equalsIgnoreCase(featureType);
     }
 
-    /** @return true iff {@link #members} has more than one row, i.e. {@link #operator} is meaningful. */
+    /** @return true iff {@link #getMembers} has more than one row, i.e. {@link #getOperator} is meaningful. */
     public boolean isMultiMember() {
         return members.size() > 1;
     }

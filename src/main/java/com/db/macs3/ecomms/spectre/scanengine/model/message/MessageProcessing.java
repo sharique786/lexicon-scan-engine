@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.message;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -7,10 +8,13 @@ import java.util.Objects;
  * {@code processing} block of the AVRO message schema — identifies which
  * partition (by run date/hour) this message record was written under.
  */
-public final class MessageProcessing implements Serializable {
+public class MessageProcessing implements Serializable {
 
-    private final String runDate;
-    private final String runHour;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String runDate;
+    private String runHour;
 
     /**
      * @param runDate    {@code YYYY-MM-DD}-shaped partition date
@@ -21,8 +25,10 @@ public final class MessageProcessing implements Serializable {
         this.runHour = runHour;
     }
 
-    public String runDate() { return runDate; }
-    public String runHour() { return runHour; }
+    public String getRunDate() { return runDate; }
+    public void setRunDate(String runDate) { this.runDate = runDate; }
+    public String getRunHour() { return runHour; }
+    public void setRunHour(String runHour) { this.runHour = runHour; }
 
     @Override
     public boolean equals(Object o) {

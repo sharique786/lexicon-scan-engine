@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.match;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -8,11 +9,14 @@ import java.util.Objects;
  * needed because the output {@code hit_details_hs} JSON organises matches by
  * area (subject / message body / per-attachment), not just as one flat list.
  */
-public final class AreaMatch implements Serializable {
+public class AreaMatch implements Serializable {
 
-    private final MatchArea area;
-    private final String attachmentId;
-    private final MatchSpan span;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private MatchArea area;
+    private String attachmentId;
+    private MatchSpan span;
 
     /**
      * @param area            which part of the message this match is in
@@ -32,9 +36,12 @@ public final class AreaMatch implements Serializable {
         this.span = span;
     }
 
-    public MatchArea area() { return area; }
-    public String attachmentId() { return attachmentId; }
-    public MatchSpan span() { return span; }
+    public MatchArea getArea() { return area; }
+    public void setArea(MatchArea area) { this.area = area; }
+    public String getAttachmentId() { return attachmentId; }
+    public void setAttachmentId(String attachmentId) { this.attachmentId = attachmentId; }
+    public MatchSpan getSpan() { return span; }
+    public void setSpan(MatchSpan span) { this.span = span; }
 
     public static AreaMatch subject(MatchSpan span) {
         return new AreaMatch(MatchArea.SUBJECT, null, span);

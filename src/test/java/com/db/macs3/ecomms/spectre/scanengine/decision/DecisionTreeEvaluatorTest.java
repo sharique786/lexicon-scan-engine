@@ -36,7 +36,7 @@ class DecisionTreeEvaluatorTest {
 
     private static List<TermMatchResult> flattenAll(MessageEvaluationResult r) {
         List<TermMatchResult> all = new ArrayList<>();
-        for (var v : r.finalLexiconMatchesByFeatureId().values()) all.addAll(v);
+        for (var v : r.getFinalLexiconMatchesByFeatureId().values()) all.addAll(v);
         return all;
     }
 
@@ -59,16 +59,16 @@ class DecisionTreeEvaluatorTest {
 
             List<String> scannedFeatures = new ArrayList<>();
             DecisionTreeEvaluator.FeatureRowScanner scanner = r -> {
-                scannedFeatures.add(r.featuresToApply());
-                return canned.getOrDefault(r.featuresToApply(), List.of());
+                scannedFeatures.add(r.getFeaturesToApply());
+                return canned.getOrDefault(r.getFeaturesToApply(), List.of());
             };
 
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-101", groups, scanner);
 
-            assertThat(result.shortCircuited()).isTrue();
+            assertThat(result.isShortCircuited()).isTrue();
             assertThat(flattenAll(result)).isEmpty();
             assertThat(scannedFeatures).doesNotContain("disc_1", "lex_std");
-            assertThat(result.evaluatedGroups()).hasSize(1);
+            assertThat(result.getEvaluatedGroups()).hasSize(1);
         }
 
         @Test
@@ -84,10 +84,10 @@ class DecisionTreeEvaluatorTest {
             canned.put("spam_2", List.of()); // AND requires BOTH -- group is not a hit
             canned.put("lex_std", List.of(oneMatch("lex_std::1", MatchArea.MESSAGE_BODY, 10, 14, "bomb")));
 
-            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.featuresToApply(), List.of());
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-102", groups, scanner);
 
-            assertThat(result.shortCircuited()).isFalse();
+            assertThat(result.isShortCircuited()).isFalse();
             assertThat(flattenAll(result)).hasSize(1);
         }
     }
@@ -111,12 +111,12 @@ class DecisionTreeEvaluatorTest {
                     new TermMatchResult("lex_std::2", "p2", List.of(
                             new AreaMatch(MatchArea.MESSAGE_BODY, null, new MatchSpan(30, 40, "partial"))))));
 
-            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.featuresToApply(), List.of());
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-103", groups, scanner);
 
             assertThat(flattenAll(result)).hasSize(1);
-            assertThat(flattenAll(result).get(0).termId()).isEqualTo("lex_std::2");
-            assertThat(result.suppressedLexiconMatchCount()).isEqualTo(1);
+            assertThat(flattenAll(result).get(0).getTermId()).isEqualTo("lex_std::2");
+            assertThat(result.getSuppressedLexiconMatchCount()).isEqualTo(1);
         }
 
         @Test
@@ -131,7 +131,7 @@ class DecisionTreeEvaluatorTest {
             canned.put("disc_1", List.of(oneMatch("disc_1::1", MatchArea.SUBJECT, 0, 10, "disclaimer")));
             canned.put("lex_std", List.of(oneMatch("lex_std::1", MatchArea.MESSAGE_BODY, 0, 10, "disclaimer")));
 
-            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.featuresToApply(), List.of());
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-104", groups, scanner);
 
             assertThat(flattenAll(result)).hasSize(1);
@@ -148,12 +148,12 @@ class DecisionTreeEvaluatorTest {
             Map<String, List<TermMatchResult>> canned = Map.of(
                     "lex_a", List.of(oneMatch("lex_a::1", MatchArea.MESSAGE_BODY, 0, 4, "bomb")),
                     "lex_b", List.of(oneMatch("lex_b::1", MatchArea.MESSAGE_BODY, 10, 14, "riot")));
-            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.featuresToApply(), List.of());
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-105", groups, scanner);
 
-            assertThat(result.finalLexiconMatchesByFeatureId()).containsKeys("1", "4");
-            assertThat(result.finalLexiconMatchesByFeatureId().get("1").get(0).termId()).isEqualTo("lex_a::1");
-            assertThat(result.finalLexiconMatchesByFeatureId().get("4").get(0).termId()).isEqualTo("lex_b::1");
+            assertThat(result.getFinalLexiconMatchesByFeatureId()).containsKeys("1", "4");
+            assertThat(result.getFinalLexiconMatchesByFeatureId().get("1").get(0).getTermId()).isEqualTo("lex_a::1");
+            assertThat(result.getFinalLexiconMatchesByFeatureId().get("4").get(0).getTermId()).isEqualTo("lex_b::1");
         }
     }
 }

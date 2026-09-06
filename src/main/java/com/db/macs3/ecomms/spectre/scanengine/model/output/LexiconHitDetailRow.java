@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.output;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.List;
@@ -16,18 +17,21 @@ import java.util.Objects;
  * <p>Unlike {@link LexiconHitSummaryRow}, only Lexicon-category (post
  * disclaimer-suppression) matches are represented here — see
  * {@code OutputRowBuilder} — since this table exists specifically to carry
- * {@link EvaluatedLexicon.TermDtl#matchedText} detail for genuine hits, not
+ * {@link EvaluatedLexicon.TermDtl#getMatchedText} detail for genuine hits, not
  * a broad per-group summary.
  */
-public final class LexiconHitDetailRow implements Serializable {
+public class LexiconHitDetailRow implements Serializable {
 
-    private final String messageId;
-    private final String processId;
-    private final String pipelineExecId;
-    private final String datasetPartitionValue;
-    private final List<EvaluatedLexicon> evaluatedLexicons;
-    private final String createdBy;
-    private final Instant createdTs;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String messageId;
+    private String processId;
+    private String pipelineExecId;
+    private String datasetPartitionValue;
+    private List<EvaluatedLexicon> evaluatedLexicons;
+    private String createdBy;
+    private Instant createdTs;
 
     /**
      * @param messageId                  the message this row is for
@@ -51,13 +55,20 @@ public final class LexiconHitDetailRow implements Serializable {
         this.createdTs = createdTs;
     }
 
-    public String messageId() { return messageId; }
-    public String processId() { return processId; }
-    public String pipelineExecId() { return pipelineExecId; }
-    public String datasetPartitionValue() { return datasetPartitionValue; }
-    public List<EvaluatedLexicon> evaluatedLexicons() { return evaluatedLexicons; }
-    public String createdBy() { return createdBy; }
-    public Instant createdTs() { return createdTs; }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
+    public String getProcessId() { return processId; }
+    public void setProcessId(String processId) { this.processId = processId; }
+    public String getPipelineExecId() { return pipelineExecId; }
+    public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
+    public String getDatasetPartitionValue() { return datasetPartitionValue; }
+    public void setDatasetPartitionValue(String datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
+    public List<EvaluatedLexicon> getEvaluatedLexicons() { return evaluatedLexicons; }
+    public void setEvaluatedLexicons(List<EvaluatedLexicon> evaluatedLexicons) { this.evaluatedLexicons = evaluatedLexicons; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public Instant getCreatedTs() { return createdTs; }
+    public void setCreatedTs(Instant createdTs) { this.createdTs = createdTs; }
 
     @Override
     public boolean equals(Object o) {
@@ -91,10 +102,13 @@ public final class LexiconHitDetailRow implements Serializable {
                 + ", createdTs=" + createdTs + "]";
     }
 
-    public static final class EvaluatedLexicon implements Serializable {
+    public static class EvaluatedLexicon implements Serializable {
 
-        private final String id;
-        private final List<TermDtl> termDtls;
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private String id;
+        private List<TermDtl> termDtls;
 
         /**
          * @param id          the group's {@code feature_id}
@@ -105,8 +119,10 @@ public final class LexiconHitDetailRow implements Serializable {
             this.termDtls = termDtls;
         }
 
-        public String id() { return id; }
-        public List<TermDtl> termDtls() { return termDtls; }
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public List<TermDtl> getTermDtls() { return termDtls; }
+        public void setTermDtls(List<TermDtl> termDtls) { this.termDtls = termDtls; }
 
         @Override
         public boolean equals(Object o) {
@@ -130,10 +146,13 @@ public final class LexiconHitDetailRow implements Serializable {
             return "EvaluatedLexicon[id=" + id + ", termDtls=" + termDtls + "]";
         }
 
-        public static final class TermDtl implements Serializable {
+        public static class TermDtl implements Serializable {
 
-            private final String termId;
-            private final String matchedText;
+            @Serial
+            private static final long serialVersionUID = 1L;
+
+            private String termId;
+            private String matchedText;
 
             /**
              * @param termId          {@code <feature>::<index>}
@@ -145,8 +164,10 @@ public final class LexiconHitDetailRow implements Serializable {
                 this.matchedText = matchedText;
             }
 
-            public String termId() { return termId; }
-            public String matchedText() { return matchedText; }
+            public String getTermId() { return termId; }
+            public void setTermId(String termId) { this.termId = termId; }
+            public String getMatchedText() { return matchedText; }
+            public void setMatchedText(String matchedText) { this.matchedText = matchedText; }
 
             @Override
             public boolean equals(Object o) {

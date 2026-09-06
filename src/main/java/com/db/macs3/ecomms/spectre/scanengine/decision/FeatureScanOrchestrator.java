@@ -141,12 +141,12 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     private List<MessageAreaText> precomputeAreaTexts(ScanMessage message) {
         List<MessageAreaText> areaTexts = new ArrayList<>(2 + message.attachmentsOrEmpty().size());
 
-        String subject = message.content() == null ? null : message.content().subject();
+        String subject = message.getContent() == null ? null : message.getContent().getSubject();
         if (subject != null && !subject.isBlank()) {
             areaTexts.add(new MessageAreaText(MatchArea.SUBJECT, null, subject, HtmlStrippingService.strip(subject)));
         }
 
-        String rawText = message.content() == null ? null : message.content().rawText();
+        String rawText = message.getContent() == null ? null : message.getContent().getRawText();
         if (rawText != null && !rawText.isBlank()) {
             areaTexts.add(new MessageAreaText(MatchArea.MESSAGE_BODY, null, rawText, HtmlStrippingService.strip(rawText)));
         }
@@ -165,12 +165,12 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         if (!withinSizeLimit(attachment)) {
             return null;
         }
-        String cleanText = attachment.cleanText();
+        String cleanText = attachment.getCleanText();
         if (cleanText == null || cleanText.isBlank()) {
             return null;
         }
         // identity(), not strip(): attachment cleanText is already HTML-free — see class Javadoc.
-        return new MessageAreaText(MatchArea.ATTACHMENT, attachment.attachmentId(), cleanText,
+        return new MessageAreaText(MatchArea.ATTACHMENT, attachment.getAttachmentId(), cleanText,
                 HtmlStrippingService.identity(cleanText));
     }
 
@@ -190,8 +190,8 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * referenced — see class Javadoc.
      */
     private List<TermMatchResult> scanRow(FeatureDecisionRow row, List<MessageAreaText> areaTexts) {
-        FeatureDefinition definition = FeatureDefinition.parse(row.featureDefinitionJson());
-        String feature = definition.body().feature();
+        FeatureDefinition definition = FeatureDefinition.parse(row.getFeatureDefinitionJson());
+        String feature = definition.getBody().getLexiconName();
         HyperscanBundleLoader.LexiconBundle bundle = bundleLoader.load(feature);
         Database database = bundle.database();
         TermExpressionMetadata metadata = bundle.metadata();
@@ -200,7 +200,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         List<AreaScanContext> areaScans = new ArrayList<>();
 
         for (MessageAreaText areaText : areaTexts) {
-            if (!definition.body().hasScope(scopeFor(areaText.area()))) {
+            if (!definition.getBody().hasScope(scopeFor(areaText.area()))) {
                 continue;
             }
             List<RawExpressionMatch> matches = HyperscanScanService.scan(
@@ -241,10 +241,10 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         if (maxAttachmentSizeBytes == null) {
             return true;
         }
-        if (attachment.cleanText() == null) {
+        if (attachment.getCleanText() == null) {
             return true;
         }
-        long byteLength = attachment.cleanText().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        long byteLength = attachment.getCleanText().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
         return byteLength <= maxAttachmentSizeBytes;
     }
 
@@ -271,9 +271,9 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         Map<Integer, List<AreaMatch>> matchesByExpressionId = new LinkedHashMap<>();
         Map<Integer, String> patternTextByExpressionId = new LinkedHashMap<>();
         for (RawExpressionMatch rawMatch : allRawMatches) {
-            matchesByExpressionId.computeIfAbsent(rawMatch.expressionId(), unusedKey -> new ArrayList<>())
-                    .addAll(rawMatch.matches());
-            patternTextByExpressionId.putIfAbsent(rawMatch.expressionId(), rawMatch.matchedPatternText());
+            matchesByExpressionId.computeIfAbsent(rawMatch.getExpressionId(), unusedKey -> new ArrayList<>())
+                    .addAll(rawMatch.getMatches());
+            patternTextByExpressionId.putIfAbsent(rawMatch.getExpressionId(), rawMatch.getMatchedPatternText());
         }
         Set<Integer> matchedExpressionIds = matchesByExpressionId.keySet();
         Map<Integer, TermEntry> termsToEvaluate = collectTermsToEvaluate(feature, metadata, matchedExpressionIds);
@@ -304,7 +304,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         for (int expressionId : matchedExpressionIds) {
             TermEntry entry = metadata.termByAnyExpressionId(expressionId);
             if (entry != null) {
-                termsToEvaluate.putIfAbsent(entry.termNumber(), entry);
+                termsToEvaluate.putIfAbsent(entry.getTermNumber(), entry);
             } else {
                 unrecognisedIds.add(expressionId);
             }
@@ -314,7 +314,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                     feature, unrecognisedIds.size(), unrecognisedIds);
         }
         for (TermEntry entry : metadata.mandatoryPerAreaTerms()) {
-            termsToEvaluate.putIfAbsent(entry.termNumber(), entry);
+            termsToEvaluate.putIfAbsent(entry.getTermNumber(), entry);
         }
         return termsToEvaluate;
     }
@@ -331,16 +331,16 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
             return null;
         }
 
-        String termId = TermIdBuilder.build(feature, entry.termNumber());
+        String termId = TermIdBuilder.build(feature, entry.getTermNumber());
         // Prefer the metadata's own pattern text (the resolvedPatterns string, or the
         // Compile Service's translatedPattern — always a genuine, readable pattern) over the
         // raw match's Expression text, which for a COMBINATION match is the unreadable
         // boolean formula string itself, and for an AND NOT match is only ONE leaf's own
         // text, not representative of the whole term.
-        String termRegexPattern = entry.termRegexPattern() != null
-                ? entry.termRegexPattern()
+        String termRegexPattern = entry.getTermRegexPattern() != null
+                ? entry.getTermRegexPattern()
                 : entry.hasCoarseExpressionId()
-                        ? patternTextByExpressionId.get(entry.requiredExpressionIds().get(0))
+                        ? patternTextByExpressionId.get(entry.getRequiredExpressionIds().get(0))
                         : null;
 
         return new TermMatchResult(termId, termRegexPattern, combined);
@@ -350,16 +350,16 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     private List<AreaMatch> resolveAndEvaluateCrossArea(String feature, TermEntry entry,
                                                           Set<Integer> matchedExpressionIds,
                                                           Map<Integer, List<AreaMatch>> matchesByExpressionId) {
-        boolean requiredSatisfied = matchedExpressionIds.containsAll(entry.requiredExpressionIds());
-        boolean excludedSatisfied = entry.requiresExclusionCheck()
-                && entry.excludedExpressionIds() != null
-                && !entry.excludedExpressionIds().isEmpty()
-                && matchedExpressionIds.containsAll(entry.excludedExpressionIds());
+        boolean requiredSatisfied = matchedExpressionIds.containsAll(entry.getRequiredExpressionIds());
+        boolean excludedSatisfied = entry.isRequiresExclusionCheck()
+                && entry.getExcludedExpressionIds() != null
+                && !entry.getExcludedExpressionIds().isEmpty()
+                && matchedExpressionIds.containsAll(entry.getExcludedExpressionIds());
 
         if (!requiredSatisfied || excludedSatisfied) {
-            if (entry.requiresExclusionCheck() && requiredSatisfied) {
+            if (entry.isRequiresExclusionCheck() && requiredSatisfied) {
                 log.debug("feature='{}', term={}: excluded by AND NOT — required side matched but so did "
-                        + "the excluded side", feature, entry.termNumber());
+                        + "the excluded side", feature, entry.getTermNumber());
             }
             return List.of();
         }
@@ -367,7 +367,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         // Combine matches from EVERY required-side expression id — the excluded side is
         // never itself surfaced as a "hit" to report, only a condition already applied above.
         List<AreaMatch> combined = new ArrayList<>();
-        for (int reqId : entry.requiredExpressionIds()) {
+        for (int reqId : entry.getRequiredExpressionIds()) {
             combined.addAll(matchesByExpressionId.getOrDefault(reqId, List.of()));
         }
         return combined;
@@ -383,7 +383,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     private List<AreaMatch> resolveAndEvaluatePerArea(String feature, TermEntry entry,
                                                         Set<Integer> matchedExpressionIds,
                                                         List<AreaScanContext> areaScans) {
-        if (entry.hasCoarseExpressionId() && !matchedExpressionIds.containsAll(entry.requiredExpressionIds())) {
+        if (entry.hasCoarseExpressionId() && !matchedExpressionIds.containsAll(entry.getRequiredExpressionIds())) {
             return List.of(); // global pre-filter: at least one required leaf never matched anywhere at all
         }
 
@@ -393,7 +393,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                 continue;
             }
             List<MatchSpan> spans = ResolvedPatternAreaEvaluator.findMatchingSpans(
-                    entry.resolvedPatternTree(), areaScan.originalText());
+                    entry.getResolvedPatternTree(), areaScan.originalText());
             for (MatchSpan span : spans) {
                 combined.add(new AreaMatch(areaScan.area(), areaScan.attachmentId(), span));
             }
@@ -410,8 +410,8 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
             return true;
         }
         Set<Integer> areaExpressionIds = areaScan.rawMatches().stream()
-                .map(RawExpressionMatch::expressionId)
+                .map(RawExpressionMatch::getExpressionId)
                 .collect(Collectors.toSet());
-        return areaExpressionIds.containsAll(entry.requiredExpressionIds());
+        return areaExpressionIds.containsAll(entry.getRequiredExpressionIds());
     }
 }

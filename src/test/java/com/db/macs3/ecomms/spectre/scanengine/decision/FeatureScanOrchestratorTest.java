@@ -123,9 +123,9 @@ class FeatureScanOrchestratorTest {
             scopeArr.append("\"").append(scopes[i]).append("\"");
         }
         scopeArr.append("]");
-        return "{\"featureName\":\"x\",\"featureType\":\"Lexicon\",\"isNoiseReduction\":false,"
-                + "\"body\":{\"feature\":\"" + feature + "\",\"totalTermsCount\":5,\"minimumHits\":1,"
-                + "\"scope\":" + scopeArr + "}}";
+        return "{\"featureId\":\"1\",\"featureName\":\"x\",\"featureType\":\"Lexicon\",\"isNoiseReduction\":false,"
+                + "\"body\":{\"id\":1,\"lexiconName\":\"" + feature + "\",\"objectId\":1,\"totalTermsCount\":5,"
+                + "\"minimumHits\":1,\"scope\":" + scopeArr + "}}";
     }
 
     /** A non-AND-NOT term's compile-results JSON entry — {@code hyperscanExpressionId} only. */
@@ -204,8 +204,8 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).matches()).hasSize(1);
-            assertThat(results.get(0).matches().get(0).area()).isEqualTo(MatchArea.MESSAGE_BODY);
+            assertThat(results.get(0).getMatches()).hasSize(1);
+            assertThat(results.get(0).getMatches().get(0).getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
         }
     }
 
@@ -230,11 +230,11 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(allScopeRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).matches()).hasSize(3);
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::7");
+            assertThat(results.get(0).getMatches()).hasSize(3);
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::7");
 
             Set<MatchArea> areas = new HashSet<>();
-            for (var m : results.get(0).matches()) areas.add(m.area());
+            for (var m : results.get(0).getMatches()) areas.add(m.getArea());
             assertThat(areas).hasSize(3);
         }
     }
@@ -286,8 +286,8 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termRegexPattern()).isEqualTo("bomb");
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::1");
+            assertThat(results.get(0).getTermRegexPattern()).isEqualTo("bomb");
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::1");
         }
     }
 
@@ -313,7 +313,7 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::47");
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::47");
         }
     }
 
@@ -370,10 +370,10 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termId())
+            assertThat(results.get(0).getTermId())
                     .as("must be the term's OWN number (3), never a raw auxiliary id like 5 or 6")
                     .isEqualTo(feature + "::3");
-            assertThat(results.get(0).matches().get(0).span().matchedText()).isEqualTo("insider");
+            assertThat(results.get(0).getMatches().get(0).getSpan().getMatchedText()).isEqualTo("insider");
         }
     }
 
@@ -410,8 +410,8 @@ class FeatureScanOrchestratorTest {
                     List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(fullMessage).scan(decisionRow);
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::9");
-            assertThat(results.get(0).matches()).hasSize(3); // one highlight per required leaf
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::9");
+            assertThat(results.get(0).getMatches()).hasSize(3); // one highlight per required leaf
         }
     }
 
@@ -440,10 +440,10 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termRegexPattern())
+            assertThat(results.get(0).getTermRegexPattern())
                     .as("must NOT be the raw, unreadable combination formula")
                     .doesNotContain("(10&11&12)");
-            assertThat(results.get(0).termRegexPattern()).contains("alpha");
+            assertThat(results.get(0).getTermRegexPattern()).contains("alpha");
         }
     }
 
@@ -474,7 +474,7 @@ class FeatureScanOrchestratorTest {
 
             assertThat(results).hasSize(2);
             Set<String> termIds = new HashSet<>();
-            for (TermMatchResult r : results) termIds.add(r.termId());
+            for (TermMatchResult r : results) termIds.add(r.getTermId());
             assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::4");
         }
     }
@@ -508,9 +508,9 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(nearMessage).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::1");
-            assertThat(results.get(0).matches()).hasSize(1);
-            assertThat(results.get(0).matches().get(0).area()).isEqualTo(MatchArea.MESSAGE_BODY);
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::1");
+            assertThat(results.get(0).getMatches()).hasSize(1);
+            assertThat(results.get(0).getMatches().get(0).getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
 
             // Both leaves present -> native COMBINATION still fires -> but more than 5 words apart ->
             // the real per-area regex distance check must reject it.
@@ -548,7 +548,7 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::6");
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::6");
         }
     }
 
@@ -584,7 +584,7 @@ class FeatureScanOrchestratorTest {
                     List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(onlyRequired).scan(decisionRow);
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).termId()).isEqualTo(feature + "::7");
+            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::7");
 
             ScanMessage both = new ScanMessage("msg-103",
                     new MessageSource("chat", "src", "sys", "conv-1"),
@@ -624,7 +624,7 @@ class FeatureScanOrchestratorTest {
 
             assertThat(results).hasSize(2);
             Set<String> termIds = new HashSet<>();
-            for (TermMatchResult r : results) termIds.add(r.termId());
+            for (TermMatchResult r : results) termIds.add(r.getTermId());
             assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::2");
         }
     }

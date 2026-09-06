@@ -1,15 +1,19 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.message;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
 /** {@code source} block of the AVRO message schema. */
-public final class MessageSource implements Serializable {
+public class MessageSource implements Serializable {
 
-    private final String channelName;
-    private final String sourceName;
-    private final String srcSysName;
-    private final String srcSysConvId;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String channelName;
+    private String sourceName;
+    private String srcSysName;
+    private String srcSysConvId;
 
     /**
      * @param channelName    {@code "chat"} / {@code "email"} / {@code "voice"}
@@ -24,10 +28,14 @@ public final class MessageSource implements Serializable {
         this.srcSysConvId = srcSysConvId;
     }
 
-    public String channelName() { return channelName; }
-    public String sourceName() { return sourceName; }
-    public String srcSysName() { return srcSysName; }
-    public String srcSysConvId() { return srcSysConvId; }
+    public String getChannelName() { return channelName; }
+    public void setChannelName(String channelName) { this.channelName = channelName; }
+    public String getSourceName() { return sourceName; }
+    public void setSourceName(String sourceName) { this.sourceName = sourceName; }
+    public String getSrcSysName() { return srcSysName; }
+    public void setSrcSysName(String srcSysName) { this.srcSysName = srcSysName; }
+    public String getSrcSysConvId() { return srcSysConvId; }
+    public void setSrcSysConvId(String srcSysConvId) { this.srcSysConvId = srcSysConvId; }
 
     @Override
     public boolean equals(Object o) {

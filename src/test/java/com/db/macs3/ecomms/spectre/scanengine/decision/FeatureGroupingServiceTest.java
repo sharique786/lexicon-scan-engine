@@ -45,36 +45,36 @@ class FeatureGroupingServiceTest {
         @Test
         @DisplayName("processing order is NoiseReduction first")
         void noiseReductionFirst() {
-            assertThat(groups.get(0).featureId()).isEqualTo("3");
+            assertThat(groups.get(0).getFeatureId()).isEqualTo("3");
             assertThat(groups.get(0).isNoiseReduction()).isTrue();
         }
 
         @Test
         @DisplayName("processing order is Disclaimer second")
         void disclaimerSecond() {
-            assertThat(groups.get(1).featureId()).isEqualTo("2");
+            assertThat(groups.get(1).getFeatureId()).isEqualTo("2");
             assertThat(groups.get(1).isDisclaimer()).isTrue();
         }
 
         @Test
         @DisplayName("processing order is standard Lexicon last")
         void lexiconLast() {
-            assertThat(groups.get(2).featureId()).isEqualTo("1");
+            assertThat(groups.get(2).getFeatureId()).isEqualTo("1");
         }
 
         @Test
         @DisplayName("the NoiseReduction group has both members and the OR operator")
         void noiseReductionGroupDetails() {
             FeatureGroup nrGroup = groups.get(0);
-            assertThat(nrGroup.members()).hasSize(2);
-            assertThat(nrGroup.operator()).isEqualTo("OR");
+            assertThat(nrGroup.getMembers()).hasSize(2);
+            assertThat(nrGroup.getOperator()).isEqualTo("OR");
             assertThat(nrGroup.isMultiMember()).isTrue();
         }
 
         @Test
         @DisplayName("a single-member group has a null operator (meaningless for one member)")
         void singleMemberGroupHasNullOperator() {
-            assertThat(groups.get(1).operator()).isNull();
+            assertThat(groups.get(1).getOperator()).isNull();
             assertThat(groups.get(1).isMultiMember()).isFalse();
         }
     }
@@ -87,7 +87,7 @@ class FeatureGroupingServiceTest {
                 row("5", "NoiseReduction", "NotNewsLetter2", "lexicon", "lexicon_spam_2", "Y", "AND")
         ));
         assertThat(groups).hasSize(1);
-        assertThat(groups.get(0).operator()).isEqualTo("AND");
+        assertThat(groups.get(0).getOperator()).isEqualTo("AND");
     }
 
     @Nested

@@ -33,8 +33,8 @@ class OutputRowBuilderTest {
     }
 
     private static String defJson(String feature, int totalTerms, int minHits) {
-        return "{\"featureName\":\"x\",\"featureType\":\"Lexicon\",\"isNoiseReduction\":false,"
-                + "\"body\":{\"feature\":\"" + feature + "\",\"totalTermsCount\":" + totalTerms
+        return "{\"featureId\":\"1\",\"featureName\":\"x\",\"featureType\":\"Lexicon\",\"isNoiseReduction\":false,"
+                + "\"body\":{\"id\":1,\"lexiconName\":\"" + feature + "\",\"objectId\":1,\"totalTermsCount\":" + totalTerms
                 + ",\"minimumHits\":" + minHits + ",\"scope\":[\"Message Body\"]}}";
     }
 
@@ -55,7 +55,7 @@ class OutputRowBuilderTest {
                 new TermMatchResult("lexicon_market_cond-1::2", "bomb",
                         List.of(AreaMatch.messageBody(new MatchSpan(50, 54, "bomb"))))));       // survives
 
-        DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.featuresToApply(), List.of());
+        DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
         return DecisionTreeEvaluator.evaluate("msg-101", groups, scanner);
     }
 
@@ -68,7 +68,7 @@ class OutputRowBuilderTest {
         void hasOneEntryPerGroup() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", buildRealisticEvaluation(), "scan-engine", NOW);
-            assertThat(row.evaluatedLexicons()).hasSize(2);
+            assertThat(row.getEvaluatedLexicons()).hasSize(2);
         }
 
         @Test
@@ -77,11 +77,11 @@ class OutputRowBuilderTest {
         void aggregatesDisclaimerCounts() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", buildRealisticEvaluation(), "scan-engine", NOW);
-            var disclaimerEntry = row.evaluatedLexicons().stream()
-                    .filter(e -> e.id().equals("2")).findFirst().orElseThrow();
-            assertThat(disclaimerEntry.totalTermsCount()).isEqualTo(5);
-            assertThat(disclaimerEntry.regexHitCount()).isEqualTo(1);
-            assertThat(disclaimerEntry.termDtls().get(0).regexMatchHitCount()).isEqualTo(1L);
+            var disclaimerEntry = row.getEvaluatedLexicons().stream()
+                    .filter(e -> e.getId().equals("2")).findFirst().orElseThrow();
+            assertThat(disclaimerEntry.getTotalTermsCount()).isEqualTo(5);
+            assertThat(disclaimerEntry.getRegexHitCount()).isEqualTo(1);
+            assertThat(disclaimerEntry.getTermDtls().get(0).getRegexMatchHitCount()).isEqualTo(1L);
         }
 
         @Test
@@ -89,9 +89,9 @@ class OutputRowBuilderTest {
         void usesPreSuppressionCounts() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", buildRealisticEvaluation(), "scan-engine", NOW);
-            var lexiconEntry = row.evaluatedLexicons().stream()
-                    .filter(e -> e.id().equals("1")).findFirst().orElseThrow();
-            assertThat(lexiconEntry.regexHitCount()).isEqualTo(2);
+            var lexiconEntry = row.getEvaluatedLexicons().stream()
+                    .filter(e -> e.getId().equals("1")).findFirst().orElseThrow();
+            assertThat(lexiconEntry.getRegexHitCount()).isEqualTo(2);
         }
 
         @Test
@@ -111,15 +111,15 @@ class OutputRowBuilderTest {
             Map<String, List<TermMatchResult>> canned = Map.of("lexicon_market_cond-2", List.of(
                     new TermMatchResult("lexicon_market_cond-2::1", "(?:(?:market|manipulate)", fiveOccurrences)));
 
-            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.featuresToApply(), List.of());
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
             MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-101", groups, scanner);
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", evaluation, "scan-engine", NOW);
 
-            var termDtl = summaryRow.evaluatedLexicons().get(0).termDtls().get(0);
-            assertThat(termDtl.termId()).isEqualTo("lexicon_market_cond-2::1");
-            assertThat(termDtl.regexMatchHitCount()).isEqualTo(5L);
+            var termDtl = summaryRow.getEvaluatedLexicons().get(0).getTermDtls().get(0);
+            assertThat(termDtl.getTermId()).isEqualTo("lexicon_market_cond-2::1");
+            assertThat(termDtl.getRegexMatchHitCount()).isEqualTo(5L);
         }
     }
 
@@ -133,7 +133,7 @@ class OutputRowBuilderTest {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", "partition-1", buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row).isNotNull();
-            assertThat(row.evaluatedLexicons()).hasSize(1); // disclaimer group excluded entirely
+            assertThat(row.getEvaluatedLexicons()).hasSize(1); // disclaimer group excluded entirely
         }
 
         @Test
@@ -141,8 +141,8 @@ class OutputRowBuilderTest {
         void suppressedTermIsGone() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", "partition-1", buildRealisticEvaluation(), "scan-engine", NOW);
-            assertThat(row.evaluatedLexicons().get(0).termDtls()).hasSize(1);
-            assertThat(row.evaluatedLexicons().get(0).termDtls().get(0).termId())
+            assertThat(row.getEvaluatedLexicons().get(0).getTermDtls()).hasSize(1);
+            assertThat(row.getEvaluatedLexicons().get(0).getTermDtls().get(0).getTermId())
                     .isEqualTo("lexicon_market_cond-1::2");
         }
 
@@ -151,7 +151,7 @@ class OutputRowBuilderTest {
         void matchedTextJsonIsCorrect() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", "partition-1", buildRealisticEvaluation(), "scan-engine", NOW);
-            String matchedTextJson = row.evaluatedLexicons().get(0).termDtls().get(0).matchedText();
+            String matchedTextJson = row.getEvaluatedLexicons().get(0).getTermDtls().get(0).getMatchedText();
             assertThat(matchedTextJson).contains("hit_details_hs");
             assertThat(matchedTextJson).contains("\"bomb\"");
             assertThat(matchedTextJson).contains("\"start\":50");
@@ -171,9 +171,9 @@ class OutputRowBuilderTest {
                     "spam-1", List.of(new TermMatchResult("spam-1::1", "spam",
                             List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam"))))));
             MessageEvaluationResult nrEval = DecisionTreeEvaluator.evaluate("msg-102", nrGroups,
-                    r -> nrCanned.getOrDefault(r.featuresToApply(), List.of()));
+                    r -> nrCanned.getOrDefault(r.getFeaturesToApply(), List.of()));
 
-            assertThat(nrEval.shortCircuited()).isTrue(); // sanity check the premise before checking the row builder
+            assertThat(nrEval.isShortCircuited()).isTrue(); // sanity check the premise before checking the row builder
 
             LexiconHitDetailRow nullRow = OutputRowBuilder.buildDetailRow(
                     "msg-102", "proc-1", "pipe-1", "partition-1", nrEval, "scan-engine", NOW);
@@ -191,10 +191,10 @@ class OutputRowBuilderTest {
             FeatureHitSummaryRow row = OutputRowBuilder.buildFeatureHitSummaryRow(
                     "msg-101", "partition-1", "pipe-1", "proc-1", "Lexicon-Tagging",
                     buildRealisticEvaluation(), "scan-engine", NOW);
-            assertThat(row.features()).hasSize(2);
-            var disclaimerFeature = row.features().stream().filter(f -> f.id() == 2L).findFirst().orElseThrow();
-            assertThat(disclaimerFeature.hitStatus()).isTrue();
-            assertThat(disclaimerFeature.subFeatures()).isEmpty(); // single-member group
+            assertThat(row.getFeatures()).hasSize(2);
+            var disclaimerFeature = row.getFeatures().stream().filter(f -> f.getId() == 2L).findFirst().orElseThrow();
+            assertThat(disclaimerFeature.isHitStatus()).isTrue();
+            assertThat(disclaimerFeature.getSubFeatures()).isEmpty(); // single-member group
         }
     }
 }

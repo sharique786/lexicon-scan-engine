@@ -134,7 +134,7 @@ public class ScanEngineJobRunner {
         } catch (Exception e) {
             log.error("Job failed: {}", e.getMessage(), e);
             writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, Instant.now(),
-                    BqColumns.JobStatus.FAILED, "0", e.toString());
+                    BqColumns.JobStatus.FAILED, 0, e.toString());
             throw e;
         }
     }
@@ -219,7 +219,7 @@ public class ScanEngineJobRunner {
                 .distinct().as(Encoders.STRING()).collectAsList();
         Set<String> distinctFeatures = distinctFeatureDefJson.stream()
                 .map(FeatureDefinition::parse)
-                .map(featureDefinition -> featureDefinition.body().feature())
+                .map(featureDefinition -> featureDefinition.getBody().getLexiconName())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, String> featureToZipPath = new HashMap<>();
@@ -295,10 +295,16 @@ public class ScanEngineJobRunner {
         OutputTableWriter.writeFeatureHitSummary(spark, tableConfig, featureHitRows);
 
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        // Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/errorMessage/
+        // executionDate/createdBy/createdTs are populated here — every other field (rule evaluation
+        // details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to stages this
+        // job doesn't run and has no source data for.
         JavaRDD<Row> recordAuditRows = failures.javaRDD().map(result -> OutputTableWriter.toRow(new PipelineRecordAuditRow(
-                runtimeArgs.processId(), runtimeArgs.triggerType(), runtimeArgs.pipelineExecId(),
-                properties.getStageName(), result.messageId(), BqColumns.RecordStatus.FAILED, 1,
-                result.errorMessage(), today, properties.getCreatedBy(), Instant.now())));
+                runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
+                result.messageId(), properties.getStageName(), null, null, null, null, null,
+                BqColumns.RecordStatus.FAILED, 1, result.errorMessage(), null, null, null, null,
+                null, null, null, null, null, null,
+                Instant.now(), properties.getCreatedBy(), null, today, null, null, null, null, null, null)));
         if (!recordAuditRows.isEmpty()) {
             OutputTableWriter.writePipelineRecordAudit(spark, tableConfig, recordAuditRows);
         }
@@ -323,14 +329,24 @@ public class ScanEngineJobRunner {
                 .csv(csvPath);
     }
 
+    /**
+     * @param errorCount INTEGER, per the delivered schema (was STRING in an earlier revision)
+     */
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                                   Instant startTime, Instant endTime, String status,
-                                  String errorCount, String errorMessage) {
+                                  Integer errorCount, String errorMessage) {
+        // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath are null here — neither
+        // RuntimeArgs nor DataprocConfig currently carries Composer DAG or Dataproc script
+        // name/path values. The delivered schema now marks all four NOT NULL (see
+        // PipelineStageAuditRow class Javadoc) — a real BigQuery table enforcing that constraint
+        // would reject this write. Pre-existing gap, not introduced by this change; wiring real
+        // values through is still open.
         PipelineStageAuditRow row = new PipelineStageAuditRow(
-                runtimeArgs.processId(), runtimeArgs.triggerType(), runtimeArgs.pipelineExecId(),
-                properties.getStageName(), null, null, null, null,
-                startTime, endTime, status, errorCount, errorMessage, null,
-                LocalDate.now(ZoneOffset.UTC));
+                runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
+                properties.getStageName(), null, null, null, null, null,
+                startTime, endTime, status, null, null, null, null,
+                errorCount, errorMessage, null, null,
+                LocalDate.now(ZoneOffset.UTC), null, null, null);
         OutputTableWriter.writePipelineStageAudit(spark, tableConfig, row);
     }
 }

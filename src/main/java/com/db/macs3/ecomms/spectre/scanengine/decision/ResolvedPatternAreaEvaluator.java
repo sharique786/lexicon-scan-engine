@@ -74,19 +74,19 @@ final class ResolvedPatternAreaEvaluator {
             return List.of();
         }
         if (tree instanceof ResolvedPatternTree.AndNot andNot) {
-            List<MatchSpan> excludedSpans = findMatchingSpans(andNot.excluded(), areaOriginalText);
+            List<MatchSpan> excludedSpans = findMatchingSpans(andNot.getExcluded(), areaOriginalText);
             if (!excludedSpans.isEmpty()) {
                 return List.of();
             }
-            return findMatchingSpans(andNot.required(), areaOriginalText);
+            return findMatchingSpans(andNot.getRequired(), areaOriginalText);
         }
         return matchesChain((ResolvedPatternTree.Chain) tree, areaOriginalText);
     }
 
     private static List<MatchSpan> matchesChain(ResolvedPatternTree.Chain chain, String areaOriginalText) {
         List<int[]> words = wordSpans(areaOriginalText);
-        List<List<LeafOccurrence>> occurrencesPerLeaf = new ArrayList<>(chain.leaves().size());
-        for (Pattern leaf : chain.leaves()) {
+        List<List<LeafOccurrence>> occurrencesPerLeaf = new ArrayList<>(chain.getLeaves().size());
+        for (Pattern leaf : chain.getLeaves()) {
             List<LeafOccurrence> occurrences = findOccurrences(leaf, areaOriginalText, words);
             if (occurrences.isEmpty()) {
                 return List.of(); // this leaf never appears at all — the whole chain cannot match here
@@ -96,7 +96,7 @@ final class ResolvedPatternAreaEvaluator {
 
         Set<MatchSpan> collected = new LinkedHashSet<>();
         int[] visits = {0};
-        backtrack(occurrencesPerLeaf, chain.operators(), chain.distances(), 0, null,
+        backtrack(occurrencesPerLeaf, chain.getOperators(), chain.getDistances(), 0, null,
                 new LeafOccurrence[occurrencesPerLeaf.size()], areaOriginalText, collected, visits);
         if (visits[0] > MAX_BACKTRACK_VISITS) {
             log.debug("resolved-pattern chain evaluation truncated after {} backtracking visits — "

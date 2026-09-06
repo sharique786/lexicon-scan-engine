@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.match;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -11,11 +12,14 @@ import java.util.Objects;
  * already been translated back to where that text actually sits in the
  * message as it was originally written.
  */
-public final class MatchSpan implements Serializable {
+public class MatchSpan implements Serializable {
 
-    private final int startCharIndex;
-    private final int endCharIndex;
-    private final String matchedText;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private int startCharIndex;
+    private int endCharIndex;
+    private String matchedText;
 
     /**
      * @param startCharIndex    inclusive start offset in the ORIGINAL text
@@ -33,9 +37,12 @@ public final class MatchSpan implements Serializable {
         this.matchedText = matchedText;
     }
 
-    public int startCharIndex() { return startCharIndex; }
-    public int endCharIndex() { return endCharIndex; }
-    public String matchedText() { return matchedText; }
+    public int getStartCharIndex() { return startCharIndex; }
+    public void setStartCharIndex(int startCharIndex) { this.startCharIndex = startCharIndex; }
+    public int getEndCharIndex() { return endCharIndex; }
+    public void setEndCharIndex(int endCharIndex) { this.endCharIndex = endCharIndex; }
+    public String getMatchedText() { return matchedText; }
+    public void setMatchedText(String matchedText) { this.matchedText = matchedText; }
 
     public int length() {
         return endCharIndex - startCharIndex;

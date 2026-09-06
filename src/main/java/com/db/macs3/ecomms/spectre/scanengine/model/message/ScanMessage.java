@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.message;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
@@ -20,18 +21,21 @@ import java.util.Objects;
  * completeness/parity with the source schema but is not itself scanned by
  * this engine.
  */
-public final class ScanMessage implements Serializable {
+public class ScanMessage implements Serializable {
 
-    private final String messageId;
-    private final MessageSource source;
-    private final MessageContent content;
-    private final List<MessageAttachment> attachments;
-    private final MessageProcessing processing;
-    private final String datasetId;
-    private final boolean restricted;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String messageId;
+    private MessageSource source;
+    private MessageContent content;
+    private List<MessageAttachment> attachments;
+    private MessageProcessing processing;
+    private String datasetId;
+    private boolean restricted;
 
     /**
-     * @param messageId    joins to {@code FeatureDecisionRow.messageId}
+     * @param messageId    joins to {@code FeatureDecisionRow.getMessageId}
      * @param source        channel/source-system identification
      * @param content       the message body — header, subject, raw/clean text
      * @param attachments   zero or more attached files' extracted text
@@ -58,15 +62,22 @@ public final class ScanMessage implements Serializable {
         this.restricted = restricted;
     }
 
-    public String messageId() { return messageId; }
-    public MessageSource source() { return source; }
-    public MessageContent content() { return content; }
-    public List<MessageAttachment> attachments() { return attachments; }
-    public MessageProcessing processing() { return processing; }
-    public String datasetId() { return datasetId; }
-    public boolean restricted() { return restricted; }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
+    public MessageSource getSource() { return source; }
+    public void setSource(MessageSource source) { this.source = source; }
+    public MessageContent getContent() { return content; }
+    public void setContent(MessageContent content) { this.content = content; }
+    public List<MessageAttachment> getAttachments() { return attachments; }
+    public void setAttachments(List<MessageAttachment> attachments) { this.attachments = attachments; }
+    public MessageProcessing getProcessing() { return processing; }
+    public void setProcessing(MessageProcessing processing) { this.processing = processing; }
+    public String getDatasetId() { return datasetId; }
+    public void setDatasetId(String datasetId) { this.datasetId = datasetId; }
+    public boolean isRestricted() { return restricted; }
+    public void setRestricted(boolean restricted) { this.restricted = restricted; }
 
-    /** @return {@link #attachments}, or an empty list if the AVRO record had no attachments field/a null one. */
+    /** @return {@link #getAttachments}, or an empty list if the AVRO record had no attachments field/a null one. */
     public List<MessageAttachment> attachmentsOrEmpty() {
         return attachments == null ? List.of() : attachments;
     }

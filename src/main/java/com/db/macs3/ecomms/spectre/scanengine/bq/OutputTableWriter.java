@@ -65,14 +65,14 @@ public final class OutputTableWriter {
     });
 
     public static Row toRow(LexiconHitSummaryRow summaryRow) {
-        List<Row> lexicons = summaryRow.evaluatedLexicons().stream().map(lexicon -> RowFactory.create(
-                lexicon.id(), lexicon.name(), lexicon.totalTermsCount(), lexicon.regexHitCount(),
-                lexicon.termDtls().stream().map(termDtl -> RowFactory.create(
-                        termDtl.termId(), termDtl.termRegexPattern(), termDtl.regexMatchHitCount()))
+        List<Row> lexicons = summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
+                lexicon.getId(), lexicon.getName(), lexicon.getTotalTermsCount(), lexicon.getRegexHitCount(),
+                lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                        termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount()))
                         .collect(Collectors.toList())
         )).collect(Collectors.toList());
-        return RowFactory.create(summaryRow.messageId(), summaryRow.processId(), summaryRow.pipelineExecId(),
-                lexicons, summaryRow.createdBy(), Timestamp.from(summaryRow.createdTs()));
+        return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),
+                lexicons, summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
     }
 
     public static void writeLexiconHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
@@ -103,12 +103,12 @@ public final class OutputTableWriter {
     });
 
     public static Row toRow(LexiconHitDetailRow detailRow) {
-        List<Row> lexicons = detailRow.evaluatedLexicons().stream().map(lexicon -> RowFactory.create(
-                lexicon.id(), lexicon.termDtls().stream().map(termDtl -> RowFactory.create(
-                        termDtl.termId(), termDtl.matchedText())).collect(Collectors.toList())
+        List<Row> lexicons = detailRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
+                lexicon.getId(), lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                        termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList())
         )).collect(Collectors.toList());
-        return RowFactory.create(detailRow.messageId(), detailRow.processId(), detailRow.pipelineExecId(),
-                detailRow.datasetPartitionValue(), lexicons, detailRow.createdBy(), Timestamp.from(detailRow.createdTs()));
+        return RowFactory.create(detailRow.getMessageId(), detailRow.getProcessId(), detailRow.getPipelineExecId(),
+                detailRow.getDatasetPartitionValue(), lexicons, detailRow.getCreatedBy(), Timestamp.from(detailRow.getCreatedTs()));
     }
 
     public static void writeLexiconHitDetail(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows, boolean restricted) {
@@ -145,14 +145,14 @@ public final class OutputTableWriter {
     });
 
     public static Row toRow(FeatureHitSummaryRow summaryRow) {
-        List<Row> features = summaryRow.features().stream().map(feature -> RowFactory.create(
-                feature.id(), feature.name(), feature.type(), feature.isNoiseReduction(), feature.hitStatus(),
-                feature.subFeatures().stream().map(subFeature -> RowFactory.create(
-                        subFeature.type(), subFeature.name(), subFeature.hitStatus())).collect(Collectors.toList())
+        List<Row> features = summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
+                feature.getId(), feature.getName(), feature.getType(), feature.isNoiseReduction(), feature.isHitStatus(),
+                feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
+                        subFeature.getType(), subFeature.getName(), subFeature.isHitStatus())).collect(Collectors.toList())
         )).collect(Collectors.toList());
-        return RowFactory.create(summaryRow.messageId(), summaryRow.datasetPartitionValue(), summaryRow.pipelineExecId(),
-                summaryRow.processId(), summaryRow.featureHitType(), features, summaryRow.createdBy(),
-                Timestamp.from(summaryRow.createdTs()));
+        return RowFactory.create(summaryRow.getMessageId(), summaryRow.getDatasetPartitionValue(), summaryRow.getPipelineExecId(),
+                summaryRow.getProcessId(), summaryRow.getFeatureHitType(), features, summaryRow.getCreatedBy(),
+                Timestamp.from(summaryRow.getCreatedTs()));
     }
 
     public static void writeFeatureHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
@@ -162,31 +162,57 @@ public final class OutputTableWriter {
 
     // ── pipeline_stage_audit ─────────────────────────────────────────────────
 
+    private static final StructType MODEL_CONFIG_DTLS_TYPE = DataTypes.createStructType(new StructField[]{
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.ModelConfigDtls.MODEL_NAME, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.ModelConfigDtls.TEMPRATURE, DataTypes.FloatType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.ModelConfigDtls.TOP_P, DataTypes.FloatType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.ModelConfigDtls.THINKING_BUDGET, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.ModelConfigDtls.MAX_OUTPUT_TOKEN, DataTypes.IntegerType, true),
+    });
+
     public static final StructType PIPELINE_STAGE_AUDIT_SCHEMA = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.PipelineStageAudit.PROCESS_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.TRIGGER_TYPE, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.EVAL_TEST_ID, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.PIPELINE_EXEC_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.STAGE_NAME, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.COMPOSER_DAG_NAME, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.COMPOSER_DAG_PATH, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.DPROC_DAG_NAME, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.DPROC_DAG_PATH, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.START_TIME, DataTypes.TimestampType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.COMPOSER_DAG_NAME, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.COMPOSER_DAG_PATH, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.DPROC_SCRIPT_NAME, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.DPROC_SCRIPT_PATH, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.MODEL_CONFIG_DTLS, MODEL_CONFIG_DTLS_TYPE, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.START_TIME, DataTypes.TimestampType, false),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.END_TIME, DataTypes.TimestampType, true),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.JOB_STATUS, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.PipelineStageAudit.ERROR_COUNT, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.JOB_STATUS, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.INPUT_FILE_COUNT, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.OUTPUT_FILE_COUNT, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.INPUT_RECORD_COUNT, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.OUTPUT_RECORD_COUNT, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.ERROR_COUNT, DataTypes.IntegerType, true),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.ERROR_MESSAGE, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.ADDITIONAL_INFO, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.LOG_PATH, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.EXECUTION_DATE, DataTypes.DateType, false),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.RERUN_FLG, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.RERUN_TYPE, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineStageAudit.RERUN_PROCESS_ID, DataTypes.StringType, true),
     });
 
     public static Row toRow(PipelineStageAuditRow auditRow) {
-        return RowFactory.create(auditRow.processId(), auditRow.triggerType(), auditRow.pipelineExecId(), auditRow.stageName(),
-                auditRow.composerDagName(), auditRow.composerDagPath(), auditRow.dprocDagName(), auditRow.dprocDagPath(),
-                auditRow.startTime() == null ? null : Timestamp.from(auditRow.startTime()),
-                auditRow.endTime() == null ? null : Timestamp.from(auditRow.endTime()),
-                auditRow.jobStatus(), auditRow.errorCount(), auditRow.errorMessage(), auditRow.additionalInfo(),
-                java.sql.Date.valueOf(auditRow.executionDate()));
+        ModelConfigDtls modelConfig = auditRow.getModelConfigDtls();
+        Row modelConfigRow = modelConfig == null ? null : RowFactory.create(
+                modelConfig.getModelName(), modelConfig.getTemprature(), modelConfig.getTopP(),
+                modelConfig.getThinkingBudget(), modelConfig.getMaxOutputToken());
+        return RowFactory.create(auditRow.getProcessId(), auditRow.getTriggerType(), auditRow.getEvalTestId(),
+                auditRow.getPipelineExecId(), auditRow.getStageName(), auditRow.getComposerDagName(), auditRow.getComposerDagPath(),
+                auditRow.getDprocScriptName(), auditRow.getDprocScriptPath(), modelConfigRow,
+                auditRow.getStartTime() == null ? null : Timestamp.from(auditRow.getStartTime()),
+                auditRow.getEndTime() == null ? null : Timestamp.from(auditRow.getEndTime()),
+                auditRow.getJobStatus(), auditRow.getInputFileCount(), auditRow.getOutputFileCount(),
+                auditRow.getInputRecordCount(), auditRow.getOutputRecordCount(), auditRow.getErrorCount(),
+                auditRow.getErrorMessage(), auditRow.getAdditionalInfo(), auditRow.getLogPath(),
+                java.sql.Date.valueOf(auditRow.getExecutionDate()), auditRow.getRerunFlg(), auditRow.getRerunType(),
+                auditRow.getRerunProcessId());
     }
 
     public static void writePipelineStageAudit(SparkSession spark, BqTableConfig config, PipelineStageAuditRow row) {
@@ -199,24 +225,78 @@ public final class OutputTableWriter {
 
     // ── pipeline_record_audit ────────────────────────────────────────────────
 
+    private static final StructType RULE_DTL_TYPE = DataTypes.createStructType(new StructField[]{
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RuleDtl.RULE_ID, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RuleDtl.RULE_NAME, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RuleDtl.RULE_VERSION, DataTypes.IntegerType, true),
+    });
+
     public static final StructType PIPELINE_RECORD_AUDIT_SCHEMA = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.PROCESS_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.TRIGGER_TYPE, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.EVAL_TEST_ID, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.PIPELINE_EXEC_ID, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.PipelineRecordAudit.STAGE_NAME, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.RECORD_ID, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.STAGE_NAME, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.MSG_INPUT_FILE_NM, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.MSG_INPUT_FILE_PATH, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.MSG_OUTPUT_FILE_PATH, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.MSG_OUTPUT_FILE_TYPE, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.MSG_OUTPUT_FILE_NM, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.STATUS, DataTypes.StringType, false),
-            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RETURN_CODE, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RETURN_CODE, DataTypes.IntegerType, false),
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.ERROR_MESSAGE, DataTypes.StringType, true),
-            DataTypes.createStructField(BqColumns.PipelineRecordAudit.EXECUTION_DATE, DataTypes.DateType, false),
-            DataTypes.createStructField(BqColumns.PipelineRecordAudit.CREATED_BY, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.EVALUATED_RULES_DTLS,
+                    DataTypes.createArrayType(RULE_DTL_TYPE), true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.EVALUATED_RULES_CNT, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.DETECTED_RULES_DTLS,
+                    DataTypes.createArrayType(RULE_DTL_TYPE), true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.DETECTED_RULES_CNT, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.SYS_PROMPT_EVAL_RULES_TOKENS, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.INPUT_TOKENS, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.OUTPUT_TOKENS, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.THINKING_TOKENS, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.CACHED_TOKENS, DataTypes.IntegerType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.MSG_ATTACH_TEXT_TOKENS, DataTypes.IntegerType, true),
             DataTypes.createStructField(BqColumns.PipelineRecordAudit.CREATED_TS, DataTypes.TimestampType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.CREATED_BY, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.ADDITION_INFO, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.EXECUTION_DATE, DataTypes.DateType, false),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.SENT_DATE, DataTypes.TimestampType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RUN_DATE, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.SOURCE_NAME, DataTypes.StringType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.GEMINI_REQUEST_START_TIME, DataTypes.TimestampType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.GEMINI_REQUEST_END_TIME, DataTypes.TimestampType, true),
+            DataTypes.createStructField(BqColumns.PipelineRecordAudit.RERUN_PROCESS_ID, DataTypes.StringType, true),
     });
 
+    private static List<Row> toRuleDtlRows(List<RuleDtlType> ruleDtls) {
+        if (ruleDtls == null) {
+            return null;
+        }
+        // Row order follows the SCHEMA's struct field order (rule_id, rule_name, rule_version),
+        // which does not match RuleDtlType's own constructor-argument order — see that class's Javadoc.
+        return ruleDtls.stream()
+                .map(ruleDtl -> RowFactory.create(ruleDtl.getRuleId(), ruleDtl.getRuleName(), ruleDtl.getRuleVersion()))
+                .collect(Collectors.toList());
+    }
+
     public static Row toRow(PipelineRecordAuditRow auditRow) {
-        return RowFactory.create(auditRow.processId(), auditRow.triggerType(), auditRow.pipelineExecId(), auditRow.stageName(),
-                auditRow.recordId(), auditRow.status(), auditRow.returnCode(), auditRow.errorMessage(),
-                java.sql.Date.valueOf(auditRow.executionDate()), auditRow.createdBy(), Timestamp.from(auditRow.createdTs()));
+        return RowFactory.create(auditRow.getProcessId(), auditRow.getTriggerType(), auditRow.getEvalTestId(),
+                auditRow.getPipelineExecId(), auditRow.getRecordId(), auditRow.getStageName(), auditRow.getMsgInputFileNm(),
+                auditRow.getMsgInputFilePath(), auditRow.getMsgOutputFilePath(), auditRow.getMsgOutputFileType(),
+                auditRow.getMsgOutputFileNm(), auditRow.getStatus(), auditRow.getReturnCode(), auditRow.getErrorMessage(),
+                toRuleDtlRows(auditRow.getEvaluatedRulesDtls()), auditRow.getEvaluatedRulesCnt(),
+                toRuleDtlRows(auditRow.getDetectedRulesDtls()), auditRow.getDetectedRulesCnt(),
+                auditRow.getSysPromptEvalRulesTokens(), auditRow.getInputTokens(), auditRow.getOutputTokens(),
+                auditRow.getThinkingTokens(), auditRow.getCachedTokens(), auditRow.getMsgMatchTextTokens(),
+                Timestamp.from(auditRow.getCreatedTs()), auditRow.getCreatedBy(), auditRow.getAdditionInfo(),
+                java.sql.Date.valueOf(auditRow.getExecutionDate()),
+                auditRow.getSentDate() == null ? null : Timestamp.from(auditRow.getSentDate()),
+                auditRow.getRunDate(), auditRow.getSourceName(),
+                auditRow.getGeminiRequestStartTime() == null ? null : Timestamp.from(auditRow.getGeminiRequestStartTime()),
+                auditRow.getGeminiRequestEndTime() == null ? null : Timestamp.from(auditRow.getGeminiRequestEndTime()),
+                auditRow.getRerunProcessId());
     }
 
     public static void writePipelineRecordAudit(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {

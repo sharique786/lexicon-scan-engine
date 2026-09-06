@@ -89,7 +89,7 @@ public final class HyperscanPathResolver {
 
     /**
      * @param basePath    from {@link #resolveBasePath} — must end with {@code /}
-     * @param feature      {@code feature_definition.body.feature}, verbatim
+     * @param feature      {@code feature_definition.body.lexiconName}, verbatim
      * @return the full zip bundle path for {@code feature} — see class Javadoc
      */
     public static String buildZipPath(String basePath, String feature) {

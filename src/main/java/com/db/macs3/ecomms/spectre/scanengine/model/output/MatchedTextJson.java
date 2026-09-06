@@ -3,6 +3,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.output;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
@@ -19,14 +20,24 @@ import java.util.Objects;
  * }]}
  * </pre>
  *
- * <p>{@link HitDetail#subject} is a LIST — a term can match more than once
+ * <p>{@link HitDetail#getSubject} is a LIST — a term can match more than once
  * within a subject line just as it can within the message body — empty when
  * there is no subject match, one entry per occurrence otherwise, the same
  * shape as {@code msg_text}/{@code att_text}.
+ *
+ * <p>Every getter here still carries an explicit {@code @JsonProperty} even
+ * though the {@code getXxx}/snake_case pairing would mostly auto-resolve —
+ * this class is the ONLY one in this project actually round-tripped through
+ * Jackson serialization (every sibling model class is only ever read
+ * field-by-field by {@code OutputTableWriter}), so the JSON key mapping is
+ * pinned explicitly rather than left to convention.
  */
-public final class MatchedTextJson implements Serializable {
+public class MatchedTextJson implements Serializable {
 
-    private final List<HitDetail> hitDetailsHs;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private List<HitDetail> hitDetailsHs;
 
     @JsonCreator
     public MatchedTextJson(@JsonProperty("hit_details_hs") List<HitDetail> hitDetailsHs) {
@@ -34,7 +45,8 @@ public final class MatchedTextJson implements Serializable {
     }
 
     @JsonProperty("hit_details_hs")
-    public List<HitDetail> hitDetailsHs() { return hitDetailsHs; }
+    public List<HitDetail> getHitDetailsHs() { return hitDetailsHs; }
+    public void setHitDetailsHs(List<HitDetail> hitDetailsHs) { this.hitDetailsHs = hitDetailsHs; }
 
     @Override
     public boolean equals(Object o) {
@@ -57,12 +69,15 @@ public final class MatchedTextJson implements Serializable {
         return "MatchedTextJson[hitDetailsHs=" + hitDetailsHs + "]";
     }
 
-    public static final class HitDetail implements Serializable {
+    public static class HitDetail implements Serializable {
 
-        private final String messageId;
-        private final List<TextHit> msgText;
-        private final List<TextHit> subject;
-        private final List<AttachmentTextHit> attachmentText;
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private String messageId;
+        private List<TextHit> msgText;
+        private List<TextHit> subject;
+        private List<AttachmentTextHit> attachmentText;
 
         @JsonCreator
         public HitDetail(@JsonProperty("message_id") String messageId,
@@ -76,13 +91,17 @@ public final class MatchedTextJson implements Serializable {
         }
 
         @JsonProperty("message_id")
-        public String messageId() { return messageId; }
+        public String getMessageId() { return messageId; }
+        public void setMessageId(String messageId) { this.messageId = messageId; }
         @JsonProperty("msg_text")
-        public List<TextHit> msgText() { return msgText; }
+        public List<TextHit> getMsgText() { return msgText; }
+        public void setMsgText(List<TextHit> msgText) { this.msgText = msgText; }
         @JsonProperty("subject")
-        public List<TextHit> subject() { return subject; }
+        public List<TextHit> getSubject() { return subject; }
+        public void setSubject(List<TextHit> subject) { this.subject = subject; }
         @JsonProperty("attachment_text")
-        public List<AttachmentTextHit> attachmentText() { return attachmentText; }
+        public List<AttachmentTextHit> getAttachmentText() { return attachmentText; }
+        public void setAttachmentText(List<AttachmentTextHit> attachmentText) { this.attachmentText = attachmentText; }
 
         @Override
         public boolean equals(Object o) {
@@ -111,11 +130,14 @@ public final class MatchedTextJson implements Serializable {
         }
     }
 
-    public static final class TextHit implements Serializable {
+    public static class TextHit implements Serializable {
 
-        private final String text;
-        private final int start;
-        private final int length;
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private String text;
+        private int start;
+        private int length;
 
         /**
          * @param text      the matched text (stripped-text form — see {@code HtmlStrippingService})
@@ -132,11 +154,14 @@ public final class MatchedTextJson implements Serializable {
         }
 
         @JsonProperty("text")
-        public String text() { return text; }
+        public String getText() { return text; }
+        public void setText(String text) { this.text = text; }
         @JsonProperty("start")
-        public int start() { return start; }
+        public int getStart() { return start; }
+        public void setStart(int start) { this.start = start; }
         @JsonProperty("length")
-        public int length() { return length; }
+        public int getLength() { return length; }
+        public void setLength(int length) { this.length = length; }
 
         @Override
         public boolean equals(Object o) {
@@ -161,10 +186,13 @@ public final class MatchedTextJson implements Serializable {
         }
     }
 
-    public static final class AttachmentTextHit implements Serializable {
+    public static class AttachmentTextHit implements Serializable {
 
-        private final String attachmentId;
-        private final List<TextHit> attText;
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private String attachmentId;
+        private List<TextHit> attText;
 
         @JsonCreator
         public AttachmentTextHit(@JsonProperty("attachment_id") String attachmentId,
@@ -174,9 +202,11 @@ public final class MatchedTextJson implements Serializable {
         }
 
         @JsonProperty("attachment_id")
-        public String attachmentId() { return attachmentId; }
+        public String getAttachmentId() { return attachmentId; }
+        public void setAttachmentId(String attachmentId) { this.attachmentId = attachmentId; }
         @JsonProperty("att_text")
-        public List<TextHit> attText() { return attText; }
+        public List<TextHit> getAttText() { return attText; }
+        public void setAttText(List<TextHit> attText) { this.attText = attText; }
 
         @Override
         public boolean equals(Object o) {

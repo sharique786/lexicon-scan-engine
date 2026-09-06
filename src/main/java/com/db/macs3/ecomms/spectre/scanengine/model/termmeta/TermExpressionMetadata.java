@@ -6,12 +6,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -78,16 +80,23 @@ import java.util.regex.Pattern;
  * Compile Service gave no id list for) is NOT reachable this way;
  * {@link #mandatoryPerAreaTerms()} is the only way to discover it.
  *
- * <p>Immutable and safe to cache/share across every message a Spark
- * partition processes for one feature.
+ * <p>Safe to cache/share across every message a Spark partition processes
+ * for one feature, PROVIDED nothing mutates a shared instance after
+ * publishing it to other threads — this class and {@link TermEntry} are
+ * mutable POJOs (setters included), not immutable records; callers must not
+ * call a setter on an instance already handed to {@code HyperscanBundleLoader}'s
+ * cache.
  */
-public final class TermExpressionMetadata implements Serializable {
+public class TermExpressionMetadata implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final String COMPILATION_STATUS_PASS = "PASS";
 
-    private final String feature;
-    private final Map<Integer, TermEntry> byExpressionId;
-    private final Map<Integer, TermEntry> byTermNumber;
+    private String feature;
+    private Map<Integer, TermEntry> byExpressionId;
+    private Map<Integer, TermEntry> byTermNumber;
 
     private TermExpressionMetadata(String feature, Map<Integer, TermEntry> byExpressionId,
                                     Map<Integer, TermEntry> byTermNumber) {
@@ -117,9 +126,29 @@ public final class TermExpressionMetadata implements Serializable {
         return result;
     }
 
-    /** @return the feature these terms belong to (verbatim {@code body.feature}). */
-    public String feature() {
+    /** @return the feature these terms belong to (verbatim {@code body.lexiconName}). */
+    public String getFeature() {
         return feature;
+    }
+
+    public void setFeature(String feature) {
+        this.feature = feature;
+    }
+
+    public Map<Integer, TermEntry> getByExpressionId() {
+        return byExpressionId;
+    }
+
+    public void setByExpressionId(Map<Integer, TermEntry> byExpressionId) {
+        this.byExpressionId = byExpressionId;
+    }
+
+    public Map<Integer, TermEntry> getByTermNumber() {
+        return byTermNumber;
+    }
+
+    public void setByTermNumber(Map<Integer, TermEntry> byTermNumber) {
+        this.byTermNumber = byTermNumber;
     }
 
     /** @return how many distinct terms this feature's metadata describes. */
@@ -130,48 +159,77 @@ public final class TermExpressionMetadata implements Serializable {
     /**
      * One term's expression-id shape, resolved from a
      * {@code TermCompilationResult} JSON entry.
-     *
-     * @param termNumber             parsed from {@code termId}'s {@code ::<n>} suffix —
-     *                               what {@code TermIdBuilder.build(feature, termNumber)} needs
-     *                               to build the correct {@code term_id} string, regardless of
-     *                               which raw expression id actually matched
-     * @param termRegexPattern       the term's pattern text for display — the verbatim
-     *                               {@code resolvedPatterns} string when present (preserves the
-     *                               NEAR/FOLLOWEDBY operator and distance for analyst readability),
-     *                               else the required side's pattern text joined for display
-     * @param requiresExclusionCheck true for AND NOT terms
-     * @param requiredExpressionIds  every expression id belonging to this term's required side, when
-     *                               any exist. Always populated for a term without a
-     *                               {@code resolvedPatternTree} — exactly one entry for a
-     *                               simple/purely-decomposed term (that one entry IS the term's own
-     *                               reportable id), one entry per required pattern for a plain AND
-     *                               NOT term. May be null for a term WITH a
-     *                               {@code resolvedPatternTree} whose AND NOT shape the Compile
-     *                               Service gave no id list for — see {@link #hasCoarseExpressionId()}
-     *                               and {@link #mandatoryPerAreaTerms()}
-     * @param excludedExpressionIds  every expression id belonging to this term's excluded side.
-     *                               Null/empty unless {@code requiresExclusionCheck}.
-     * @param resolvedPatternTree    non-null iff this term's JSON entry carried a non-blank
-     *                               {@code resolvedPatterns} — see class Javadoc. When non-null,
-     *                               {@code FeatureScanOrchestrator} must evaluate this term PER
-     *                               SCANNED AREA independently against that area's real original
-     *                               text, never merged across areas — word-distance across two
-     *                               different texts is meaningless.
      */
-    public record TermEntry(
-            int termNumber,
-            String termRegexPattern,
-            boolean requiresExclusionCheck,
-            List<Integer> requiredExpressionIds,
-            List<Integer> excludedExpressionIds,
-            ResolvedPatternTree resolvedPatternTree
-    ) {
+    public static class TermEntry implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private int termNumber;
+        private String termRegexPattern;
+        private boolean requiresExclusionCheck;
+        private List<Integer> requiredExpressionIds;
+        private List<Integer> excludedExpressionIds;
+        private ResolvedPatternTree resolvedPatternTree;
+
+        /**
+         * @param termNumber             parsed from {@code termId}'s {@code ::<n>} suffix —
+         *                               what {@code TermIdBuilder.build(feature, termNumber)} needs
+         *                               to build the correct {@code term_id} string, regardless of
+         *                               which raw expression id actually matched
+         * @param termRegexPattern       the term's pattern text for display — the verbatim
+         *                               {@code resolvedPatterns} string when present (preserves the
+         *                               NEAR/FOLLOWEDBY operator and distance for analyst readability),
+         *                               else the required side's pattern text joined for display
+         * @param requiresExclusionCheck true for AND NOT terms
+         * @param requiredExpressionIds  every expression id belonging to this term's required side, when
+         *                               any exist. Always populated for a term without a
+         *                               {@code resolvedPatternTree} — exactly one entry for a
+         *                               simple/purely-decomposed term (that one entry IS the term's own
+         *                               reportable id), one entry per required pattern for a plain AND
+         *                               NOT term. May be null for a term WITH a
+         *                               {@code resolvedPatternTree} whose AND NOT shape the Compile
+         *                               Service gave no id list for — see {@link #hasCoarseExpressionId()}
+         *                               and {@link TermExpressionMetadata#mandatoryPerAreaTerms()}
+         * @param excludedExpressionIds  every expression id belonging to this term's excluded side.
+         *                               Null/empty unless {@code requiresExclusionCheck}.
+         * @param resolvedPatternTree    non-null iff this term's JSON entry carried a non-blank
+         *                               {@code resolvedPatterns} — see class Javadoc. When non-null,
+         *                               {@code FeatureScanOrchestrator} must evaluate this term PER
+         *                               SCANNED AREA independently against that area's real original
+         *                               text, never merged across areas — word-distance across two
+         *                               different texts is meaningless.
+         */
+        public TermEntry(int termNumber, String termRegexPattern, boolean requiresExclusionCheck,
+                          List<Integer> requiredExpressionIds, List<Integer> excludedExpressionIds,
+                          ResolvedPatternTree resolvedPatternTree) {
+            this.termNumber = termNumber;
+            this.termRegexPattern = termRegexPattern;
+            this.requiresExclusionCheck = requiresExclusionCheck;
+            this.requiredExpressionIds = requiredExpressionIds;
+            this.excludedExpressionIds = excludedExpressionIds;
+            this.resolvedPatternTree = resolvedPatternTree;
+        }
+
+        public int getTermNumber() { return termNumber; }
+        public void setTermNumber(int termNumber) { this.termNumber = termNumber; }
+        public String getTermRegexPattern() { return termRegexPattern; }
+        public void setTermRegexPattern(String termRegexPattern) { this.termRegexPattern = termRegexPattern; }
+        public boolean isRequiresExclusionCheck() { return requiresExclusionCheck; }
+        public void setRequiresExclusionCheck(boolean requiresExclusionCheck) { this.requiresExclusionCheck = requiresExclusionCheck; }
+        public List<Integer> getRequiredExpressionIds() { return requiredExpressionIds; }
+        public void setRequiredExpressionIds(List<Integer> requiredExpressionIds) { this.requiredExpressionIds = requiredExpressionIds; }
+        public List<Integer> getExcludedExpressionIds() { return excludedExpressionIds; }
+        public void setExcludedExpressionIds(List<Integer> excludedExpressionIds) { this.excludedExpressionIds = excludedExpressionIds; }
+        public ResolvedPatternTree getResolvedPatternTree() { return resolvedPatternTree; }
+        public void setResolvedPatternTree(ResolvedPatternTree resolvedPatternTree) { this.resolvedPatternTree = resolvedPatternTree; }
+
         /**
          * @return true when this term uses the native Hyperscan COMBINATION
          *         mechanism directly — pure decomposition, no AND NOT — meaning
-         *         its {@link #requiredExpressionIds} has exactly one entry that IS
+         *         its {@link #getRequiredExpressionIds} has exactly one entry that IS
          *         the term's own reportable id, no further boolean evaluation needed.
-         *         Always false for a term with a {@link #resolvedPatternTree} — such
+         *         Always false for a term with a {@link #getResolvedPatternTree} — such
          *         a term always needs {@code ResolvedPatternAreaEvaluator} verification,
          *         even a Chain-shaped (non-AND-NOT) one, since its coarse COMBINATION id
          *         alone cannot confirm the actual proximity distance/order.
@@ -185,9 +243,41 @@ public final class TermExpressionMetadata implements Serializable {
             return resolvedPatternTree != null;
         }
 
-        /** @return true iff {@link #requiredExpressionIds} gives a usable coarse pre-filter id set. */
+        /** @return true iff {@link #getRequiredExpressionIds} gives a usable coarse pre-filter id set. */
         public boolean hasCoarseExpressionId() {
             return requiredExpressionIds != null && !requiredExpressionIds.isEmpty();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof TermEntry)) {
+                return false;
+            }
+            TermEntry other = (TermEntry) o;
+            return termNumber == other.termNumber
+                    && requiresExclusionCheck == other.requiresExclusionCheck
+                    && Objects.equals(termRegexPattern, other.termRegexPattern)
+                    && Objects.equals(requiredExpressionIds, other.requiredExpressionIds)
+                    && Objects.equals(excludedExpressionIds, other.excludedExpressionIds)
+                    && Objects.equals(resolvedPatternTree, other.resolvedPatternTree);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(termNumber, termRegexPattern, requiresExclusionCheck, requiredExpressionIds,
+                    excludedExpressionIds, resolvedPatternTree);
+        }
+
+        @Override
+        public String toString() {
+            return "TermEntry[termNumber=" + termNumber + ", termRegexPattern=" + termRegexPattern
+                    + ", requiresExclusionCheck=" + requiresExclusionCheck
+                    + ", requiredExpressionIds=" + requiredExpressionIds
+                    + ", excludedExpressionIds=" + excludedExpressionIds
+                    + ", resolvedPatternTree=" + resolvedPatternTree + "]";
         }
     }
 
@@ -223,9 +313,9 @@ public final class TermExpressionMetadata implements Serializable {
 
         Map<Integer, TermEntry> byExpressionId = new HashMap<>();
         Map<Integer, TermEntry> byTermNumber = new HashMap<>();
-        if (parsed.results() != null) {
-            for (TermResultJson termResult : parsed.results()) {
-                if (COMPILATION_STATUS_PASS.equalsIgnoreCase(termResult.compilationStatus())) {
+        if (parsed.getResults() != null) {
+            for (TermResultJson termResult : parsed.getResults()) {
+                if (COMPILATION_STATUS_PASS.equalsIgnoreCase(termResult.getCompilationStatus())) {
                     TermEntry entry = buildTermEntry(feature, termResult);
                     indexTermEntry(feature, entry, byExpressionId, byTermNumber);
                 }
@@ -236,28 +326,44 @@ public final class TermExpressionMetadata implements Serializable {
     }
 
     private static TermEntry buildTermEntry(String feature, TermResultJson termResult) {
-        int termNumber = parseTermNumber(feature, termResult.termId());
+        int termNumber = parseTermNumber(feature, termResult.getTermId());
         List<String> leaves = patternLeaves(termResult);
-        boolean requiresExclusion = Boolean.TRUE.equals(termResult.requiresExclusionCheck());
+        boolean requiresExclusion = Boolean.TRUE.equals(termResult.getRequiresExclusionCheck());
 
         ResolvedPatternTree tree = null;
-        if (termResult.resolvedPatterns() != null && !termResult.resolvedPatterns().isBlank()) {
-            List<String> treeLeaves = withExclusionLeaves(leaves, termResult.exclusionRegex());
-            tree = ResolvedPatternTree.build(feature, termResult.termId(), termResult.resolvedPatterns(), treeLeaves);
+        if (termResult.getResolvedPatterns() != null && !termResult.getResolvedPatterns().isBlank()) {
+            List<String> treeLeaves = withExclusionLeaves(leaves, termResult.getExclusionRegex());
+            tree = ResolvedPatternTree.build(feature, termResult.getTermId(), termResult.getResolvedPatterns(), treeLeaves);
             validateShapeAgreement(feature, termResult, tree, requiresExclusion);
         }
 
         String termRegexPattern = tree != null
-                ? termResult.resolvedPatterns()
+                ? termResult.getResolvedPatterns()
                 : (leaves == null ? null : String.join(" & ", leaves));
 
         RequiredExcludedIds ids = resolveIds(feature, termResult, termNumber, tree);
 
         return new TermEntry(
-                termNumber, termRegexPattern, requiresExclusion, ids.required(), ids.excluded(), tree);
+                termNumber, termRegexPattern, requiresExclusion, ids.getRequired(), ids.getExcluded(), tree);
     }
 
-    private record RequiredExcludedIds(List<Integer> required, List<Integer> excluded) {
+    private static class RequiredExcludedIds implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private List<Integer> required;
+        private List<Integer> excluded;
+
+        RequiredExcludedIds(List<Integer> required, List<Integer> excluded) {
+            this.required = required;
+            this.excluded = excluded;
+        }
+
+        List<Integer> getRequired() { return required; }
+        void setRequired(List<Integer> required) { this.required = required; }
+        List<Integer> getExcluded() { return excluded; }
+        void setExcluded(List<Integer> excluded) { this.excluded = excluded; }
     }
 
     /**
@@ -271,23 +377,23 @@ public final class TermExpressionMetadata implements Serializable {
     private static RequiredExcludedIds resolveIds(String feature, TermResultJson termResult, int termNumber,
                                                     ResolvedPatternTree tree) {
         if (tree instanceof ResolvedPatternTree.AndNot) {
-            return new RequiredExcludedIds(termResult.requiredExpressionIds(), termResult.excludedExpressionIds());
+            return new RequiredExcludedIds(termResult.getRequiredExpressionIds(), termResult.getExcludedExpressionIds());
         }
         List<Integer> requiredIds = resolveRequiredIds(feature, termResult, termNumber);
-        List<Integer> excludedIds = tree instanceof ResolvedPatternTree.Chain ? null : termResult.excludedExpressionIds();
+        List<Integer> excludedIds = tree instanceof ResolvedPatternTree.Chain ? null : termResult.getExcludedExpressionIds();
         return new RequiredExcludedIds(requiredIds, excludedIds);
     }
 
     private static void indexTermEntry(String feature, TermEntry entry,
                                         Map<Integer, TermEntry> byExpressionId, Map<Integer, TermEntry> byTermNumber) {
-        putUnique(byTermNumber, feature, entry.termNumber(), entry);
-        if (entry.requiredExpressionIds() != null) {
-            for (int expressionId : entry.requiredExpressionIds()) {
+        putUnique(byTermNumber, feature, entry.getTermNumber(), entry);
+        if (entry.getRequiredExpressionIds() != null) {
+            for (int expressionId : entry.getRequiredExpressionIds()) {
                 putUniqueExpressionId(byExpressionId, feature, expressionId, entry);
             }
         }
-        if (entry.excludedExpressionIds() != null) {
-            for (int expressionId : entry.excludedExpressionIds()) {
+        if (entry.getExcludedExpressionIds() != null) {
+            for (int expressionId : entry.getExcludedExpressionIds()) {
                 putUniqueExpressionId(byExpressionId, feature, expressionId, entry);
             }
         }
@@ -295,7 +401,7 @@ public final class TermExpressionMetadata implements Serializable {
 
     /** {@code regexPattern} (new schema) if present, else {@code translatedPattern} (old schema). */
     private static List<String> patternLeaves(TermResultJson termResult) {
-        return termResult.regexPattern() != null ? termResult.regexPattern() : termResult.translatedPattern();
+        return termResult.getRegexPattern() != null ? termResult.getRegexPattern() : termResult.getTranslatedPattern();
     }
 
     /**
@@ -333,7 +439,7 @@ public final class TermExpressionMetadata implements Serializable {
         boolean isAndNotShape = tree instanceof ResolvedPatternTree.AndNot;
         if (requiresExclusion != isAndNotShape) {
             throw new TermMetadataParseException(
-                    "Term '" + termResult.termId() + "' in feature '" + feature + "': requiresExclusionCheck="
+                    "Term '" + termResult.getTermId() + "' in feature '" + feature + "': requiresExclusionCheck="
                     + requiresExclusion + " does not agree with resolvedPatterns' shape ("
                     + (isAndNotShape ? "AND NOT" : "plain chain") + ") — malformed compile-results JSON.");
         }
@@ -361,11 +467,11 @@ public final class TermExpressionMetadata implements Serializable {
      * this term's own ids rather than rejected outright.
      */
     private static void validateAndNotShapeHasNoNativeCombination(String feature, TermResultJson termResult) {
-        if (termResult.hyperscanExpressionId() != null) {
+        if (termResult.getHyperscanExpressionId() != null) {
             throw new TermMetadataParseException(
-                    "Term '" + termResult.termId() + "' in feature '" + feature + "' is an AND NOT term (per "
+                    "Term '" + termResult.getTermId() + "' in feature '" + feature + "' is an AND NOT term (per "
                     + "resolvedPatterns) but also has a native hyperscanExpressionId="
-                    + termResult.hyperscanExpressionId() + " populated — malformed compile-results JSON.");
+                    + termResult.getHyperscanExpressionId() + " populated — malformed compile-results JSON.");
         }
         validateAndNotPatternMappingMatchesIds(feature, termResult);
     }
@@ -379,21 +485,21 @@ public final class TermExpressionMetadata implements Serializable {
      * ids directly rather than just counting leaves.
      */
     private static void validateAndNotPatternMappingMatchesIds(String feature, TermResultJson termResult) {
-        String mapping = termResult.patternMapping();
+        String mapping = termResult.getPatternMapping();
         if (mapping == null || mapping.isBlank()) {
             return;
         }
         Set<Integer> mappingIds = extractIds(mapping);
         Set<Integer> expectedIds = new HashSet<>();
-        if (termResult.requiredExpressionIds() != null) {
-            expectedIds.addAll(termResult.requiredExpressionIds());
+        if (termResult.getRequiredExpressionIds() != null) {
+            expectedIds.addAll(termResult.getRequiredExpressionIds());
         }
-        if (termResult.excludedExpressionIds() != null) {
-            expectedIds.addAll(termResult.excludedExpressionIds());
+        if (termResult.getExcludedExpressionIds() != null) {
+            expectedIds.addAll(termResult.getExcludedExpressionIds());
         }
         if (!mappingIds.equals(expectedIds)) {
             throw new TermMetadataParseException(
-                    "Term '" + termResult.termId() + "' in feature '" + feature + "': patternMapping '" + mapping
+                    "Term '" + termResult.getTermId() + "' in feature '" + feature + "': patternMapping '" + mapping
                     + "' references ids " + mappingIds + " but requiredExpressionIds/excludedExpressionIds give "
                     + expectedIds + " — malformed compile-results JSON.");
         }
@@ -418,7 +524,7 @@ public final class TermExpressionMetadata implements Serializable {
      * decomposition) is not checked.
      */
     private static void validatePatternMappingCount(String feature, TermResultJson termResult, ResolvedPatternTree.Chain chain) {
-        String mapping = termResult.patternMapping();
+        String mapping = termResult.getPatternMapping();
         if (mapping == null || mapping.isBlank()) {
             return;
         }
@@ -427,11 +533,11 @@ public final class TermExpressionMetadata implements Serializable {
             stripped = stripped.substring(1, stripped.length() - 1);
         }
         int idCount = stripped.isBlank() ? 0 : stripped.split("&").length;
-        if (idCount != chain.leaves().size()) {
+        if (idCount != chain.getLeaves().size()) {
             throw new TermMetadataParseException(
-                    "Term '" + termResult.termId() + "' in feature '" + feature + "': patternMapping '" + mapping
+                    "Term '" + termResult.getTermId() + "' in feature '" + feature + "': patternMapping '" + mapping
                     + "' implies " + idCount + " expression id(s) but regexPattern/translatedPattern has "
-                    + chain.leaves().size() + " leaf/leaves — malformed compile-results JSON.");
+                    + chain.getLeaves().size() + " leaf/leaves — malformed compile-results JSON.");
         }
     }
 
@@ -441,14 +547,14 @@ public final class TermExpressionMetadata implements Serializable {
      * way this returns the required-side id list {@link TermEntry} needs.
      */
     private static List<Integer> resolveRequiredIds(String feature, TermResultJson termResult, int termNumber) {
-        if (termResult.requiredExpressionIds() != null && !termResult.requiredExpressionIds().isEmpty()) {
-            return termResult.requiredExpressionIds();
+        if (termResult.getRequiredExpressionIds() != null && !termResult.getRequiredExpressionIds().isEmpty()) {
+            return termResult.getRequiredExpressionIds();
         }
-        if (termResult.hyperscanExpressionId() != null) {
-            return List.of(termResult.hyperscanExpressionId());
+        if (termResult.getHyperscanExpressionId() != null) {
+            return List.of(termResult.getHyperscanExpressionId());
         }
         throw new TermMetadataParseException(
-                "Term '" + termResult.termId() + "' in feature '" + feature + "' is PASS but has neither "
+                "Term '" + termResult.getTermId() + "' in feature '" + feature + "' is PASS but has neither "
                 + "hyperscanExpressionId nor requiredExpressionIds populated — malformed compile-results JSON.");
     }
 
@@ -463,10 +569,10 @@ public final class TermExpressionMetadata implements Serializable {
 
     private static void putUniqueExpressionId(Map<Integer, TermEntry> map, String feature, int id, TermEntry entry) {
         TermEntry existing = map.putIfAbsent(id, entry);
-        if (existing != null && existing.termNumber() != entry.termNumber()) {
+        if (existing != null && existing.getTermNumber() != entry.getTermNumber()) {
             throw new TermMetadataParseException(
                     "Expression id " + id + " in feature '" + feature + "' is claimed by both term "
-                    + existing.termNumber() + " and term " + entry.termNumber()
+                    + existing.getTermNumber() + " and term " + entry.getTermNumber()
                     + " — malformed or stale compile-results JSON.");
         }
     }
@@ -491,30 +597,105 @@ public final class TermExpressionMetadata implements Serializable {
     // ── Raw JSON shape (only the fields this class needs) ───────────────────────
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record CompileResponseJson(
-            @JsonProperty("results") List<TermResultJson> results
-    ) {
+    private static class CompileResponseJson implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private List<TermResultJson> results;
+
         @JsonCreator
-        private CompileResponseJson {}
+        CompileResponseJson(@JsonProperty("results") List<TermResultJson> results) {
+            this.results = results;
+        }
+
+        @JsonProperty("results")
+        List<TermResultJson> getResults() { return results; }
+        void setResults(List<TermResultJson> results) { this.results = results; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record TermResultJson(
-            @JsonProperty("termId") String termId,
-            @JsonProperty("termDescription") String termDescription,
-            @JsonProperty("compilationStatus") String compilationStatus,
-            @JsonProperty("translatedPattern") List<String> translatedPattern,
-            @JsonProperty("regexPattern") List<String> regexPattern,
-            @JsonProperty("requiresExclusionCheck") Boolean requiresExclusionCheck,
-            @JsonProperty("resolvedPatterns") String resolvedPatterns,
-            @JsonProperty("exclusionRegex") List<String> exclusionRegex,
-            @JsonProperty("hyperscanExpressionId") Integer hyperscanExpressionId,
-            @JsonProperty("requiredExpressionIds") List<Integer> requiredExpressionIds,
-            @JsonProperty("excludedExpressionIds") List<Integer> excludedExpressionIds,
-            @JsonProperty("patternMapping") String patternMapping
-    ) {
+    private static class TermResultJson implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private String termId;
+        private String termDescription;
+        private String compilationStatus;
+        private List<String> translatedPattern;
+        private List<String> regexPattern;
+        private Boolean requiresExclusionCheck;
+        private String resolvedPatterns;
+        private List<String> exclusionRegex;
+        private Integer hyperscanExpressionId;
+        private List<Integer> requiredExpressionIds;
+        private List<Integer> excludedExpressionIds;
+        private String patternMapping;
+
         @JsonCreator
-        private TermResultJson {}
+        TermResultJson(@JsonProperty("termId") String termId,
+                       @JsonProperty("termDescription") String termDescription,
+                       @JsonProperty("compilationStatus") String compilationStatus,
+                       @JsonProperty("translatedPattern") List<String> translatedPattern,
+                       @JsonProperty("regexPattern") List<String> regexPattern,
+                       @JsonProperty("requiresExclusionCheck") Boolean requiresExclusionCheck,
+                       @JsonProperty("resolvedPatterns") String resolvedPatterns,
+                       @JsonProperty("exclusionRegex") List<String> exclusionRegex,
+                       @JsonProperty("hyperscanExpressionId") Integer hyperscanExpressionId,
+                       @JsonProperty("requiredExpressionIds") List<Integer> requiredExpressionIds,
+                       @JsonProperty("excludedExpressionIds") List<Integer> excludedExpressionIds,
+                       @JsonProperty("patternMapping") String patternMapping) {
+            this.termId = termId;
+            this.termDescription = termDescription;
+            this.compilationStatus = compilationStatus;
+            this.translatedPattern = translatedPattern;
+            this.regexPattern = regexPattern;
+            this.requiresExclusionCheck = requiresExclusionCheck;
+            this.resolvedPatterns = resolvedPatterns;
+            this.exclusionRegex = exclusionRegex;
+            this.hyperscanExpressionId = hyperscanExpressionId;
+            this.requiredExpressionIds = requiredExpressionIds;
+            this.excludedExpressionIds = excludedExpressionIds;
+            this.patternMapping = patternMapping;
+        }
+
+        @JsonProperty("termId")
+        String getTermId() { return termId; }
+        void setTermId(String termId) { this.termId = termId; }
+        @JsonProperty("termDescription")
+        String getTermDescription() { return termDescription; }
+        void setTermDescription(String termDescription) { this.termDescription = termDescription; }
+        @JsonProperty("compilationStatus")
+        String getCompilationStatus() { return compilationStatus; }
+        void setCompilationStatus(String compilationStatus) { this.compilationStatus = compilationStatus; }
+        @JsonProperty("translatedPattern")
+        List<String> getTranslatedPattern() { return translatedPattern; }
+        void setTranslatedPattern(List<String> translatedPattern) { this.translatedPattern = translatedPattern; }
+        @JsonProperty("regexPattern")
+        List<String> getRegexPattern() { return regexPattern; }
+        void setRegexPattern(List<String> regexPattern) { this.regexPattern = regexPattern; }
+        @JsonProperty("requiresExclusionCheck")
+        Boolean getRequiresExclusionCheck() { return requiresExclusionCheck; }
+        void setRequiresExclusionCheck(Boolean requiresExclusionCheck) { this.requiresExclusionCheck = requiresExclusionCheck; }
+        @JsonProperty("resolvedPatterns")
+        String getResolvedPatterns() { return resolvedPatterns; }
+        void setResolvedPatterns(String resolvedPatterns) { this.resolvedPatterns = resolvedPatterns; }
+        @JsonProperty("exclusionRegex")
+        List<String> getExclusionRegex() { return exclusionRegex; }
+        void setExclusionRegex(List<String> exclusionRegex) { this.exclusionRegex = exclusionRegex; }
+        @JsonProperty("hyperscanExpressionId")
+        Integer getHyperscanExpressionId() { return hyperscanExpressionId; }
+        void setHyperscanExpressionId(Integer hyperscanExpressionId) { this.hyperscanExpressionId = hyperscanExpressionId; }
+        @JsonProperty("requiredExpressionIds")
+        List<Integer> getRequiredExpressionIds() { return requiredExpressionIds; }
+        void setRequiredExpressionIds(List<Integer> requiredExpressionIds) { this.requiredExpressionIds = requiredExpressionIds; }
+        @JsonProperty("excludedExpressionIds")
+        List<Integer> getExcludedExpressionIds() { return excludedExpressionIds; }
+        void setExcludedExpressionIds(List<Integer> excludedExpressionIds) { this.excludedExpressionIds = excludedExpressionIds; }
+        @JsonProperty("patternMapping")
+        String getPatternMapping() { return patternMapping; }
+        void setPatternMapping(String patternMapping) { this.patternMapping = patternMapping; }
     }
 
     /** Thrown by {@link #parse} on malformed or internally-inconsistent term metadata JSON. */

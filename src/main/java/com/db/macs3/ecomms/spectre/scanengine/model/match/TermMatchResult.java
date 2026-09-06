@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.scanengine.model.match;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
@@ -10,14 +11,17 @@ import java.util.Objects;
  * spanning subject, message body, and/or multiple attachments, and
  * potentially more than one occurrence within any of those.
  */
-public final class TermMatchResult implements Serializable {
+public class TermMatchResult implements Serializable {
 
-    private final String termId;
-    private final String termRegexPattern;
-    private final List<AreaMatch> matches;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String termId;
+    private String termRegexPattern;
+    private List<AreaMatch> matches;
 
     /**
-     * @param termId              {@code <body.feature>::<index>} — see
+     * @param termId              {@code <body.lexiconName>::<index>} — see
      *                              {@code TermIdBuilder}
      * @param termRegexPattern    the compiled Hyperscan pattern text for this term,
      *                              for {@code lexicon-hit-summary.term_dtls.term_regex_pattern}
@@ -34,9 +38,12 @@ public final class TermMatchResult implements Serializable {
         this.matches = matches;
     }
 
-    public String termId() { return termId; }
-    public String termRegexPattern() { return termRegexPattern; }
-    public List<AreaMatch> matches() { return matches; }
+    public String getTermId() { return termId; }
+    public void setTermId(String termId) { this.termId = termId; }
+    public String getTermRegexPattern() { return termRegexPattern; }
+    public void setTermRegexPattern(String termRegexPattern) { this.termRegexPattern = termRegexPattern; }
+    public List<AreaMatch> getMatches() { return matches; }
+    public void setMatches(List<AreaMatch> matches) { this.matches = matches; }
 
     @Override
     public boolean equals(Object o) {

@@ -147,7 +147,7 @@ class HyperscanBundleLoaderTest {
         HyperscanBundleLoader.LexiconBundle bundle = loader.load(feature);
 
         assertThat(bundle.database()).isNotNull();
-        assertThat(bundle.metadata().feature()).isEqualTo(feature);
+        assertThat(bundle.metadata().getFeature()).isEqualTo(feature);
         assertThat(bundle.metadata().termByAnyExpressionId(1)).isNotNull();
     }
 

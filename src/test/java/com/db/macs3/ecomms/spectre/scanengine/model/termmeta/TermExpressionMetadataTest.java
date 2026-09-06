@@ -43,10 +43,10 @@ class TermExpressionMetadataTest {
             TermEntry entry = meta.termByAnyExpressionId(1);
 
             assertThat(entry).isNotNull();
-            assertThat(entry.termNumber()).isEqualTo(1);
-            assertThat(entry.requiresExclusionCheck()).isFalse();
-            assertThat(entry.requiredExpressionIds()).containsExactly(1);
-            assertThat(entry.excludedExpressionIds()).isNull();
+            assertThat(entry.getTermNumber()).isEqualTo(1);
+            assertThat(entry.isRequiresExclusionCheck()).isFalse();
+            assertThat(entry.getRequiredExpressionIds()).containsExactly(1);
+            assertThat(entry.getExcludedExpressionIds()).isNull();
             assertThat(entry.isNativelyResolved()).isTrue();
         }
 
@@ -64,8 +64,8 @@ class TermExpressionMetadataTest {
             TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
             TermEntry entry = meta.termByAnyExpressionId(2);
 
-            assertThat(entry.termRegexPattern()).contains("alpha").contains("beta").contains("gamma");
-            assertThat(entry.requiredExpressionIds()).containsExactly(2);
+            assertThat(entry.getTermRegexPattern()).contains("alpha").contains("beta").contains("gamma");
+            assertThat(entry.getRequiredExpressionIds()).containsExactly(2);
         }
 
         @Test
@@ -104,9 +104,9 @@ class TermExpressionMetadataTest {
 
             assertThat(viaRequired).isNotNull();
             assertThat(viaExcluded).isNotNull();
-            assertThat(viaRequired.termNumber()).isEqualTo(viaExcluded.termNumber());
-            assertThat(viaRequired.termNumber()).isEqualTo(3);
-            assertThat(viaRequired.requiresExclusionCheck()).isTrue();
+            assertThat(viaRequired.getTermNumber()).isEqualTo(viaExcluded.getTermNumber());
+            assertThat(viaRequired.getTermNumber()).isEqualTo(3);
+            assertThat(viaRequired.isRequiresExclusionCheck()).isTrue();
             assertThat(viaRequired.isNativelyResolved())
                     .as("AND NOT terms are never natively resolved by Hyperscan any more")
                     .isFalse();
@@ -128,12 +128,12 @@ class TermExpressionMetadataTest {
             TermEntry entry = meta.termByAnyExpressionId(11); // middle leaf
 
             assertThat(entry).isNotNull();
-            assertThat(entry.termNumber()).isEqualTo(9);
-            assertThat(entry.requiredExpressionIds()).containsExactly(10, 11, 12);
-            assertThat(entry.excludedExpressionIds()).containsExactly(13);
+            assertThat(entry.getTermNumber()).isEqualTo(9);
+            assertThat(entry.getRequiredExpressionIds()).containsExactly(10, 11, 12);
+            assertThat(entry.getExcludedExpressionIds()).containsExactly(13);
             // Every leaf id resolves back to the SAME entry.
-            assertThat(meta.termByAnyExpressionId(10).termNumber()).isEqualTo(9);
-            assertThat(meta.termByAnyExpressionId(12).termNumber()).isEqualTo(9);
+            assertThat(meta.termByAnyExpressionId(10).getTermNumber()).isEqualTo(9);
+            assertThat(meta.termByAnyExpressionId(12).getTermNumber()).isEqualTo(9);
         }
     }
 
@@ -158,10 +158,10 @@ class TermExpressionMetadataTest {
             TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
 
             assertThat(meta.termCount()).isEqualTo(3);
-            assertThat(meta.termByAnyExpressionId(1).termNumber()).isEqualTo(1);
-            assertThat(meta.termByAnyExpressionId(2).termNumber()).isEqualTo(2);
-            assertThat(meta.termByAnyExpressionId(20).termNumber()).isEqualTo(3);
-            assertThat(meta.termByAnyExpressionId(21).termNumber()).isEqualTo(3);
+            assertThat(meta.termByAnyExpressionId(1).getTermNumber()).isEqualTo(1);
+            assertThat(meta.termByAnyExpressionId(2).getTermNumber()).isEqualTo(2);
+            assertThat(meta.termByAnyExpressionId(20).getTermNumber()).isEqualTo(3);
+            assertThat(meta.termByAnyExpressionId(21).getTermNumber()).isEqualTo(3);
             assertThat(meta.termByAnyExpressionId(999)).isNull();
         }
     }
@@ -187,18 +187,18 @@ class TermExpressionMetadataTest {
             TermEntry entry = meta.termByAnyExpressionId(1);
 
             assertThat(entry).isNotNull();
-            assertThat(entry.termNumber()).isEqualTo(1);
-            assertThat(entry.requiredExpressionIds()).containsExactly(1);
+            assertThat(entry.getTermNumber()).isEqualTo(1);
+            assertThat(entry.getRequiredExpressionIds()).containsExactly(1);
             assertThat(entry.requiresPerAreaEvaluation()).isTrue();
             assertThat(entry.isNativelyResolved())
                     .as("a resolvedPatterns term always needs per-area verification, even a plain chain")
                     .isFalse();
-            assertThat(entry.termRegexPattern()).isEqualTo("manipulate NEAR{5} (?:price|spread|stock)");
+            assertThat(entry.getTermRegexPattern()).isEqualTo("manipulate NEAR{5} (?:price|spread|stock)");
 
-            ResolvedPatternTree.Chain chain = (ResolvedPatternTree.Chain) entry.resolvedPatternTree();
-            assertThat(chain.leaves()).hasSize(2);
-            assertThat(chain.operators()).containsExactly("NEAR");
-            assertThat(chain.distances()).containsExactly(5);
+            ResolvedPatternTree.Chain chain = (ResolvedPatternTree.Chain) entry.getResolvedPatternTree();
+            assertThat(chain.getLeaves()).hasSize(2);
+            assertThat(chain.getOperators()).containsExactly("NEAR");
+            assertThat(chain.getDistances()).containsExactly(5);
         }
 
         @Test
@@ -219,9 +219,9 @@ class TermExpressionMetadataTest {
 
             assertThat(entry).isNotNull();
             assertThat(entry.requiresPerAreaEvaluation()).isTrue();
-            ResolvedPatternTree.Chain chain = (ResolvedPatternTree.Chain) entry.resolvedPatternTree();
-            assertThat(chain.leaves()).hasSize(1);
-            assertThat(chain.operators()).isEmpty();
+            ResolvedPatternTree.Chain chain = (ResolvedPatternTree.Chain) entry.getResolvedPatternTree();
+            assertThat(chain.getLeaves()).hasSize(1);
+            assertThat(chain.getOperators()).isEmpty();
         }
 
         @Test
@@ -240,10 +240,10 @@ class TermExpressionMetadataTest {
             TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
             TermEntry entry = meta.termByAnyExpressionId(6);
 
-            ResolvedPatternTree.Chain chain = (ResolvedPatternTree.Chain) entry.resolvedPatternTree();
-            assertThat(chain.leaves()).hasSize(3);
-            assertThat(chain.operators()).containsExactly("FOLLOWEDBY", "FOLLOWEDBY");
-            assertThat(chain.distances()).containsExactly(4, 4);
+            ResolvedPatternTree.Chain chain = (ResolvedPatternTree.Chain) entry.getResolvedPatternTree();
+            assertThat(chain.getLeaves()).hasSize(3);
+            assertThat(chain.getOperators()).containsExactly("FOLLOWEDBY", "FOLLOWEDBY");
+            assertThat(chain.getDistances()).containsExactly(4, 4);
         }
 
         @Test
@@ -300,10 +300,10 @@ class TermExpressionMetadataTest {
 
             assertThat(viaRequired).isNotNull();
             assertThat(viaExcluded).isNotNull();
-            assertThat(viaRequired.termNumber()).isEqualTo(7);
+            assertThat(viaRequired.getTermNumber()).isEqualTo(7);
             assertThat(viaRequired.requiresPerAreaEvaluation()).isTrue();
             assertThat(viaRequired.hasCoarseExpressionId()).isTrue();
-            assertThat(viaRequired.resolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
+            assertThat(viaRequired.getResolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
             assertThat(meta.mandatoryPerAreaTerms()).isEmpty();
         }
 
@@ -325,7 +325,7 @@ class TermExpressionMetadataTest {
             assertThat(meta.termCount()).isEqualTo(1);
             assertThat(meta.mandatoryPerAreaTerms()).hasSize(1);
             TermEntry entry = meta.mandatoryPerAreaTerms().get(0);
-            assertThat(entry.termNumber()).isEqualTo(8);
+            assertThat(entry.getTermNumber()).isEqualTo(8);
             assertThat(entry.hasCoarseExpressionId()).isFalse();
             assertThat(entry.requiresPerAreaEvaluation()).isTrue();
         }
@@ -374,7 +374,7 @@ class TermExpressionMetadataTest {
             TermEntry entry = meta.termByAnyExpressionId(30);
 
             assertThat(entry).isNotNull();
-            assertThat(entry.resolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
+            assertThat(entry.getResolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
         }
 
         @Test
@@ -416,11 +416,11 @@ class TermExpressionMetadataTest {
             TermEntry entry = meta.termByAnyExpressionId(11);
 
             assertThat(entry).isNotNull();
-            assertThat(entry.termNumber()).isEqualTo(10);
-            assertThat(entry.resolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
-            ResolvedPatternTree.AndNot andNot = (ResolvedPatternTree.AndNot) entry.resolvedPatternTree();
-            assertThat(((ResolvedPatternTree.Chain) andNot.required()).leaves()).hasSize(3);
-            assertThat(((ResolvedPatternTree.Chain) andNot.excluded()).leaves()).hasSize(1);
+            assertThat(entry.getTermNumber()).isEqualTo(10);
+            assertThat(entry.getResolvedPatternTree()).isInstanceOf(ResolvedPatternTree.AndNot.class);
+            ResolvedPatternTree.AndNot andNot = (ResolvedPatternTree.AndNot) entry.getResolvedPatternTree();
+            assertThat(((ResolvedPatternTree.Chain) andNot.getRequired()).getLeaves()).hasSize(3);
+            assertThat(((ResolvedPatternTree.Chain) andNot.getExcluded()).getLeaves()).hasSize(1);
         }
 
         @Test
@@ -559,7 +559,7 @@ class TermExpressionMetadataTest {
         void emptyResultsIsValid() {
             TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, "{\"results\": []}");
             assertThat(meta.termCount()).isEqualTo(0);
-            assertThat(meta.feature()).isEqualTo(FEATURE);
+            assertThat(meta.getFeature()).isEqualTo(FEATURE);
         }
     }
 }

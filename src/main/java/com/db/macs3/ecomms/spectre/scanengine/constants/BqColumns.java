@@ -38,11 +38,15 @@ public final class BqColumns {
     /** {@code feature_definition} JSON field names (both root-level and nested {@code body}). */
     public static final class FeatureDefinitionJson {
         private FeatureDefinitionJson() {}
+        public static final String FEATURE_ID             = "featureId";
         public static final String FEATURE_NAME          = "featureName";
         public static final String FEATURE_TYPE           = "featureType";
         public static final String IS_NOISE_REDUCTION    = "isNoiseReduction";
         public static final String BODY                   = "body";
-        public static final String BODY_FEATURE            = "feature";
+        public static final String BODY_ID                 = "id";
+        /** Renamed from {@code "feature"} — see {@code FeatureDefinition} class Javadoc. */
+        public static final String BODY_LEXICON_NAME      = "lexiconName";
+        public static final String BODY_OBJECT_ID          = "objectId";
         public static final String BODY_TOTAL_TERMS_COUNT = "totalTermsCount";
         public static final String BODY_MINIMUM_HITS      = "minimumHits";
         public static final String BODY_SCOPE              = "scope";
@@ -159,19 +163,41 @@ public final class BqColumns {
         public static final String TABLE = "pipeline_stage_audit";
         public static final String PROCESS_ID          = "process_id";
         public static final String TRIGGER_TYPE         = "trigger_type";
+        public static final String EVAL_TEST_ID          = "eval_test_id";
         public static final String PIPELINE_EXEC_ID    = "pipelinex_exec_id"; // sic — matches the delivered schema verbatim
         public static final String STAGE_NAME           = "stage_name";
         public static final String COMPOSER_DAG_NAME   = "composer_dag_name";
         public static final String COMPOSER_DAG_PATH    = "composer_dag_path";
-        public static final String DPROC_DAG_NAME       = "dproc_dag_name";
-        public static final String DPROC_DAG_PATH        = "dproc_dag_path";
+        /** Renamed from {@code dproc_dag_name} — Dataproc runs a script, not a DAG. */
+        public static final String DPROC_SCRIPT_NAME    = "dproc_script_name";
+        public static final String DPROC_SCRIPT_PATH     = "dproc_script_path";
+        public static final String MODEL_CONFIG_DTLS     = "model_config_dtls";
         public static final String START_TIME            = "start_time";
         public static final String END_TIME               = "end_time";
         public static final String JOB_STATUS             = "job_status";
+        public static final String INPUT_FILE_COUNT      = "input_file_count";
+        public static final String OUTPUT_FILE_COUNT     = "output_file_count";
+        public static final String INPUT_RECORD_COUNT    = "input_record_count";
+        public static final String OUTPUT_RECORD_COUNT   = "output_record_count";
+        /** INTEGER, per the delivered schema (was STRING in an earlier revision). */
         public static final String ERROR_COUNT            = "error_count";
         public static final String ERROR_MESSAGE           = "error_message";
         public static final String ADDITIONAL_INFO        = "additional_info";
+        public static final String LOG_PATH                = "log_path";
         public static final String EXECUTION_DATE          = "execution_date";
+        public static final String RERUN_FLG               = "rerun_flg";
+        public static final String RERUN_TYPE              = "rerun_type";
+        public static final String RERUN_PROCESS_ID       = "rerun_process_id";
+
+        /** {@code model_config_dtls} nested struct field names. */
+        public static final class ModelConfigDtls {
+            private ModelConfigDtls() {}
+            public static final String MODEL_NAME       = "model_name";
+            public static final String TEMPRATURE        = "temprature"; // sic — matches the delivered schema verbatim
+            public static final String TOP_P              = "top_p";
+            public static final String THINKING_BUDGET    = "thinking_budget";
+            public static final String MAX_OUTPUT_TOKEN  = "max_output_token";
+        }
     }
 
     /** {@code pipeline_record_audit} table. */
@@ -180,15 +206,50 @@ public final class BqColumns {
         public static final String TABLE = "pipeline_record_audit";
         public static final String PROCESS_ID          = "process_id";
         public static final String TRIGGER_TYPE         = "trigger_type";
+        public static final String EVAL_TEST_ID          = "eval_test_id";
         public static final String PIPELINE_EXEC_ID    = "pipelinex_exec_id"; // sic — matches the delivered schema verbatim
-        public static final String STAGE_NAME           = "stage_name";
+        /** Precedes {@link #STAGE_NAME} in the delivered schema — see {@code PipelineRecordAuditRow} class Javadoc. */
         public static final String RECORD_ID             = "record_id";
+        public static final String STAGE_NAME           = "stage_name";
+        public static final String MSG_INPUT_FILE_NM    = "msg_input_file_nm";
+        public static final String MSG_INPUT_FILE_PATH  = "msg_input_file_path";
+        public static final String MSG_OUTPUT_FILE_PATH = "msg_output_file_path";
+        public static final String MSG_OUTPUT_FILE_TYPE = "msg_output_file_type";
+        public static final String MSG_OUTPUT_FILE_NM   = "msg_output_file_nm";
         public static final String STATUS                 = "status";
         public static final String RETURN_CODE            = "return_code";
         public static final String ERROR_MESSAGE           = "error_message";
-        public static final String EXECUTION_DATE          = "execution_date";
-        public static final String CREATED_BY              = "created_by";
+        public static final String EVALUATED_RULES_DTLS  = "evaluated_rules_dtls";
+        public static final String EVALUATED_RULES_CNT   = "evaluated_rules_cnt";
+        public static final String DETECTED_RULES_DTLS   = "detected_rules_dtls";
+        public static final String DETECTED_RULES_CNT    = "detected_rules_cnt";
+        public static final String SYS_PROMPT_EVAL_RULES_TOKENS = "sys_prompt_eval_rules_tokens";
+        public static final String INPUT_TOKENS           = "input_tokens";
+        public static final String OUTPUT_TOKENS          = "output_tokens";
+        public static final String THINKING_TOKENS        = "thinking_tokens";
+        public static final String CACHED_TOKENS          = "cached_tokens";
+        /** Maps to {@code PipelineRecordAuditRow#msgMatchTextTokens()} — sic, see that class's Javadoc. */
+        public static final String MSG_ATTACH_TEXT_TOKENS = "msg_attach_text_tokens";
         public static final String CREATED_TS               = "created_ts";
+        public static final String CREATED_BY              = "created_by";
+        /** Maps to {@code PipelineRecordAuditRow#additionInfo()} — sic, not "additional_info". */
+        public static final String ADDITION_INFO           = "addition_info";
+        public static final String EXECUTION_DATE          = "execution_date";
+        public static final String SENT_DATE                = "sent_date";
+        /** STRING, matching the delivered schema's column type (not DATE). */
+        public static final String RUN_DATE                 = "run_date";
+        public static final String SOURCE_NAME              = "source_name";
+        public static final String GEMINI_REQUEST_START_TIME = "gemini_request_start_time";
+        public static final String GEMINI_REQUEST_END_TIME   = "gemini_request_end_time";
+        public static final String RERUN_PROCESS_ID          = "rerun_process_id";
+
+        /** {@code evaluated_rules_dtls}/{@code detected_rules_dtls} array entry struct field names. */
+        public static final class RuleDtl {
+            private RuleDtl() {}
+            public static final String RULE_ID       = "rule_id";
+            public static final String RULE_NAME      = "rule_name";
+            public static final String RULE_VERSION   = "rule_version";
+        }
     }
 
     /** Job status values written to {@code pipeline_stage_audit.job_status}. */

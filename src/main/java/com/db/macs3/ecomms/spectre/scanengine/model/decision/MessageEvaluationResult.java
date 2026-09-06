@@ -2,6 +2,7 @@ package com.db.macs3.ecomms.spectre.scanengine.model.decision;
 
 import com.db.macs3.ecomms.spectre.scanengine.model.match.TermMatchResult;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
@@ -15,23 +16,26 @@ import java.util.Objects;
  * <p>See {@code DecisionTreeEvaluator} for how this is produced: groups are
  * evaluated in {@code FeatureGroupingService}'s order (NoiseReduction →
  * Disclaimer → Lexicon); if any NoiseReduction group is a hit, evaluation
- * stops there and {@link #shortCircuited} is true — every LATER group
+ * stops there and {@link #isShortCircuited} is true — every LATER group
  * (further NoiseReduction groups, the Disclaimer group, all Lexicon groups)
  * is simply never evaluated at all, not evaluated-and-discarded.
  */
-public final class MessageEvaluationResult implements Serializable {
+public class MessageEvaluationResult implements Serializable {
 
-    private final String messageId;
-    private final List<GroupEvaluationResult> evaluatedGroups;
-    private final boolean shortCircuited;
-    private final List<TermMatchResult> disclaimerMatches;
-    private final Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId;
-    private final int suppressedLexiconMatchCount;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String messageId;
+    private List<GroupEvaluationResult> evaluatedGroups;
+    private boolean shortCircuited;
+    private List<TermMatchResult> disclaimerMatches;
+    private Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId;
+    private int suppressedLexiconMatchCount;
 
     /**
      * @param messageId                        the message this result is for
      * @param evaluatedGroups                   every group that WAS evaluated, in processing
-     *                                           order — stops early (per {@link #shortCircuited})
+     *                                           order — stops early (per {@link #isShortCircuited})
      * @param shortCircuited                     true iff a NoiseReduction group was a hit,
      *                                           meaning Disclaimer and Lexicon groups were
      *                                           never evaluated at all
@@ -42,12 +46,12 @@ public final class MessageEvaluationResult implements Serializable {
      * @param finalLexiconMatchesByFeatureId      Lexicon-category matches AFTER disclaimer-overlap
      *                                           suppression (full containment only — see
      *                                           {@code DecisionTreeEvaluator}), keyed by
-     *                                           {@code featureId} (i.e. by {@link FeatureGroup#featureId()})
+     *                                           {@code featureId} (i.e. by {@link FeatureGroup#getFeatureId()})
      *                                           so a downstream row builder can reconstruct which
      *                                           evaluated group each surviving match belongs to — this
      *                                           is what {@code lexicon-hit-summary}/{@code -restricted}/
      *                                           {@code -unrestricted} are built from; empty when
-     *                                           {@link #shortCircuited} is true. A {@code featureId} with
+     *                                           {@link #isShortCircuited} is true. A {@code featureId} with
      *                                           zero surviving matches after suppression is absent from
      *                                           this map entirely, not present with an empty list.
      * @param suppressedLexiconMatchCount        how many raw Lexicon matches were discarded by
@@ -66,12 +70,20 @@ public final class MessageEvaluationResult implements Serializable {
         this.suppressedLexiconMatchCount = suppressedLexiconMatchCount;
     }
 
-    public String messageId() { return messageId; }
-    public List<GroupEvaluationResult> evaluatedGroups() { return evaluatedGroups; }
-    public boolean shortCircuited() { return shortCircuited; }
-    public List<TermMatchResult> disclaimerMatches() { return disclaimerMatches; }
-    public Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId() { return finalLexiconMatchesByFeatureId; }
-    public int suppressedLexiconMatchCount() { return suppressedLexiconMatchCount; }
+    public String getMessageId() { return messageId; }
+    public void setMessageId(String messageId) { this.messageId = messageId; }
+    public List<GroupEvaluationResult> getEvaluatedGroups() { return evaluatedGroups; }
+    public void setEvaluatedGroups(List<GroupEvaluationResult> evaluatedGroups) { this.evaluatedGroups = evaluatedGroups; }
+    public boolean isShortCircuited() { return shortCircuited; }
+    public void setShortCircuited(boolean shortCircuited) { this.shortCircuited = shortCircuited; }
+    public List<TermMatchResult> getDisclaimerMatches() { return disclaimerMatches; }
+    public void setDisclaimerMatches(List<TermMatchResult> disclaimerMatches) { this.disclaimerMatches = disclaimerMatches; }
+    public Map<String, List<TermMatchResult>> getFinalLexiconMatchesByFeatureId() { return finalLexiconMatchesByFeatureId; }
+    public void setFinalLexiconMatchesByFeatureId(Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId) {
+        this.finalLexiconMatchesByFeatureId = finalLexiconMatchesByFeatureId;
+    }
+    public int getSuppressedLexiconMatchCount() { return suppressedLexiconMatchCount; }
+    public void setSuppressedLexiconMatchCount(int suppressedLexiconMatchCount) { this.suppressedLexiconMatchCount = suppressedLexiconMatchCount; }
 
     @Override
     public boolean equals(Object o) {
