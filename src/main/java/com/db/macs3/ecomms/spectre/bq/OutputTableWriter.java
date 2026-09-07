@@ -72,27 +72,36 @@ public final class OutputTableWriter {
     private OutputTableWriter() {}
 
     /**
-     * Converts a {@code List<Row>} bound for an ARRAY field NESTED inside a
-     * struct that is itself an array element (e.g. {@code evaluated_lexicons[].term_dtls[]},
-     * {@code features[].sub_features[]}) to a genuine {@code scala.collection.Seq}.
+     * Converts a {@code List<Row>} bound for ANY ARRAY-typed {@link StructField}
+     * (top-level in the outer row, or nested inside a struct that is itself an
+     * array element, e.g. {@code evaluated_lexicons[].term_dtls[]}) to a
+     * genuine {@code scala.collection.Seq} — every array field, at every
+     * nesting depth, needs this, full stop. Returns {@code null} unchanged
+     * (some array fields here, e.g. {@code evaluated_rules_dtls}, are
+     * legitimately NULLABLE and always null in this engine's own usage).
      *
-     * <p>The Row-to-{@code InternalRow} conversion behind both {@code
-     * Encoders.row(StructType)} (used by the {@code Dataset.mapPartitions}
-     * mapper classes in {@code spark/} that build these rows) and {@code
-     * spark.createDataFrame(List<Row>, StructType)} (used below for the
-     * single-row audit write) only tolerates a plain {@code java.util.List}
-     * for an ARRAY field at the TOP level of the outer row — for an ARRAY field
-     * nested one level deeper (inside a struct that is itself inside an
-     * array), the codegen'd {@code MapObjects} expects
-     * {@code scala.collection.Seq} and throws {@code ClassCastException:
-     * class java.util.ArrayList cannot be cast to class scala.collection.Seq}
-     * if handed a plain {@code java.util.List} instead — confirmed via a real
-     * production stack trace. Every OUTER array field below (e.g.
-     * {@code evaluated_lexicons}, {@code features}) stays a plain
-     * {@code List<Row>}; only the INNER one needs this conversion.
+     * <p><b>Revised — an earlier revision of this method got the rule wrong.</b>
+     * It claimed only NESTED array fields needed this conversion, and that a
+     * TOP-level array field could stay a plain {@code java.util.List}. That
+     * was true ONLY for the old {@code spark.createDataFrame(JavaRDD<Row>,
+     * StructType)} write path this project used before switching to {@code
+     * Dataset<T>.mapPartitions(MapPartitionsFunction, Encoders.row(StructType))}
+     * (see {@code ScanEngineJobRunner#writeOutputs} and the {@code spark/}
+     * mapper classes) — under {@code Encoders.row(StructType)}'s
+     * {@code SchemaInference}-generated encoder, a TOP-level array field
+     * fails with the exact same {@code ClassCastException: class
+     * java.util.ArrayList cannot be cast to class scala.collection.Seq} that
+     * nested ones always did, confirmed via a real production stack trace
+     * AFTER that mapPartitions migration. Every array-valued field built by
+     * every {@code toRow(...)} method below now goes through this method,
+     * regardless of nesting depth. {@code writePipelineStageAudit} still uses
+     * the old {@code spark.createDataFrame(List<Row>, StructType)} path (a
+     * single small row, not mapPartitions-built) — moot today since that
+     * table's schema has no array fields, but worth remembering if one is
+     * ever added there.
      */
-    private static scala.collection.Seq<Row> toNestedArrayValue(List<Row> rows) {
-        return scala.jdk.CollectionConverters.ListHasAsScala(rows).asScala().toSeq();
+    private static scala.collection.Seq<Row> toArraySeq(List<Row> rows) {
+        return rows == null ? null : scala.jdk.CollectionConverters.ListHasAsScala(rows).asScala().toSeq();
     }
 
     // ── lexicon-hit-summary ──────────────────────────────────────────────────
@@ -301,33 +310,33 @@ public final class OutputTableWriter {
     }
 
     public static Row toRow(LexiconHitSummaryRow summaryRow) {
-        List<Row> lexicons = summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
+        scala.collection.Seq<Row> lexicons = toArraySeq(summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
                 lexicon.getId(), lexicon.getName(), lexicon.getTotalTermsCount(), lexicon.getRegexHitCount(),
-                toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                toArraySeq(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
                                 termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount()))
                         .collect(Collectors.toList()))
-        )).collect(Collectors.toList());
+        )).collect(Collectors.toList()));
         return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),
                 lexicons, java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
                 summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
     }
 
     public static Row toRow(LexiconHitDetailRow detailRow) {
-        List<Row> lexicons = detailRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
-                lexicon.getId(), toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+        scala.collection.Seq<Row> lexicons = toArraySeq(detailRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
+                lexicon.getId(), toArraySeq(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
                         termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList()))
-        )).collect(Collectors.toList());
+        )).collect(Collectors.toList()));
         return RowFactory.create(detailRow.getMessageId(), detailRow.getProcessId(), detailRow.getPipelineExecId(),
                 lexicons, java.sql.Date.valueOf(detailRow.getDatasetPartitionValue()),
                 detailRow.getCreatedBy(), Timestamp.from(detailRow.getCreatedTs()));
     }
 
     public static Row toRow(FeatureHitSummaryRow summaryRow) {
-        List<Row> features = summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
+        scala.collection.Seq<Row> features = toArraySeq(summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
                 feature.getId(), feature.getName(), feature.getType(), feature.getIsNoiseReduction(), feature.getHitStatus(),
-                toNestedArrayValue(feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
+                toArraySeq(feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
                         subFeature.getType(), subFeature.getName(), subFeature.getHitStatus())).collect(Collectors.toList()))
-        )).collect(Collectors.toList());
+        )).collect(Collectors.toList()));
         return RowFactory.create(summaryRow.getMessageId(), features,
                 java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()), summaryRow.getFeatureHitType(),
                 summaryRow.getCreatedBy(),
@@ -357,8 +366,8 @@ public final class OutputTableWriter {
                 auditRow.getPipelineExecId(), auditRow.getRecordId(), auditRow.getStageName(), auditRow.getMsgInputFileNm(),
                 auditRow.getMsgInputFilePath(), auditRow.getMsgOutputFilePath(), auditRow.getMsgOutputFileType(),
                 auditRow.getMsgOutputFileNm(), auditRow.getStatus(), auditRow.getReturnCode(), auditRow.getErrorMessage(),
-                toRuleDtlRows(auditRow.getEvaluatedRulesDtls()), auditRow.getEvaluatedRulesCnt(),
-                toRuleDtlRows(auditRow.getDetectedRulesDtls()), auditRow.getDetectedRulesCnt(),
+                toArraySeq(toRuleDtlRows(auditRow.getEvaluatedRulesDtls())), auditRow.getEvaluatedRulesCnt(),
+                toArraySeq(toRuleDtlRows(auditRow.getDetectedRulesDtls())), auditRow.getDetectedRulesCnt(),
                 auditRow.getSysPromptEvalRulesTokens(), auditRow.getInputTokens(), auditRow.getOutputTokens(),
                 auditRow.getThinkingTokens(), auditRow.getCachedTokens(), auditRow.getMsgMatchTextTokens(),
                 Timestamp.from(auditRow.getCreatedTs()), auditRow.getCreatedBy(), auditRow.getAdditionInfo(),

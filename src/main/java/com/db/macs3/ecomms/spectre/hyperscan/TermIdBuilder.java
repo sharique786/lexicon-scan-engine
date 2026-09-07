@@ -52,7 +52,7 @@ public final class TermIdBuilder {
         if (feature == null || feature.isBlank()) {
             throw new IllegalArgumentException("feature must not be null/blank when building a term-metadata filename");
         }
-        return feature + "-compile-results.json";
+        return feature + ".json";
     }
 
     /**
