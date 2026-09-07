@@ -227,7 +227,7 @@ public final class BqColumns {
         public static final String THINKING_TOKENS        = "thinking_tokens";
         public static final String CACHED_TOKENS          = "cached_tokens";
         /** Maps to {@code PipelineRecordAuditRow#msgMatchTextTokens()} — sic, see that class's Javadoc. */
-        public static final String MSG_ATTACH_TEXT_TOKENS = "msg_attach_text_tokens";
+        public static final String MSG_ATTACH_TEXT_TOKENS = "msg_atch_text_tokens";
         public static final String CREATED_TS               = "created_ts";
         public static final String CREATED_BY              = "created_by";
         /** Maps to {@code PipelineRecordAuditRow#additionInfo()} — sic, not "additional_info". */

@@ -46,13 +46,19 @@ public final class ViewRowConverter implements Serializable {
                 getStringOrNull(row, BqColumns.View.OPERATOR),
                 getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION),
                 getDateOrNull(row, BqColumns.View.FEATURE_PARTITION_VALUE),
-                getStringOrNull(row, BqColumns.View.POLICY_ENGINE_ID)
+                getLongAsStringOrNull(row, BqColumns.View.POLICY_ENGINE_ID)
         );
     }
 
     private static String getStringOrNull(Row row, String columnName) {
         int idx = row.fieldIndex(columnName);
         return row.isNullAt(idx) ? null : row.getString(idx);
+    }
+
+    private static String getLongAsStringOrNull(Row row, String columnName) {
+        int idx = row.fieldIndex(columnName);
+        Long longVal = row.isNullAt(idx) ? null : row.getLong(idx);
+        return longVal == null ? null : longVal.toString();
     }
 
     private static Long getLongOrNull(Row row, String columnName) {
