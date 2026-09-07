@@ -15,5 +15,5 @@ scan-engine:
 
 logging:
   level:
-    com.db.macs3.ecomms.spectre.scanengine: INFO
+    com.db.macs3.ecomms.spectre: INFO
     org.apache.spark: WARN

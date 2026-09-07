@@ -254,7 +254,7 @@
                                  autoconfiguration fat jar), so overriding rather than merging is correct here. -->
                             <transformers combine.self="override">
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.db.macs3.ecomms.spectre.scanengine.spark.ScanEngineApplication</mainClass>
+                                    <mainClass>com.db.macs3.ecomms.spectre.LexiconScanEngineApplication</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>

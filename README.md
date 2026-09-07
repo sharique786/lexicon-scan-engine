@@ -1063,7 +1063,7 @@ gcloud dataproc jobs submit spark \
   --cluster=<cluster-name> \
   --region=<region> \
   --jar=gs://<bucket>/lexicon-scan-engine-2.0.0.jar \
-  --class=com.db.macs3.ecomms.spectre.scanengine.spark.ScanEngineApplication \
+  --class=com.db.macs3.ecomms.spectre.ScanEngineApplication \
   --properties="<see Suggested Spark configuration above>" \
   -- \
   --process_id=913b68f9-0f62-4f51-a9c1-c9aa0d84c01c \
