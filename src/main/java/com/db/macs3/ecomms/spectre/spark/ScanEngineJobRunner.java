@@ -12,11 +12,8 @@ import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.gcs.GcsClient;
 import com.db.macs3.ecomms.spectre.gcs.HyperscanPathResolver;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
-import com.db.macs3.ecomms.spectre.model.output.PipelineRecordAuditRow;
 import com.db.macs3.ecomms.spectre.model.output.PipelineStageAuditRow;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.FilterFunction;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
@@ -290,7 +287,7 @@ public class ScanEngineJobRunner {
         // 7. Split and write — this is where steps 4-6's lazy DAG actually executes, as each write
         // below triggers its own Spark action.
         runStageVoid("scan messages + write outputs",
-                () -> writeOutputs(spark, tableConfig, runtimeArgs, hyperscanConfig.hdbGcsBucket(), results));
+                () -> writeOutputs(tableConfig, runtimeArgs, hyperscanConfig.hdbGcsBucket(), results));
     }
 
     /**
@@ -321,62 +318,59 @@ public class ScanEngineJobRunner {
         });
     }
 
-    private void writeOutputs(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
+    // writeOutputs builds each output table's Dataset<Row> via Dataset<MessageProcessingResult>.
+    // mapPartitions(MapPartitionsFunction, Encoder<Row>) directly, against a dedicated mapper
+    // class in this package — NOT via JavaRDD.map(Function) + spark.createDataFrame(JavaRDD<Row>,
+    // StructType), an earlier revision's approach. See OutputTableWriter class Javadoc for why:
+    // a JavaRDD.map lambda that references an enclosing instance field (as this method's
+    // pipeline_record_audit row-building used to, via `properties.getStageName()`) silently
+    // captures the enclosing ScanEngineJobRunner itself, which is not serializable, and fails
+    // with "Task not serializable" only once actually run on a cluster — confirmed via a real
+    // Dataproc run. A standalone MapPartitionsFunction class holding only genuinely serializable
+    // fields (SummaryRowMapper, DetailRowMapper, FeatureHitSummaryRowMapper,
+    // PipelineRecordAuditRowMapper — all in this package) avoids that failure mode structurally,
+    // not just by careful lambda-capture discipline.
+    private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                                String csvMirrorBucket, Dataset<MessageProcessingResult> results) {
-        // Explicit FilterFunction typing: a bare lambda here is ambiguous between Dataset's Java
-        // API (FilterFunction<T>) and its Scala API (Function1<T, Object>), both of which are
-        // structurally compatible with a T -> boolean lambda.
-        Dataset<MessageProcessingResult> successes =
-                results.filter((FilterFunction<MessageProcessingResult>) result -> !result.isError());
+        Dataset<Row> summaryRows = results.mapPartitions(
+                new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA));
+        OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
 
-        JavaRDD<Row> summaryRows = successes.javaRDD()
-                .map(result -> OutputTableWriter.toRow(result.getSummaryRow()));
-        OutputTableWriter.writeLexiconHitSummary(spark, tableConfig, summaryRows);
+        Dataset<Row> restrictedDetailRows = results.mapPartitions(
+                new DetailRowMapper(true), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
+        OutputTableWriter.writeLexiconHitDetail(tableConfig, restrictedDetailRows, true);
+        writeRestrictedCsvMirror(runtimeArgs, csvMirrorBucket, restrictedDetailRows);
 
-        JavaRDD<Row> restrictedDetailRows = successes.javaRDD()
-                .filter(result -> result.isRestricted() && result.getDetailRow() != null)
-                .map(result -> OutputTableWriter.toRow(result.getDetailRow()));
-        OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, restrictedDetailRows, true);
-        writeRestrictedCsvMirror(spark, runtimeArgs, csvMirrorBucket, restrictedDetailRows);
+        Dataset<Row> unrestrictedDetailRows = results.mapPartitions(
+                new DetailRowMapper(false), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
+        OutputTableWriter.writeLexiconHitDetail(tableConfig, unrestrictedDetailRows, false);
 
-        JavaRDD<Row> unrestrictedDetailRows = successes.javaRDD()
-                .filter(result -> !result.isRestricted() && result.getDetailRow() != null)
-                .map(result -> OutputTableWriter.toRow(result.getDetailRow()));
-        OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, unrestrictedDetailRows, false);
+        Dataset<Row> featureHitRows = results.mapPartitions(
+                new FeatureHitSummaryRowMapper(), Encoders.row(OutputTableWriter.FEATURE_HIT_SUMMARY_SCHEMA));
+        OutputTableWriter.writeFeatureHitSummary(tableConfig, featureHitRows);
 
-        JavaRDD<Row> featureHitRows =
-                successes.javaRDD().map(result -> OutputTableWriter.toRow(result.getFeatureHitSummaryRow()));
-        OutputTableWriter.writeFeatureHitSummary(spark, tableConfig, featureHitRows);
-
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        Dataset<MessageProcessingResult> failures =
-                results.filter((FilterFunction<MessageProcessingResult>) MessageProcessingResult::isError);
         // Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/errorMessage/
         // executionDate/createdBy/createdTs are populated here — every other field (rule evaluation
         // details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to stages this
-        // job doesn't run and has no source data for. The Integer count/token fields default to 0
-        // rather than null since they have no real value to report here.
-        JavaRDD<Row> recordAuditRows = failures.javaRDD().map(result -> OutputTableWriter.toRow(new PipelineRecordAuditRow(
-                runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
-                result.getMessageId(), properties.getStageName(), null, null, null, null, null,
-                BqColumns.RecordStatus.FAILED, 1, result.getErrorMessage(), null, 0, null, 0,
-                0, 0, 0, 0, 0, 0,
-                Instant.now(), properties.getCreatedBy(), null, today, null, null, null, null, null, null)));
+        // job doesn't run and has no source data for — see PipelineRecordAuditRowMapper class Javadoc.
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        Dataset<Row> recordAuditRows = results.mapPartitions(
+                new PipelineRecordAuditRowMapper(runtimeArgs, properties.getStageName(), properties.getCreatedBy(), today),
+                Encoders.row(OutputTableWriter.PIPELINE_RECORD_AUDIT_SCHEMA));
         if (!recordAuditRows.isEmpty()) {
-            OutputTableWriter.writePipelineRecordAudit(spark, tableConfig, recordAuditRows);
+            OutputTableWriter.writePipelineRecordAudit(tableConfig, recordAuditRows);
         }
     }
 
     /** Mirrors the restricted detail rows to a single CSV file on GCS. */
-    private void writeRestrictedCsvMirror(SparkSession spark, RuntimeArgs runtimeArgs, String csvMirrorBucket,
-                                           JavaRDD<Row> restrictedDetailRows) {
+    private void writeRestrictedCsvMirror(RuntimeArgs runtimeArgs, String csvMirrorBucket,
+                                           Dataset<Row> restrictedDetailRows) {
         String csvPath = "gs://" + csvMirrorBucket + "/" + runtimeArgs.policyEngineId()
                 + "/" + runtimeArgs.processId() + "/restricted/" + runtimeArgs.pipelineExecId() + ".csv";
-        Dataset<Row> restrictedDetailDataset = spark.createDataFrame(restrictedDetailRows, OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA);
         // Spark's own CSV writer cannot represent nested array/struct columns directly — the
         // evaluated_lexicons column is flattened to its JSON string form specifically for this
         // CSV mirror, since CSV has no native nested-value representation.
-        restrictedDetailDataset
+        restrictedDetailRows
                 .withColumn(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS,
                         functions.to_json(functions.col(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS)))
                 .coalesce(1) // one CSV file at this path

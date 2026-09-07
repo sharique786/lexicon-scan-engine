@@ -3,7 +3,6 @@ package com.db.macs3.ecomms.spectre.bq;
 import com.db.macs3.ecomms.spectre.config.BqTableConfig;
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.model.output.*;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -22,11 +21,31 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Converts each of the 6 output/audit row records into a Spark
- * {@code Dataset<Row>} against an explicit {@link StructType} schema, then
- * writes it to BigQuery via the Spark BigQuery connector
- * ({@code write().format("bigquery")}, append mode — every write here adds
- * new rows; this job never updates rows in place).
+ * Defines each of the 6 output/audit tables' {@link StructType} schemas and
+ * {@code toRow} conversions, and writes a table's {@code Dataset<Row>} to
+ * BigQuery via the Spark BigQuery connector ({@code write().format("bigquery")},
+ * append mode — every write here adds new rows; this job never updates rows
+ * in place).
+ *
+ * <p>For the four message-scale tables (lexicon-hit-summary/-restricted/
+ * -unrestricted, feature-hit-summary), the {@code Dataset<Row>} itself is
+ * built by the caller — {@link com.db.macs3.ecomms.spectre.spark.ScanEngineJobRunner#writeOutputs}
+ * calls {@code Dataset<MessageProcessingResult>.mapPartitions(...)} directly,
+ * against one of the dedicated {@link org.apache.spark.api.java.function.MapPartitionsFunction}
+ * classes in {@code spark/} ({@code SummaryRowMapper}, {@code DetailRowMapper},
+ * {@code FeatureHitSummaryRowMapper}, {@code PipelineRecordAuditRowMapper}) —
+ * this class's {@code write*} methods for those tables just take the
+ * resulting {@code Dataset<Row>} and call {@code .write()} on it; they no
+ * longer build it themselves via {@code JavaRDD.map} +
+ * {@code spark.createDataFrame(JavaRDD<Row>, StructType)} (an earlier
+ * revision's approach — abandoned because a {@code JavaRDD.map} lambda
+ * referencing an enclosing instance field, as {@code writeOutputs} did for
+ * {@code pipeline_record_audit}, silently captures the enclosing
+ * non-serializable class and fails with {@code Task not serializable} at
+ * runtime; a dedicated {@code MapPartitionsFunction} class with only
+ * genuinely serializable fields avoids that class of bug structurally). The
+ * single-row {@code pipeline_stage_audit} write is the one exception — see
+ * {@link #writePipelineStageAudit}.
  *
  * <p>Two write methods are used, split by table scale (see
  * {@code writeAppend}/{@code writeAppendDirect} below): the four
@@ -44,8 +63,7 @@ import java.util.stream.Collectors;
  *
  * <p>Every write here is a normal Spark action on an already-distributed
  * {@code Dataset} — no {@code collect()}, no driver-side row construction at
- * message scale; {@code toDataset}-style conversions run their {@code map}
- * entirely on executors.
+ * message scale.
  */
 public final class OutputTableWriter {
 
@@ -58,9 +76,12 @@ public final class OutputTableWriter {
      * struct that is itself an array element (e.g. {@code evaluated_lexicons[].term_dtls[]},
      * {@code features[].sub_features[]}) to a genuine {@code scala.collection.Seq}.
      *
-     * <p>{@code spark.createDataFrame(JavaRDD<Row>, StructType)}'s generated
-     * row serializer only tolerates a plain {@code java.util.List} for an
-     * ARRAY field at the TOP level of the outer row — for an ARRAY field
+     * <p>The Row-to-{@code InternalRow} conversion behind both {@code
+     * Encoders.row(StructType)} (used by the {@code Dataset.mapPartitions}
+     * mapper classes in {@code spark/} that build these rows) and {@code
+     * spark.createDataFrame(List<Row>, StructType)} (used below for the
+     * single-row audit write) only tolerates a plain {@code java.util.List}
+     * for an ARRAY field at the TOP level of the outer row — for an ARRAY field
      * nested one level deeper (inside a struct that is itself inside an
      * array), the codegen'd {@code MapObjects} expects
      * {@code scala.collection.Seq} and throws {@code ClassCastException:
@@ -103,9 +124,8 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitSummary.CREATED_TS, DataTypes.TimestampType, false),
     });
 
-    public static void writeLexiconHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
-        Dataset<Row> dataset = spark.createDataFrame(rows, LEXICON_HIT_SUMMARY_SCHEMA);
-        writeAppend(dataset, config.bqOutputHitSummary());
+    public static void writeLexiconHitSummary(BqTableConfig config, Dataset<Row> rows) {
+        writeAppend(rows, config.bqOutputHitSummary());
     }
 
     // ── lexicon-hit-restricted / lexicon-hit-unrestricted (shared schema) ───
@@ -135,10 +155,9 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitDetail.CREATED_TS, DataTypes.TimestampType, false),
     });
 
-    public static void writeLexiconHitDetail(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows, boolean restricted) {
-        Dataset<Row> dataset = spark.createDataFrame(rows, LEXICON_HIT_DETAIL_SCHEMA);
+    public static void writeLexiconHitDetail(BqTableConfig config, Dataset<Row> rows, boolean restricted) {
         String fullyQualifiedTable = restricted ? config.bqOutputHitRestricted() : config.bqOutputHitUnrestricted();
-        writeAppend(dataset, fullyQualifiedTable);
+        writeAppend(rows, fullyQualifiedTable);
     }
 
     // ── feature-hit-summary ──────────────────────────────────────────────────
@@ -173,9 +192,8 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.FeatureHitSummary.PIPELINE_EXEC_ID, DataTypes.StringType, false),
     });
 
-    public static void writeFeatureHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
-        Dataset<Row> dataset = spark.createDataFrame(rows, FEATURE_HIT_SUMMARY_SCHEMA);
-        writeAppend(dataset, config.bqOutputFeatureHitSummary());
+    public static void writeFeatureHitSummary(BqTableConfig config, Dataset<Row> rows) {
+        writeAppend(rows, config.bqOutputFeatureHitSummary());
     }
 
     // ── pipeline_stage_audit ─────────────────────────────────────────────────
@@ -352,9 +370,8 @@ public final class OutputTableWriter {
                 auditRow.getRerunProcessId());
     }
 
-    public static void writePipelineRecordAudit(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
-        Dataset<Row> dataset = spark.createDataFrame(rows, PIPELINE_RECORD_AUDIT_SCHEMA);
-        writeAppendDirect(dataset, config.bqOutputRecordAudit());
+    public static void writePipelineRecordAudit(BqTableConfig config, Dataset<Row> rows) {
+        writeAppendDirect(rows, config.bqOutputRecordAudit());
     }
 
     // ── shared write path ────────────────────────────────────────────────────
