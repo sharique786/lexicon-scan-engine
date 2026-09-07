@@ -103,18 +103,6 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitSummary.CREATED_TS, DataTypes.TimestampType, false),
     });
 
-    public static Row toRow(LexiconHitSummaryRow summaryRow) {
-        List<Row> lexicons = summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
-                lexicon.getId(), lexicon.getName(), lexicon.getTotalTermsCount(), lexicon.getRegexHitCount(),
-                toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
-                        termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount()))
-                        .collect(Collectors.toList()))
-        )).collect(Collectors.toList());
-        return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),
-                lexicons, java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
-                summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
-    }
-
     public static void writeLexiconHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
         Dataset<Row> dataset = spark.createDataFrame(rows, LEXICON_HIT_SUMMARY_SCHEMA);
         writeAppend(dataset, config.bqOutputHitSummary());
@@ -146,16 +134,6 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitDetail.CREATED_BY, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.CREATED_TS, DataTypes.TimestampType, false),
     });
-
-    public static Row toRow(LexiconHitDetailRow detailRow) {
-        List<Row> lexicons = detailRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
-                lexicon.getId(), toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
-                        termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList()))
-        )).collect(Collectors.toList());
-        return RowFactory.create(detailRow.getMessageId(), detailRow.getProcessId(), detailRow.getPipelineExecId(),
-                lexicons, java.sql.Date.valueOf(detailRow.getDatasetPartitionValue()),
-                detailRow.getCreatedBy(), Timestamp.from(detailRow.getCreatedTs()));
-    }
 
     public static void writeLexiconHitDetail(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows, boolean restricted) {
         Dataset<Row> dataset = spark.createDataFrame(rows, LEXICON_HIT_DETAIL_SCHEMA);
@@ -194,19 +172,6 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.FeatureHitSummary.PROCESS_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.FeatureHitSummary.PIPELINE_EXEC_ID, DataTypes.StringType, false),
     });
-
-    public static Row toRow(FeatureHitSummaryRow summaryRow) {
-        List<Row> features = summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
-                feature.getId(), feature.getName(), feature.getType(), feature.getIsNoiseReduction(), feature.getHitStatus(),
-                toNestedArrayValue(feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
-                        subFeature.getType(), subFeature.getName(), subFeature.getHitStatus())).collect(Collectors.toList()))
-        )).collect(Collectors.toList());
-        return RowFactory.create(summaryRow.getMessageId(), features,
-                java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()), summaryRow.getFeatureHitType(),
-                summaryRow.getCreatedBy(),
-                summaryRow.getCreatedTs() == null ? null : Timestamp.from(summaryRow.getCreatedTs()),
-                summaryRow.getProcessId(), summaryRow.getPipelineExecId());
-    }
 
     public static void writeFeatureHitSummary(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
         Dataset<Row> dataset = spark.createDataFrame(rows, FEATURE_HIT_SUMMARY_SCHEMA);
@@ -250,23 +215,6 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.PipelineStageAudit.RERUN_TYPE, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.PipelineStageAudit.RERUN_PROCESS_ID, DataTypes.StringType, true),
     });
-
-    public static Row toRow(PipelineStageAuditRow auditRow) {
-        ModelConfigDtls modelConfig = auditRow.getModelConfigDtls();
-        Row modelConfigRow = modelConfig == null ? null : RowFactory.create(
-                modelConfig.getModelName(), modelConfig.getTemprature(), modelConfig.getTopP(),
-                modelConfig.getThinkingBudget(), modelConfig.getMaxOutputToken());
-        return RowFactory.create(auditRow.getProcessId(), auditRow.getTriggerType(), auditRow.getEvalTestId(),
-                auditRow.getPipelineExecId(), auditRow.getStageName(), auditRow.getComposerDagName(), auditRow.getComposerDagPath(),
-                auditRow.getDprocScriptName(), auditRow.getDprocScriptPath(), modelConfigRow,
-                auditRow.getStartTime() == null ? null : Timestamp.from(auditRow.getStartTime()),
-                auditRow.getEndTime() == null ? null : Timestamp.from(auditRow.getEndTime()),
-                auditRow.getJobStatus(), auditRow.getInputFileCount(), auditRow.getOutputFileCount(),
-                auditRow.getInputRecordCount(), auditRow.getOutputRecordCount(), auditRow.getErrorCount(),
-                auditRow.getErrorMessage(), auditRow.getAdditionalInfo(), auditRow.getLogPath(),
-                java.sql.Date.valueOf(auditRow.getExecutionDate()), auditRow.getRerunFlg(), auditRow.getRerunType(),
-                auditRow.getRerunProcessId());
-    }
 
     public static void writePipelineStageAudit(SparkSession spark, BqTableConfig config, PipelineStageAuditRow row) {
         // Single-row audit write — a normal driver-side write of ONE small row is not a
@@ -332,6 +280,58 @@ public final class OutputTableWriter {
         return ruleDtls.stream()
                 .map(ruleDtl -> RowFactory.create(ruleDtl.getRuleId(), ruleDtl.getRuleName(), ruleDtl.getRuleVersion()))
                 .collect(Collectors.toList());
+    }
+
+    public static Row toRow(LexiconHitSummaryRow summaryRow) {
+        List<Row> lexicons = summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
+                lexicon.getId(), lexicon.getName(), lexicon.getTotalTermsCount(), lexicon.getRegexHitCount(),
+                toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                                termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount()))
+                        .collect(Collectors.toList()))
+        )).collect(Collectors.toList());
+        return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),
+                lexicons, java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()),
+                summaryRow.getCreatedBy(), Timestamp.from(summaryRow.getCreatedTs()));
+    }
+
+    public static Row toRow(LexiconHitDetailRow detailRow) {
+        List<Row> lexicons = detailRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
+                lexicon.getId(), toNestedArrayValue(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
+                        termDtl.getTermId(), termDtl.getMatchedText())).collect(Collectors.toList()))
+        )).collect(Collectors.toList());
+        return RowFactory.create(detailRow.getMessageId(), detailRow.getProcessId(), detailRow.getPipelineExecId(),
+                lexicons, java.sql.Date.valueOf(detailRow.getDatasetPartitionValue()),
+                detailRow.getCreatedBy(), Timestamp.from(detailRow.getCreatedTs()));
+    }
+
+    public static Row toRow(FeatureHitSummaryRow summaryRow) {
+        List<Row> features = summaryRow.getFeatures().stream().map(feature -> RowFactory.create(
+                feature.getId(), feature.getName(), feature.getType(), feature.getIsNoiseReduction(), feature.getHitStatus(),
+                toNestedArrayValue(feature.getSubFeatures().stream().map(subFeature -> RowFactory.create(
+                        subFeature.getType(), subFeature.getName(), subFeature.getHitStatus())).collect(Collectors.toList()))
+        )).collect(Collectors.toList());
+        return RowFactory.create(summaryRow.getMessageId(), features,
+                java.sql.Date.valueOf(summaryRow.getDatasetPartitionValue()), summaryRow.getFeatureHitType(),
+                summaryRow.getCreatedBy(),
+                summaryRow.getCreatedTs() == null ? null : Timestamp.from(summaryRow.getCreatedTs()),
+                summaryRow.getProcessId(), summaryRow.getPipelineExecId());
+    }
+
+    public static Row toRow(PipelineStageAuditRow auditRow) {
+        ModelConfigDtls modelConfig = auditRow.getModelConfigDtls();
+        Row modelConfigRow = modelConfig == null ? null : RowFactory.create(
+                modelConfig.getModelName(), modelConfig.getTemprature(), modelConfig.getTopP(),
+                modelConfig.getThinkingBudget(), modelConfig.getMaxOutputToken());
+        return RowFactory.create(auditRow.getProcessId(), auditRow.getTriggerType(), auditRow.getEvalTestId(),
+                auditRow.getPipelineExecId(), auditRow.getStageName(), auditRow.getComposerDagName(), auditRow.getComposerDagPath(),
+                auditRow.getDprocScriptName(), auditRow.getDprocScriptPath(), modelConfigRow,
+                auditRow.getStartTime() == null ? null : Timestamp.from(auditRow.getStartTime()),
+                auditRow.getEndTime() == null ? null : Timestamp.from(auditRow.getEndTime()),
+                auditRow.getJobStatus(), auditRow.getInputFileCount(), auditRow.getOutputFileCount(),
+                auditRow.getInputRecordCount(), auditRow.getOutputRecordCount(), auditRow.getErrorCount(),
+                auditRow.getErrorMessage(), auditRow.getAdditionalInfo(), auditRow.getLogPath(),
+                java.sql.Date.valueOf(auditRow.getExecutionDate()), auditRow.getRerunFlg(), auditRow.getRerunType(),
+                auditRow.getRerunProcessId());
     }
 
     public static Row toRow(PipelineRecordAuditRow auditRow) {

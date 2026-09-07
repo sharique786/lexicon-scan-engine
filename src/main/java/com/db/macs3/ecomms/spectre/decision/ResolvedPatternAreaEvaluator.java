@@ -150,13 +150,13 @@ final class ResolvedPatternAreaEvaluator {
      */
     private static List<LeafOccurrence> findOccurrences(Pattern leaf, String areaOriginalText, List<int[]> words) {
         List<LeafOccurrence> occurrences = new ArrayList<>();
-        Matcher m = leaf.matcher(areaOriginalText);
-        while (m.find()) {
-            int endWordIndex = wordIndexAtOrBefore(words, m.end());
+        Matcher matcher = leaf.matcher(areaOriginalText);
+        while (matcher.find()) {
+            int endWordIndex = wordIndexAtOrBefore(words, matcher.end());
             if (endWordIndex >= 0) {
-                occurrences.add(new LeafOccurrence(m.start(), m.end(), endWordIndex));
+                occurrences.add(new LeafOccurrence(matcher.start(), matcher.end(), endWordIndex));
             }
-            if (m.end() == m.start()) {
+            if (matcher.end() == matcher.start()) {
                 break; // guard against a zero-width match looping forever
             }
         }
@@ -165,9 +165,9 @@ final class ResolvedPatternAreaEvaluator {
 
     private static List<int[]> wordSpans(String text) {
         List<int[]> spans = new ArrayList<>();
-        Matcher m = Pattern.compile("\\S+").matcher(text);
-        while (m.find()) {
-            spans.add(new int[] {m.start(), m.end()});
+        Matcher matcher = Pattern.compile("\\S+").matcher(text);
+        while (matcher.find()) {
+            spans.add(new int[] {matcher.start(), matcher.end()});
         }
         return spans;
     }

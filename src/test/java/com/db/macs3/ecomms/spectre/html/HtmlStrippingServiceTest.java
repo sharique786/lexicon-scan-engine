@@ -34,18 +34,18 @@ class HtmlStrippingServiceTest {
         @DisplayName("matchedText is 'Enjoy Happy', matching the requirement exactly")
         void matchedTextIsCorrect() {
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(ORIGINAL);
-            Matcher m = PATTERN.matcher(result.strippedText());
-            assertThat(m.find()).isTrue();
-            assertThat(m.group()).isEqualTo("Enjoy Happy");
+            Matcher matcher = PATTERN.matcher(result.strippedText());
+            assertThat(matcher.find()).isTrue();
+            assertThat(matcher.group()).isEqualTo("Enjoy Happy");
         }
 
         @Test
         @DisplayName("startCharIndex is 3, matching the requirement exactly")
         void startCharIndexIsCorrect() {
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(ORIGINAL);
-            Matcher m = PATTERN.matcher(result.strippedText());
-            m.find();
-            int originalStart = result.offsetMap().toOriginal(m.start());
+            Matcher matcher = PATTERN.matcher(result.strippedText());
+            matcher.find();
+            int originalStart = result.offsetMap().toOriginal(matcher.start());
             assertThat(originalStart).isEqualTo(3);
         }
 
@@ -55,9 +55,9 @@ class HtmlStrippingServiceTest {
                      "derivations do not reproduce)")
         void endCharIndexIsInternallyConsistent() {
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(ORIGINAL);
-            Matcher m = PATTERN.matcher(result.strippedText());
-            m.find();
-            int originalEnd = result.offsetMap().toOriginal(m.end());
+            Matcher matcher = PATTERN.matcher(result.strippedText());
+            matcher.find();
+            int originalEnd = result.offsetMap().toOriginal(matcher.end());
             assertThat(originalEnd).isEqualTo(21);
         }
     }
@@ -78,10 +78,10 @@ class HtmlStrippingServiceTest {
         @DisplayName("matchedText equals original.substring(start,end) exactly, with no HTML to skip over")
         void matchedTextEqualsSubstring() {
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(PLAIN);
-            Matcher m = Pattern.compile("bomb").matcher(result.strippedText());
-            m.find();
-            int start = result.offsetMap().toOriginal(m.start());
-            int end = result.offsetMap().toOriginal(m.end());
+            Matcher matcher = Pattern.compile("bomb").matcher(result.strippedText());
+            matcher.find();
+            int start = result.offsetMap().toOriginal(matcher.start());
+            int end = result.offsetMap().toOriginal(matcher.end());
             assertThat(PLAIN.substring(start, end)).isEqualTo("bomb");
         }
     }

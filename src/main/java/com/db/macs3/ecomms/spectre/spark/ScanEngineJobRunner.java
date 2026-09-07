@@ -328,10 +328,9 @@ public class ScanEngineJobRunner {
         // structurally compatible with a T -> boolean lambda.
         Dataset<MessageProcessingResult> successes =
                 results.filter((FilterFunction<MessageProcessingResult>) result -> !result.isError());
-        Dataset<MessageProcessingResult> failures =
-                results.filter((FilterFunction<MessageProcessingResult>) MessageProcessingResult::isError);
 
-        JavaRDD<Row> summaryRows = successes.javaRDD().map(result -> OutputTableWriter.toRow(result.getSummaryRow()));
+        JavaRDD<Row> summaryRows = successes.javaRDD()
+                .map(result -> OutputTableWriter.toRow(result.getSummaryRow()));
         OutputTableWriter.writeLexiconHitSummary(spark, tableConfig, summaryRows);
 
         JavaRDD<Row> restrictedDetailRows = successes.javaRDD()
@@ -350,6 +349,8 @@ public class ScanEngineJobRunner {
         OutputTableWriter.writeFeatureHitSummary(spark, tableConfig, featureHitRows);
 
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        Dataset<MessageProcessingResult> failures =
+                results.filter((FilterFunction<MessageProcessingResult>) MessageProcessingResult::isError);
         // Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/errorMessage/
         // executionDate/createdBy/createdTs are populated here — every other field (rule evaluation
         // details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to stages this

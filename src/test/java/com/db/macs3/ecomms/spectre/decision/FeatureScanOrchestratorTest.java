@@ -237,7 +237,7 @@ class FeatureScanOrchestratorTest {
             assertThat(results.get(0).getTermId()).isEqualTo(feature + "::7");
 
             Set<MatchArea> areas = new HashSet<>();
-            for (var m : results.get(0).getMatches()) areas.add(m.getArea());
+            for (var matcher : results.get(0).getMatches()) areas.add(matcher.getArea());
             assertThat(areas).hasSize(3);
         }
     }
