@@ -14,7 +14,7 @@ import java.util.Objects;
  * instead.
  *
  * <p>Field name note: {@link #getPipelineExecId} maps to the BQ column
- * literally named {@code pipelinex_exec_id} — see
+ * literally named {@code pipeline_exec_id} — see
  * {@link PipelineStageAuditRow} class Javadoc for the same note.
  *
  * <p>Field name note: {@link #getMsgMatchTextTokens} maps to
@@ -22,7 +22,7 @@ import java.util.Objects;
  * the Java field, "Attach" in the delivered column — and {@link #getAdditionInfo}
  * (not "additional") likewise matches its column, {@code addition_info},
  * verbatim. Both kept as delivered rather than "corrected", same convention
- * as {@code pipelinex_exec_id}.
+ * as {@code pipeline_exec_id}.
  *
  * <p>Field ORDER note: {@link #getRecordId} now precedes {@link #getStageName} —
  * the delivered schema reordered these relative to an earlier revision of

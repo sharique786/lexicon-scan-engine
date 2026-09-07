@@ -22,7 +22,7 @@ public final class BqColumns {
         public static final String FEATURE_ID                = "feature_id";
         public static final String FEATURE_NAME              = "feature_name";
         public static final String SUB_FEATURE_TYPE         = "sub_feature_type";
-        public static final String FEATURES_TO_APPLY        = "features_to_apply";
+        public static final String FEATURES_TO_APPLY        = "lexicon_features_to_apply_name";
         public static final String IS_NOISE_REDUCTION       = "is_noise_reduction";
         public static final String OPERATOR                  = "operator";
         public static final String FEATURE_DEFINITION        = "feature_definition";
@@ -165,10 +165,10 @@ public final class BqColumns {
         public static final String PROCESS_ID          = "process_id";
         public static final String TRIGGER_TYPE         = "trigger_type";
         public static final String EVAL_TEST_ID          = "eval_test_id";
-        public static final String PIPELINE_EXEC_ID    = "pipelinex_exec_id"; // sic — matches the delivered schema verbatim
+        public static final String PIPELINE_EXEC_ID    = "pipeline_exec_id"; // sic — matches the delivered schema verbatim
         public static final String STAGE_NAME           = "stage_name";
-        public static final String COMPOSER_DAG_NAME   = "composer_dag_name";
-        public static final String COMPOSER_DAG_PATH    = "composer_dag_path";
+        public static final String COMPOSER_DAG_NAME   = "compsr_dag_name";
+        public static final String COMPOSER_DAG_PATH    = "compsr_dag_path";
         /** Renamed from {@code dproc_dag_name} — Dataproc runs a script, not a DAG. */
         public static final String DPROC_SCRIPT_NAME    = "dproc_script_name";
         public static final String DPROC_SCRIPT_PATH     = "dproc_script_path";
@@ -208,7 +208,7 @@ public final class BqColumns {
         public static final String PROCESS_ID          = "process_id";
         public static final String TRIGGER_TYPE         = "trigger_type";
         public static final String EVAL_TEST_ID          = "eval_test_id";
-        public static final String PIPELINE_EXEC_ID    = "pipelinex_exec_id"; // sic — matches the delivered schema verbatim
+        public static final String PIPELINE_EXEC_ID    = "pipeline_exec_id"; // sic — matches the delivered schema verbatim
         /** Precedes {@link #STAGE_NAME} in the delivered schema — see {@code PipelineRecordAuditRow} class Javadoc. */
         public static final String RECORD_ID             = "record_id";
         public static final String STAGE_NAME           = "stage_name";

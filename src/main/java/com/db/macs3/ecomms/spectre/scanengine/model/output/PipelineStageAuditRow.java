@@ -14,7 +14,7 @@ import java.util.Objects;
  * matching BigQuery's append-oriented write model).
  *
  * <p>Field name note: {@link #getPipelineExecId} maps to the BQ column
- * literally named {@code pipelinex_exec_id} (with an "x") — see
+ * literally named {@code pipeline_exec_id} (with an "x") — see
  * {@code BqColumns.PipelineStageAudit#PIPELINE_EXEC_ID}; kept verbatim from
  * the delivered schema rather than "corrected", since it persisted across a
  * schema revision and is therefore treated as intentional.
@@ -25,12 +25,12 @@ import java.util.Objects;
  * Composer's), and the delivered schema marks {@link #getComposerDagName},
  * {@link #getComposerDagPath}, {@link #getDprocScriptName}, and
  * {@link #getDprocScriptPath} all NOT NULL (previously nullable). Neither
- * {@code RuntimeArgs} nor {@code DataprocConfig} currently carries values for
- * any of these four fields — {@code ScanEngineJobRunner.writeStageAudit}
- * still passes {@code null} for all of them. This is a known, pre-existing
- * gap: a real BigQuery table enforcing NOT NULL on these columns would
- * reject the write. Wiring real Composer DAG name/path and the Dataproc
- * script name/path through to this row is not yet done.
+ * {@code RuntimeArgs} nor {@code DataprocConfig} currently carries real values
+ * for any of these four fields — {@code ScanEngineJobRunner.writeStageAudit}
+ * passes a placeholder string for each rather than {@code null}, since a real
+ * BigQuery table enforcing NOT NULL on these columns would reject a null
+ * write. Wiring real Composer DAG name/path and the Dataproc script
+ * name/path through to this row is not yet done.
  */
 public class PipelineStageAuditRow implements Serializable {
 

@@ -4,6 +4,7 @@ import com.db.macs3.ecomms.spectre.scanengine.model.output.FeatureHitSummaryRow;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.LexiconHitDetailRow;
 import com.db.macs3.ecomms.spectre.scanengine.model.output.LexiconHitSummaryRow;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -13,29 +14,35 @@ import java.util.Objects;
  * {@code pipeline_record_audit}, so that a single message's processing
  * failure never fails the whole job.
  *
- * <p>Exactly one of ({@link #summaryRow}, {@link #featureHitSummaryRow}) vs
- * {@link #errorMessage} is meaningful for a given instance — see
- * {@link #isError()}. {@link #detailRow} may be null even on success (a
+ * <p>Exactly one of ({@link #getSummaryRow()}, {@link #getFeatureHitSummaryRow()}) vs
+ * {@link #getErrorMessage()} is meaningful for a given instance — see
+ * {@link #isError()}. {@link #getDetailRow()} may be null even on success (a
  * message with nothing surviving disclaimer suppression, or one
  * short-circuited by noise reduction — see {@code OutputRowBuilder#buildDetailRow}).
  *
  * <p>Serializable: this is the element type Spark's {@code mapPartitions}
  * output {@code Dataset} carries via {@code Encoders.kryo}.
  */
-public final class MessageProcessingResult implements Serializable {
+public class MessageProcessingResult implements Serializable {
 
-    private final String messageId;
-    private final boolean restricted;
-    private final String datasetPartitionValue;
-    private final LexiconHitSummaryRow summaryRow;
-    private final LexiconHitDetailRow detailRow;
-    private final FeatureHitSummaryRow featureHitSummaryRow;
-    private final String errorMessage;
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private String messageId;
+    private boolean restricted;
+    private String datasetPartitionValue;
+    private LexiconHitSummaryRow summaryRow;
+    private LexiconHitDetailRow detailRow;
+    private FeatureHitSummaryRow featureHitSummaryRow;
+    private String errorMessage;
+
+    public MessageProcessingResult() {
+    }
 
     /**
      * @param messageId               the message this result is for
      * @param restricted                which output table ({@code lexicon-hit-restricted} vs
-     *                                 {@code -unrestricted}) {@link #detailRow} belongs to
+     *                                 {@code -unrestricted}) {@link #getDetailRow()} belongs to
      * @param datasetPartitionValue     carried through for the audit/error path
      * @param summaryRow                 null iff {@link #isError()}
      * @param detailRow                   may be null on success (see class Javadoc); always null on error
@@ -54,13 +61,61 @@ public final class MessageProcessingResult implements Serializable {
         this.errorMessage = errorMessage;
     }
 
-    public String messageId() { return messageId; }
-    public boolean restricted() { return restricted; }
-    public String datasetPartitionValue() { return datasetPartitionValue; }
-    public LexiconHitSummaryRow summaryRow() { return summaryRow; }
-    public LexiconHitDetailRow detailRow() { return detailRow; }
-    public FeatureHitSummaryRow featureHitSummaryRow() { return featureHitSummaryRow; }
-    public String errorMessage() { return errorMessage; }
+    public String getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(String messageId) {
+        this.messageId = messageId;
+    }
+
+    public boolean isRestricted() {
+        return restricted;
+    }
+
+    public void setRestricted(boolean restricted) {
+        this.restricted = restricted;
+    }
+
+    public String getDatasetPartitionValue() {
+        return datasetPartitionValue;
+    }
+
+    public void setDatasetPartitionValue(String datasetPartitionValue) {
+        this.datasetPartitionValue = datasetPartitionValue;
+    }
+
+    public LexiconHitSummaryRow getSummaryRow() {
+        return summaryRow;
+    }
+
+    public void setSummaryRow(LexiconHitSummaryRow summaryRow) {
+        this.summaryRow = summaryRow;
+    }
+
+    public LexiconHitDetailRow getDetailRow() {
+        return detailRow;
+    }
+
+    public void setDetailRow(LexiconHitDetailRow detailRow) {
+        this.detailRow = detailRow;
+    }
+
+    public FeatureHitSummaryRow getFeatureHitSummaryRow() {
+        return featureHitSummaryRow;
+    }
+
+    public void setFeatureHitSummaryRow(FeatureHitSummaryRow featureHitSummaryRow) {
+        this.featureHitSummaryRow = featureHitSummaryRow;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
 
     public boolean isError() {
         return errorMessage != null;

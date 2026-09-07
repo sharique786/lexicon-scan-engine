@@ -13,7 +13,7 @@ import java.util.Objects;
  *
  * <p>{@link #getTemprature()} is spelled verbatim as delivered by the schema
  * (not "temperature") — kept as-is rather than "corrected", the same
- * convention this project applies to {@code pipelinex_exec_id} elsewhere;
+ * convention this project applies to {@code pipeline_exec_id} elsewhere;
  * see {@code BqColumns.PipelineStageAudit.ModelConfigDtls}.
  */
 public class ModelConfigDtls implements Serializable {

@@ -272,34 +272,35 @@ public class ScanEngineJobRunner {
         Dataset<MessageProcessingResult> failures =
                 results.filter((FilterFunction<MessageProcessingResult>) MessageProcessingResult::isError);
 
-        JavaRDD<Row> summaryRows = successes.javaRDD().map(result -> OutputTableWriter.toRow(result.summaryRow()));
+        JavaRDD<Row> summaryRows = successes.javaRDD().map(result -> OutputTableWriter.toRow(result.getSummaryRow()));
         OutputTableWriter.writeLexiconHitSummary(spark, tableConfig, summaryRows);
 
         JavaRDD<Row> restrictedDetailRows = successes.javaRDD()
-                .filter(result -> result.restricted() && result.detailRow() != null)
-                .map(result -> OutputTableWriter.toRow(result.detailRow()));
+                .filter(result -> result.isRestricted() && result.getDetailRow() != null)
+                .map(result -> OutputTableWriter.toRow(result.getDetailRow()));
         OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, restrictedDetailRows, true);
         writeRestrictedCsvMirror(spark, runtimeArgs, csvMirrorBucket, restrictedDetailRows);
 
         JavaRDD<Row> unrestrictedDetailRows = successes.javaRDD()
-                .filter(result -> !result.restricted() && result.detailRow() != null)
-                .map(result -> OutputTableWriter.toRow(result.detailRow()));
+                .filter(result -> !result.isRestricted() && result.getDetailRow() != null)
+                .map(result -> OutputTableWriter.toRow(result.getDetailRow()));
         OutputTableWriter.writeLexiconHitDetail(spark, tableConfig, unrestrictedDetailRows, false);
 
         JavaRDD<Row> featureHitRows =
-                successes.javaRDD().map(result -> OutputTableWriter.toRow(result.featureHitSummaryRow()));
+                successes.javaRDD().map(result -> OutputTableWriter.toRow(result.getFeatureHitSummaryRow()));
         OutputTableWriter.writeFeatureHitSummary(spark, tableConfig, featureHitRows);
 
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         // Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/errorMessage/
         // executionDate/createdBy/createdTs are populated here — every other field (rule evaluation
         // details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to stages this
-        // job doesn't run and has no source data for.
+        // job doesn't run and has no source data for. The Integer count/token fields default to 0
+        // rather than null since they have no real value to report here.
         JavaRDD<Row> recordAuditRows = failures.javaRDD().map(result -> OutputTableWriter.toRow(new PipelineRecordAuditRow(
                 runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
-                result.messageId(), properties.getStageName(), null, null, null, null, null,
-                BqColumns.RecordStatus.FAILED, 1, result.errorMessage(), null, null, null, null,
-                null, null, null, null, null, null,
+                result.getMessageId(), properties.getStageName(), null, null, null, null, null,
+                BqColumns.RecordStatus.FAILED, 1, result.getErrorMessage(), null, 0, null, 0,
+                0, 0, 0, 0, 0, 0,
                 Instant.now(), properties.getCreatedBy(), null, today, null, null, null, null, null, null)));
         if (!recordAuditRows.isEmpty()) {
             OutputTableWriter.writePipelineRecordAudit(spark, tableConfig, recordAuditRows);
@@ -328,20 +329,23 @@ public class ScanEngineJobRunner {
     /**
      * @param errorCount INTEGER, per the delivered schema (was STRING in an earlier revision)
      */
+    /** Placeholder for the NOT NULL Composer DAG / Dataproc script columns until real values are wired through. */
+    private static final String STAGE_AUDIT_UNKNOWN_STRING = "N/A";
+
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                                   Instant startTime, Instant endTime, String status,
                                   Integer errorCount, String errorMessage) {
-        // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath are null here — neither
-        // RuntimeArgs nor DataprocConfig currently carries Composer DAG or Dataproc script
-        // name/path values. The delivered schema now marks all four NOT NULL (see
-        // PipelineStageAuditRow class Javadoc) — a real BigQuery table enforcing that constraint
-        // would reject this write. Pre-existing gap, not introduced by this change; wiring real
-        // values through is still open.
+        // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath: neither RuntimeArgs nor
+        // DataprocConfig currently carries Composer DAG or Dataproc script name/path values, but the
+        // delivered schema marks all four NOT NULL (see PipelineStageAuditRow class Javadoc) — a real
+        // BigQuery table enforcing that constraint would reject a null write, so a placeholder is used
+        // until real values are wired through.
         PipelineStageAuditRow row = new PipelineStageAuditRow(
                 runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
-                properties.getStageName(), null, null, null, null, null,
-                startTime, endTime, status, null, null, null, null,
-                errorCount, errorMessage, null, null,
+                properties.getStageName(), STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING,
+                STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING, null,
+                startTime, endTime, status, 0, 0, 0, 0,
+                errorCount == null ? 0 : errorCount, errorMessage, null, null,
                 LocalDate.now(ZoneOffset.UTC), null, null, null);
         OutputTableWriter.writePipelineStageAudit(spark, tableConfig, row);
     }
