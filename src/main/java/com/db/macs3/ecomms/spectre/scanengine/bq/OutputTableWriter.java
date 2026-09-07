@@ -24,6 +24,14 @@ import java.util.stream.Collectors;
  * ({@code write().format("bigquery")}, append mode — every write here adds
  * new rows; this job never updates rows in place).
  *
+ * <p>Two write methods are used, split by table scale (see
+ * {@code writeAppend}/{@code writeAppendDirect} below): the four
+ * message-scale tables (millions of rows) use {@code writeMethod=indirect}
+ * (the connector default — stage to GCS, then one BigQuery load job) with
+ * {@code intermediateFormat=avro}; the two small audit tables use
+ * {@code writeMethod=direct} (Storage Write API, no GCS staging) for lower
+ * per-write latency, since their volume is negligible.
+ *
  * <p>Explicit {@code Row}/{@code StructType} construction is used rather
  * than a bean/reflection-based encoder because these are Java records (no
  * zero-arg constructor + setters for {@code Encoders.bean} to use) — this
@@ -259,7 +267,7 @@ public final class OutputTableWriter {
         // scaling concern (contrast the per-message tables above, always written from an
         // already-distributed Dataset).
         Dataset<Row> dataset = spark.createDataFrame(List.of(toRow(row)), PIPELINE_STAGE_AUDIT_SCHEMA);
-        writeAppend(dataset, config.bqOutputStageAudit());
+        writeAppendDirect(dataset, config.bqOutputStageAudit());
     }
 
     // ── pipeline_record_audit ────────────────────────────────────────────────
@@ -340,15 +348,45 @@ public final class OutputTableWriter {
 
     public static void writePipelineRecordAudit(SparkSession spark, BqTableConfig config, JavaRDD<Row> rows) {
         Dataset<Row> dataset = spark.createDataFrame(rows, PIPELINE_RECORD_AUDIT_SCHEMA);
-        writeAppend(dataset, config.bqOutputRecordAudit());
+        writeAppendDirect(dataset, config.bqOutputRecordAudit());
     }
 
     // ── shared write path ────────────────────────────────────────────────────
 
+    // intermediateFormat=avro: the connector's indirect write defaults to Parquet, whose
+    // 3-level LIST encoding for a REPEATED RECORD (evaluated_lexicons[]/features[]) sitting
+    // alongside its own nested REPEATED sub-field (term_dtls[]/sub_features[]) is a documented
+    // spark-bigquery-connector defect — the BQ load job rejects it with "Schema mismatch:
+    // referenced variable '...id' has array levels of 1, while the corresponding field path to
+    // Parquet column has 0 repeated fields" even though the destination table schema and this
+    // job's Spark schema agree exactly (confirmed against the live lexicon-hit-summary table).
+    // Avro's array representation doesn't hit this bug. See GoogleCloudDataproc/
+    // spark-bigquery-connector issues #474 and #1466.
+    //
+    // Used for the four message-scale tables (lexicon-hit-summary/-restricted/-unrestricted,
+    // feature-hit-summary) — at "millions of messages" scale, indirect's single batch load job
+    // outperforms the direct Storage Write API's per-row/per-batch overhead. See
+    // writeAppendDirect below for the two small audit tables, where the opposite tradeoff wins.
     private static void writeAppend(Dataset<Row> dataset, String fullyQualifiedTable) {
         dataset.write()
                 .format("bigquery")
                 .option("table", fullyQualifiedTable)
+                .option("intermediateFormat", "avro")
+                .mode(SaveMode.Append)
+                .save();
+    }
+
+    // writeMethod=direct: no intermediate GCS file/load job — rows go straight to BigQuery via
+    // the Storage Write API, with schema compatibility checked up front in-process rather than
+    // inside a load job. Lower per-write latency, no GCS staging round-trip; used only for the
+    // two tiny audit tables (pipeline_stage_audit: 2 rows/run; pipeline_record_audit: failed
+    // messages only) where that latency actually matters and the overhead is negligible — see
+    // README's write-method guidance. Do not use this for the message-scale tables above.
+    private static void writeAppendDirect(Dataset<Row> dataset, String fullyQualifiedTable) {
+        dataset.write()
+                .format("bigquery")
+                .option("table", fullyQualifiedTable)
+                .option("writeMethod", "direct")
                 .mode(SaveMode.Append)
                 .save();
     }

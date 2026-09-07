@@ -162,7 +162,7 @@ public final class BqColumns {
     public static final class PipelineStageAudit {
         private PipelineStageAudit() {}
         public static final String TABLE = "pipeline_stage_audit";
-        public static final String PROCESS_ID          = "process_id";
+        public static final String PROCESS_ID          = "process_Id"; // sic — matches the delivered schema verbatim
         public static final String TRIGGER_TYPE         = "trigger_type";
         public static final String EVAL_TEST_ID          = "eval_test_id";
         public static final String PIPELINE_EXEC_ID    = "pipeline_exec_id"; // sic — matches the delivered schema verbatim
@@ -205,7 +205,7 @@ public final class BqColumns {
     public static final class PipelineRecordAudit {
         private PipelineRecordAudit() {}
         public static final String TABLE = "pipeline_record_audit";
-        public static final String PROCESS_ID          = "process_id";
+        public static final String PROCESS_ID          = "process_Id"; // sic — matches the delivered schema verbatim
         public static final String TRIGGER_TYPE         = "trigger_type";
         public static final String EVAL_TEST_ID          = "eval_test_id";
         public static final String PIPELINE_EXEC_ID    = "pipeline_exec_id"; // sic — matches the delivered schema verbatim
