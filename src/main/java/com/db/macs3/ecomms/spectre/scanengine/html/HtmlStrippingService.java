@@ -56,26 +56,31 @@ public final class HtmlStrippingService {
 
     private HtmlStrippingService() {}
 
-    /**
-     * Result of {@link #strip}.
-     *
-     * @param strippedText    the text with every HTML-tag-or-whitespace run
-     *                         collapsed to exactly one space — what Hyperscan
-     *                         actually scans
-     * @param offsetMap        translates a stripped-text position back to its
-     *                         original-text position — see {@link OffsetMap}
-     */
     public static final class StripResult implements Serializable {
         private final String strippedText;
         private final OffsetMap offsetMap;
 
+        /**
+         * Result of {@link #strip}.
+         *
+         * @param strippedText    the text with every HTML-tag-or-whitespace run
+         *                         collapsed to exactly one space — what Hyperscan
+         *                         actually scans
+         * @param offsetMap        translates a stripped-text position back to its
+         *                         original-text position — see {@link OffsetMap}
+         */
         public StripResult(String strippedText, OffsetMap offsetMap) {
             this.strippedText = strippedText;
             this.offsetMap = offsetMap;
         }
 
-        public String strippedText() { return strippedText; }
-        public OffsetMap offsetMap() { return offsetMap; }
+        public String strippedText() {
+            return strippedText;
+        }
+
+        public OffsetMap offsetMap() {
+            return offsetMap;
+        }
 
         @Override
         public boolean equals(Object obj) {

@@ -71,22 +71,69 @@ public class FeatureHitSummaryRow implements Serializable {
         this.pipelineExecId = pipelineExecId;
     }
 
-    public String getMessageId() { return messageId; }
-    public void setMessageId(String messageId) { this.messageId = messageId; }
-    public List<Feature> getFeatures() { return features; }
-    public void setFeatures(List<Feature> features) { this.features = features; }
-    public LocalDate getDatasetPartitionValue() { return datasetPartitionValue; }
-    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
-    public String getFeatureHitType() { return featureHitType; }
-    public void setFeatureHitType(String featureHitType) { this.featureHitType = featureHitType; }
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-    public Instant getCreatedTs() { return createdTs; }
-    public void setCreatedTs(Instant createdTs) { this.createdTs = createdTs; }
-    public String getProcessId() { return processId; }
-    public void setProcessId(String processId) { this.processId = processId; }
-    public String getPipelineExecId() { return pipelineExecId; }
-    public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
+    public String getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(String messageId) {
+        this.messageId = messageId;
+    }
+
+    public List<Feature> getFeatures() {
+        return features;
+    }
+
+    public void setFeatures(List<Feature> features) {
+        this.features = features;
+    }
+
+    public LocalDate getDatasetPartitionValue() {
+        return datasetPartitionValue;
+    }
+
+    public void setDatasetPartitionValue(LocalDate datasetPartitionValue) {
+        this.datasetPartitionValue = datasetPartitionValue;
+    }
+
+    public String getFeatureHitType() {
+        return featureHitType;
+    }
+
+    public void setFeatureHitType(String featureHitType) {
+        this.featureHitType = featureHitType;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public Instant getCreatedTs() {
+        return createdTs;
+    }
+
+    public void setCreatedTs(Instant createdTs) {
+        this.createdTs = createdTs;
+    }
+
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
+    }
+
+    public String getPipelineExecId() {
+        return pipelineExecId;
+    }
+
+    public void setPipelineExecId(String pipelineExecId) {
+        this.pipelineExecId = pipelineExecId;
+    }
 
     @Override
     public boolean equals(Object obj) {
@@ -154,18 +201,53 @@ public class FeatureHitSummaryRow implements Serializable {
             this.subFeatures = subFeatures;
         }
 
-        public long getId() { return id; }
-        public void setId(long id) { this.id = id; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        public Boolean getIsNoiseReduction() { return isNoiseReduction; }
-        public void setIsNoiseReduction(Boolean noiseReduction) { isNoiseReduction = noiseReduction; }
-        public Boolean getHitStatus() { return hitStatus; }
-        public void setHitStatus(Boolean hitStatus) { this.hitStatus = hitStatus; }
-        public List<SubFeature> getSubFeatures() { return subFeatures; }
-        public void setSubFeatures(List<SubFeature> subFeatures) { this.subFeatures = subFeatures; }
+        public long getId() {
+            return id;
+        }
+
+        public void setId(long id) {
+            this.id = id;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public Boolean getIsNoiseReduction() {
+            return isNoiseReduction;
+        }
+
+        public void setIsNoiseReduction(Boolean noiseReduction) {
+            isNoiseReduction = noiseReduction;
+        }
+
+        public Boolean getHitStatus() {
+            return hitStatus;
+        }
+
+        public void setHitStatus(Boolean hitStatus) {
+            this.hitStatus = hitStatus;
+        }
+
+        public List<SubFeature> getSubFeatures() {
+            return subFeatures;
+        }
+
+        public void setSubFeatures(List<SubFeature> subFeatures) {
+            this.subFeatures = subFeatures;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -219,12 +301,29 @@ public class FeatureHitSummaryRow implements Serializable {
             this.hitStatus = hitStatus;
         }
 
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public Boolean getHitStatus() { return hitStatus; }
-        public void setHitStatus(Boolean hitStatus) { this.hitStatus = hitStatus; }
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
+
+        public Boolean getHitStatus() {
+            return hitStatus;
+        }
+
+        public void setHitStatus(Boolean hitStatus) {
+            this.hitStatus = hitStatus;
+        }
 
         @Override
         public boolean equals(Object obj) {

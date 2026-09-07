@@ -52,14 +52,37 @@ public class GroupEvaluationResult implements Serializable {
         this.isHit = isHit;
     }
 
-    public FeatureGroup getGroup() { return group; }
-    public void setGroup(FeatureGroup group) { this.group = group; }
-    public Map<FeatureDecisionRow, List<TermMatchResult>> getMemberMatches() { return memberMatches; }
-    public void setMemberMatches(Map<FeatureDecisionRow, List<TermMatchResult>> memberMatches) { this.memberMatches = memberMatches; }
-    public Map<FeatureDecisionRow, Boolean> getMemberHit() { return memberHit; }
-    public void setMemberHit(Map<FeatureDecisionRow, Boolean> memberHit) { this.memberHit = memberHit; }
-    public boolean isHit() { return isHit; }
-    public void setHit(boolean hit) { isHit = hit; }
+    public FeatureGroup getGroup() {
+        return group;
+    }
+
+    public void setGroup(FeatureGroup group) {
+        this.group = group;
+    }
+
+    public Map<FeatureDecisionRow, List<TermMatchResult>> getMemberMatches() {
+        return memberMatches;
+    }
+
+    public void setMemberMatches(Map<FeatureDecisionRow, List<TermMatchResult>> memberMatches) {
+        this.memberMatches = memberMatches;
+    }
+
+    public Map<FeatureDecisionRow, Boolean> getMemberHit() {
+        return memberHit;
+    }
+
+    public void setMemberHit(Map<FeatureDecisionRow, Boolean> memberHit) {
+        this.memberHit = memberHit;
+    }
+
+    public boolean isHit() {
+        return isHit;
+    }
+
+    public void setHit(boolean hit) {
+        isHit = hit;
+    }
 
     @Override
     public boolean equals(Object obj) {

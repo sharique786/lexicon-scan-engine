@@ -46,15 +46,35 @@ public class ScanEngineProperties {
     /** This job's {@code pipeline_stage_audit.stage_name} identity. */
     private String stageName = DEFAULT_STAGE_IDENTITY;
 
-    public Long getMaxAttachmentSizeBytes() { return maxAttachmentSizeBytes; }
-    public void setMaxAttachmentSizeBytes(Long maxAttachmentSizeBytes) { this.maxAttachmentSizeBytes = maxAttachmentSizeBytes; }
+    public Long getMaxAttachmentSizeBytes() {
+        return maxAttachmentSizeBytes;
+    }
 
-    public int getMaxCachedDatabasesPerPartition() { return maxCachedDatabasesPerPartition; }
-    public void setMaxCachedDatabasesPerPartition(int maxCachedDatabasesPerPartition) { this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition; }
+    public void setMaxAttachmentSizeBytes(Long maxAttachmentSizeBytes) {
+        this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
+    }
 
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public int getMaxCachedDatabasesPerPartition() {
+        return maxCachedDatabasesPerPartition;
+    }
 
-    public String getStageName() { return stageName; }
-    public void setStageName(String stageName) { this.stageName = stageName; }
+    public void setMaxCachedDatabasesPerPartition(int maxCachedDatabasesPerPartition) {
+        this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getStageName() {
+        return stageName;
+    }
+
+    public void setStageName(String stageName) {
+        this.stageName = stageName;
+    }
 }

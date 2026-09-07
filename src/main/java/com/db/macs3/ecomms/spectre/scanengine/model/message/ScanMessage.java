@@ -66,20 +66,61 @@ public class ScanMessage implements Serializable {
         this.restricted = restricted;
     }
 
-    public String getMessageId() { return messageId; }
-    public void setMessageId(String messageId) { this.messageId = messageId; }
-    public MessageSource getSource() { return source; }
-    public void setSource(MessageSource source) { this.source = source; }
-    public MessageContent getContent() { return content; }
-    public void setContent(MessageContent content) { this.content = content; }
-    public List<MessageAttachment> getAttachments() { return attachments; }
-    public void setAttachments(List<MessageAttachment> attachments) { this.attachments = attachments; }
-    public MessageProcessing getProcessing() { return processing; }
-    public void setProcessing(MessageProcessing processing) { this.processing = processing; }
-    public String getDatasetPartitionValue() { return datasetPartitionValue; }
-    public void setDatasetPartitionValue(String datasetPartitionValue) { this.datasetPartitionValue = datasetPartitionValue; }
-    public boolean isRestricted() { return restricted; }
-    public void setRestricted(boolean restricted) { this.restricted = restricted; }
+    public String getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(String messageId) {
+        this.messageId = messageId;
+    }
+
+    public MessageSource getSource() {
+        return source;
+    }
+
+    public void setSource(MessageSource source) {
+        this.source = source;
+    }
+
+    public MessageContent getContent() {
+        return content;
+    }
+
+    public void setContent(MessageContent content) {
+        this.content = content;
+    }
+
+    public List<MessageAttachment> getAttachments() {
+        return attachments;
+    }
+
+    public void setAttachments(List<MessageAttachment> attachments) {
+        this.attachments = attachments;
+    }
+
+    public MessageProcessing getProcessing() {
+        return processing;
+    }
+
+    public void setProcessing(MessageProcessing processing) {
+        this.processing = processing;
+    }
+
+    public String getDatasetPartitionValue() {
+        return datasetPartitionValue;
+    }
+
+    public void setDatasetPartitionValue(String datasetPartitionValue) {
+        this.datasetPartitionValue = datasetPartitionValue;
+    }
+
+    public boolean isRestricted() {
+        return restricted;
+    }
+
+    public void setRestricted(boolean restricted) {
+        this.restricted = restricted;
+    }
 
     /** @return {@link #getAttachments}, or an empty list if the AVRO record had no attachments field/a null one. */
     public List<MessageAttachment> attachmentsOrEmpty() {

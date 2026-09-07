@@ -28,14 +28,37 @@ public class MessageSource implements Serializable {
         this.srcSysConvId = srcSysConvId;
     }
 
-    public String getChannelName() { return channelName; }
-    public void setChannelName(String channelName) { this.channelName = channelName; }
-    public String getSourceName() { return sourceName; }
-    public void setSourceName(String sourceName) { this.sourceName = sourceName; }
-    public String getSrcSysName() { return srcSysName; }
-    public void setSrcSysName(String srcSysName) { this.srcSysName = srcSysName; }
-    public String getSrcSysConvId() { return srcSysConvId; }
-    public void setSrcSysConvId(String srcSysConvId) { this.srcSysConvId = srcSysConvId; }
+    public String getChannelName() {
+        return channelName;
+    }
+
+    public void setChannelName(String channelName) {
+        this.channelName = channelName;
+    }
+
+    public String getSourceName() {
+        return sourceName;
+    }
+
+    public void setSourceName(String sourceName) {
+        this.sourceName = sourceName;
+    }
+
+    public String getSrcSysName() {
+        return srcSysName;
+    }
+
+    public void setSrcSysName(String srcSysName) {
+        this.srcSysName = srcSysName;
+    }
+
+    public String getSrcSysConvId() {
+        return srcSysConvId;
+    }
+
+    public void setSrcSysConvId(String srcSysConvId) {
+        this.srcSysConvId = srcSysConvId;
+    }
 
     @Override
     public boolean equals(Object obj) {

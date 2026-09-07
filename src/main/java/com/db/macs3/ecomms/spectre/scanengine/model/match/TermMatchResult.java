@@ -38,12 +38,29 @@ public class TermMatchResult implements Serializable {
         this.matches = matches;
     }
 
-    public String getTermId() { return termId; }
-    public void setTermId(String termId) { this.termId = termId; }
-    public String getTermRegexPattern() { return termRegexPattern; }
-    public void setTermRegexPattern(String termRegexPattern) { this.termRegexPattern = termRegexPattern; }
-    public List<AreaMatch> getMatches() { return matches; }
-    public void setMatches(List<AreaMatch> matches) { this.matches = matches; }
+    public String getTermId() {
+        return termId;
+    }
+
+    public void setTermId(String termId) {
+        this.termId = termId;
+    }
+
+    public String getTermRegexPattern() {
+        return termRegexPattern;
+    }
+
+    public void setTermRegexPattern(String termRegexPattern) {
+        this.termRegexPattern = termRegexPattern;
+    }
+
+    public List<AreaMatch> getMatches() {
+        return matches;
+    }
+
+    public void setMatches(List<AreaMatch> matches) {
+        this.matches = matches;
+    }
 
     @Override
     public boolean equals(Object obj) {

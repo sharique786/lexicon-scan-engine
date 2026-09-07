@@ -92,15 +92,37 @@ public final class DataprocConfig implements Serializable {
         this.spectre = spectre;
     }
 
-    public String projectId() { return projectId; }
-    public String region() { return region; }
-    public String clusterName() { return clusterName; }
-    public Long workflowTimeoutSeconds() { return workflowTimeoutSeconds; }
-    public SpectreConfig spectre() { return spectre; }
+    public String projectId() {
+        return projectId;
+    }
 
-    public HyperscanGcsConfig hyperscan() { return spectre.engine().hyperscan(); }
-    public MessagesGcsConfig messages() { return spectre.engine().messages(); }
-    public BqTableConfig bigquery() { return spectre.engine().bigquery(); }
+    public String region() {
+        return region;
+    }
+
+    public String clusterName() {
+        return clusterName;
+    }
+
+    public Long workflowTimeoutSeconds() {
+        return workflowTimeoutSeconds;
+    }
+
+    public SpectreConfig spectre() {
+        return spectre;
+    }
+
+    public HyperscanGcsConfig hyperscan() {
+        return spectre.engine().hyperscan();
+    }
+
+    public MessagesGcsConfig messages() {
+        return spectre.engine().messages();
+    }
+
+    public BqTableConfig bigquery() {
+        return spectre.engine().bigquery();
+    }
 
     // SafeConstructor rather than SnakeYAML's default Constructor: this file is
     // externally-owned (written by the orchestrator, not this codebase), and SafeConstructor
@@ -163,7 +185,9 @@ public final class DataprocConfig implements Serializable {
             this.engine = engine;
         }
 
-        public EngineConfig engine() { return engine; }
+        public EngineConfig engine() {
+            return engine;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -171,10 +195,14 @@ public final class DataprocConfig implements Serializable {
         }
 
         @Override
-        public int hashCode() { return Objects.hashCode(engine); }
+        public int hashCode() {
+            return Objects.hashCode(engine);
+        }
 
         @Override
-        public String toString() { return "SpectreConfig[engine=" + engine + "]"; }
+        public String toString() {
+            return "SpectreConfig[engine=" + engine + "]";
+        }
     }
 
     /** {@code spectre.engine:} — carries the three subsections this job actually reads. */
@@ -193,9 +221,17 @@ public final class DataprocConfig implements Serializable {
             this.bigquery = bigquery;
         }
 
-        public HyperscanGcsConfig hyperscan() { return hyperscan; }
-        public MessagesGcsConfig messages() { return messages; }
-        public BqTableConfig bigquery() { return bigquery; }
+        public HyperscanGcsConfig hyperscan() {
+            return hyperscan;
+        }
+
+        public MessagesGcsConfig messages() {
+            return messages;
+        }
+
+        public BqTableConfig bigquery() {
+            return bigquery;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -205,7 +241,9 @@ public final class DataprocConfig implements Serializable {
         }
 
         @Override
-        public int hashCode() { return Objects.hash(hyperscan, messages, bigquery); }
+        public int hashCode() {
+            return Objects.hash(hyperscan, messages, bigquery);
+        }
 
         @Override
         public String toString() {
@@ -231,8 +269,13 @@ public final class DataprocConfig implements Serializable {
             this.hdbGcsPrefix = hdbGcsPrefix;
         }
 
-        public String hdbGcsBucket() { return hdbGcsBucket; }
-        public String hdbGcsPrefix() { return hdbGcsPrefix; }
+        public String hdbGcsBucket() {
+            return hdbGcsBucket;
+        }
+
+        public String hdbGcsPrefix() {
+            return hdbGcsPrefix;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -241,10 +284,14 @@ public final class DataprocConfig implements Serializable {
         }
 
         @Override
-        public int hashCode() { return Objects.hash(hdbGcsBucket, hdbGcsPrefix); }
+        public int hashCode() {
+            return Objects.hash(hdbGcsBucket, hdbGcsPrefix);
+        }
 
         @Override
-        public String toString() { return "HyperscanGcsConfig[hdbGcsBucket=" + hdbGcsBucket + ", hdbGcsPrefix=" + hdbGcsPrefix + "]"; }
+        public String toString() {
+            return "HyperscanGcsConfig[hdbGcsBucket=" + hdbGcsBucket + ", hdbGcsPrefix=" + hdbGcsPrefix + "]";
+        }
     }
 
     /**
@@ -267,8 +314,13 @@ public final class DataprocConfig implements Serializable {
             this.msgGcsPrefix = msgGcsPrefix;
         }
 
-        public String msgGcsBucket() { return msgGcsBucket; }
-        public String msgGcsPrefix() { return msgGcsPrefix; }
+        public String msgGcsBucket() {
+            return msgGcsBucket;
+        }
+
+        public String msgGcsPrefix() {
+            return msgGcsPrefix;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -277,9 +329,13 @@ public final class DataprocConfig implements Serializable {
         }
 
         @Override
-        public int hashCode() { return Objects.hash(msgGcsBucket, msgGcsPrefix); }
+        public int hashCode() {
+            return Objects.hash(msgGcsBucket, msgGcsPrefix);
+        }
 
         @Override
-        public String toString() { return "MessagesGcsConfig[msgGcsBucket=" + msgGcsBucket + ", msgGcsPrefix=" + msgGcsPrefix + "]"; }
+        public String toString() {
+            return "MessagesGcsConfig[msgGcsBucket=" + msgGcsBucket + ", msgGcsPrefix=" + msgGcsPrefix + "]";
+        }
     }
 }

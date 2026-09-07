@@ -12,8 +12,12 @@ import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -44,6 +48,8 @@ import java.util.stream.Collectors;
  * entirely on executors.
  */
 public final class OutputTableWriter {
+
+    private static final Logger log = LoggerFactory.getLogger(OutputTableWriter.class);
 
     private OutputTableWriter() {}
 
@@ -376,13 +382,34 @@ public final class OutputTableWriter {
     // alongside intermediateFormat=avro. See GoogleCloudDataproc/spark-bigquery-connector
     // issues #300 and #612, and the connector's own README ("useAvroLogicalTypes").
     private static void writeAppend(Dataset<Row> dataset, String fullyQualifiedTable) {
-        dataset.write()
-                .format("bigquery")
-                .option("table", fullyQualifiedTable)
-                .option("intermediateFormat", "avro")
-                .option("useAvroLogicalTypes", "true")
-                .mode(SaveMode.Append)
-                .save();
+        log.info("Starting indirect (avro) write to BigQuery table {}", fullyQualifiedTable);
+        Instant writeStart = Instant.now();
+        boolean succeeded = false;
+        try {
+            dataset.write()
+                    .format("bigquery")
+                    .option("table", fullyQualifiedTable)
+                    .option("intermediateFormat", "avro")
+                    .option("useAvroLogicalTypes", "true")
+                    .mode(SaveMode.Append)
+                    .save();
+            succeeded = true;
+        } catch (RuntimeException e) {
+            // Not swallowed — a write failure here must fail the whole job (see
+            // ScanEngineJobRunner#run, which records it to pipeline_stage_audit). Logged with
+            // the target table before rethrow since the connector's own exception message
+            // often does not name it (see the schema-mismatch investigations this table's
+            // write path has been through — array/date-logical-type issues above).
+            log.error("Indirect write to BigQuery table {} failed: {}", fullyQualifiedTable, e.getMessage(), e);
+            throw e;
+        } finally {
+            // finally, not just a post-save() log line, so the elapsed time is captured even
+            // when save() throws — that duration (e.g. "failed after 40 minutes" vs. "after 5
+            // seconds") is itself useful triage information the catch block alone can't give.
+            long elapsedMs = Duration.between(writeStart, Instant.now()).toMillis();
+            log.info("Indirect write to BigQuery table {} {} in {}ms",
+                    fullyQualifiedTable, succeeded ? "completed" : "failed", elapsedMs);
+        }
     }
 
     // writeMethod=direct: no intermediate GCS file/load job — rows go straight to BigQuery via
@@ -392,11 +419,28 @@ public final class OutputTableWriter {
     // messages only) where that latency actually matters and the overhead is negligible — see
     // README's write-method guidance. Do not use this for the message-scale tables above.
     private static void writeAppendDirect(Dataset<Row> dataset, String fullyQualifiedTable) {
-        dataset.write()
-                .format("bigquery")
-                .option("table", fullyQualifiedTable)
-                .option("writeMethod", "direct")
-                .mode(SaveMode.Append)
-                .save();
+        log.info("Starting direct write to BigQuery table {}", fullyQualifiedTable);
+        Instant writeStart = Instant.now();
+        boolean succeeded = false;
+        try {
+            dataset.write()
+                    .format("bigquery")
+                    .option("table", fullyQualifiedTable)
+                    .option("writeMethod", "direct")
+                    .mode(SaveMode.Append)
+                    .save();
+            succeeded = true;
+        } catch (RuntimeException e) {
+            // Direct write's schema check runs up front (see the process_Id casing
+            // investigation) — this is where a column-name/case/type drift between this
+            // job's Spark schema and the live table surfaces. Not swallowed, same reasoning
+            // as writeAppend above.
+            log.error("Direct write to BigQuery table {} failed: {}", fullyQualifiedTable, e.getMessage(), e);
+            throw e;
+        } finally {
+            long elapsedMs = Duration.between(writeStart, Instant.now()).toMillis();
+            log.info("Direct write to BigQuery table {} {} in {}ms",
+                    fullyQualifiedTable, succeeded ? "completed" : "failed", elapsedMs);
+        }
     }
 }

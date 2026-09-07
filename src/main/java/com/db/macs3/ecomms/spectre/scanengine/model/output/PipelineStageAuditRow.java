@@ -127,56 +127,205 @@ public class PipelineStageAuditRow implements Serializable {
         this.rerunProcessId = rerunProcessId;
     }
 
-    public String getProcessId() { return processId; }
-    public void setProcessId(String processId) { this.processId = processId; }
-    public String getTriggerType() { return triggerType; }
-    public void setTriggerType(String triggerType) { this.triggerType = triggerType; }
-    public String getEvalTestId() { return evalTestId; }
-    public void setEvalTestId(String evalTestId) { this.evalTestId = evalTestId; }
-    public String getPipelineExecId() { return pipelineExecId; }
-    public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
-    public String getStageName() { return stageName; }
-    public void setStageName(String stageName) { this.stageName = stageName; }
-    public String getComposerDagName() { return composerDagName; }
-    public void setComposerDagName(String composerDagName) { this.composerDagName = composerDagName; }
-    public String getComposerDagPath() { return composerDagPath; }
-    public void setComposerDagPath(String composerDagPath) { this.composerDagPath = composerDagPath; }
-    public String getDprocScriptName() { return dprocScriptName; }
-    public void setDprocScriptName(String dprocScriptName) { this.dprocScriptName = dprocScriptName; }
-    public String getDprocScriptPath() { return dprocScriptPath; }
-    public void setDprocScriptPath(String dprocScriptPath) { this.dprocScriptPath = dprocScriptPath; }
-    public ModelConfigDtls getModelConfigDtls() { return modelConfigDtls; }
-    public void setModelConfigDtls(ModelConfigDtls modelConfigDtls) { this.modelConfigDtls = modelConfigDtls; }
-    public Instant getStartTime() { return startTime; }
-    public void setStartTime(Instant startTime) { this.startTime = startTime; }
-    public Instant getEndTime() { return endTime; }
-    public void setEndTime(Instant endTime) { this.endTime = endTime; }
-    public String getJobStatus() { return jobStatus; }
-    public void setJobStatus(String jobStatus) { this.jobStatus = jobStatus; }
-    public Integer getInputFileCount() { return inputFileCount; }
-    public void setInputFileCount(Integer inputFileCount) { this.inputFileCount = inputFileCount; }
-    public Integer getOutputFileCount() { return outputFileCount; }
-    public void setOutputFileCount(Integer outputFileCount) { this.outputFileCount = outputFileCount; }
-    public Integer getInputRecordCount() { return inputRecordCount; }
-    public void setInputRecordCount(Integer inputRecordCount) { this.inputRecordCount = inputRecordCount; }
-    public Integer getOutputRecordCount() { return outputRecordCount; }
-    public void setOutputRecordCount(Integer outputRecordCount) { this.outputRecordCount = outputRecordCount; }
-    public Integer getErrorCount() { return errorCount; }
-    public void setErrorCount(Integer errorCount) { this.errorCount = errorCount; }
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-    public String getAdditionalInfo() { return additionalInfo; }
-    public void setAdditionalInfo(String additionalInfo) { this.additionalInfo = additionalInfo; }
-    public String getLogPath() { return logPath; }
-    public void setLogPath(String logPath) { this.logPath = logPath; }
-    public LocalDate getExecutionDate() { return executionDate; }
-    public void setExecutionDate(LocalDate executionDate) { this.executionDate = executionDate; }
-    public String getRerunFlg() { return rerunFlg; }
-    public void setRerunFlg(String rerunFlg) { this.rerunFlg = rerunFlg; }
-    public String getRerunType() { return rerunType; }
-    public void setRerunType(String rerunType) { this.rerunType = rerunType; }
-    public String getRerunProcessId() { return rerunProcessId; }
-    public void setRerunProcessId(String rerunProcessId) { this.rerunProcessId = rerunProcessId; }
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
+    }
+
+    public String getTriggerType() {
+        return triggerType;
+    }
+
+    public void setTriggerType(String triggerType) {
+        this.triggerType = triggerType;
+    }
+
+    public String getEvalTestId() {
+        return evalTestId;
+    }
+
+    public void setEvalTestId(String evalTestId) {
+        this.evalTestId = evalTestId;
+    }
+
+    public String getPipelineExecId() {
+        return pipelineExecId;
+    }
+
+    public void setPipelineExecId(String pipelineExecId) {
+        this.pipelineExecId = pipelineExecId;
+    }
+
+    public String getStageName() {
+        return stageName;
+    }
+
+    public void setStageName(String stageName) {
+        this.stageName = stageName;
+    }
+
+    public String getComposerDagName() {
+        return composerDagName;
+    }
+
+    public void setComposerDagName(String composerDagName) {
+        this.composerDagName = composerDagName;
+    }
+
+    public String getComposerDagPath() {
+        return composerDagPath;
+    }
+
+    public void setComposerDagPath(String composerDagPath) {
+        this.composerDagPath = composerDagPath;
+    }
+
+    public String getDprocScriptName() {
+        return dprocScriptName;
+    }
+
+    public void setDprocScriptName(String dprocScriptName) {
+        this.dprocScriptName = dprocScriptName;
+    }
+
+    public String getDprocScriptPath() {
+        return dprocScriptPath;
+    }
+
+    public void setDprocScriptPath(String dprocScriptPath) {
+        this.dprocScriptPath = dprocScriptPath;
+    }
+
+    public ModelConfigDtls getModelConfigDtls() {
+        return modelConfigDtls;
+    }
+
+    public void setModelConfigDtls(ModelConfigDtls modelConfigDtls) {
+        this.modelConfigDtls = modelConfigDtls;
+    }
+
+    public Instant getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(Instant startTime) {
+        this.startTime = startTime;
+    }
+
+    public Instant getEndTime() {
+        return endTime;
+    }
+
+    public void setEndTime(Instant endTime) {
+        this.endTime = endTime;
+    }
+
+    public String getJobStatus() {
+        return jobStatus;
+    }
+
+    public void setJobStatus(String jobStatus) {
+        this.jobStatus = jobStatus;
+    }
+
+    public Integer getInputFileCount() {
+        return inputFileCount;
+    }
+
+    public void setInputFileCount(Integer inputFileCount) {
+        this.inputFileCount = inputFileCount;
+    }
+
+    public Integer getOutputFileCount() {
+        return outputFileCount;
+    }
+
+    public void setOutputFileCount(Integer outputFileCount) {
+        this.outputFileCount = outputFileCount;
+    }
+
+    public Integer getInputRecordCount() {
+        return inputRecordCount;
+    }
+
+    public void setInputRecordCount(Integer inputRecordCount) {
+        this.inputRecordCount = inputRecordCount;
+    }
+
+    public Integer getOutputRecordCount() {
+        return outputRecordCount;
+    }
+
+    public void setOutputRecordCount(Integer outputRecordCount) {
+        this.outputRecordCount = outputRecordCount;
+    }
+
+    public Integer getErrorCount() {
+        return errorCount;
+    }
+
+    public void setErrorCount(Integer errorCount) {
+        this.errorCount = errorCount;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+
+    public String getAdditionalInfo() {
+        return additionalInfo;
+    }
+
+    public void setAdditionalInfo(String additionalInfo) {
+        this.additionalInfo = additionalInfo;
+    }
+
+    public String getLogPath() {
+        return logPath;
+    }
+
+    public void setLogPath(String logPath) {
+        this.logPath = logPath;
+    }
+
+    public LocalDate getExecutionDate() {
+        return executionDate;
+    }
+
+    public void setExecutionDate(LocalDate executionDate) {
+        this.executionDate = executionDate;
+    }
+
+    public String getRerunFlg() {
+        return rerunFlg;
+    }
+
+    public void setRerunFlg(String rerunFlg) {
+        this.rerunFlg = rerunFlg;
+    }
+
+    public String getRerunType() {
+        return rerunType;
+    }
+
+    public void setRerunType(String rerunType) {
+        this.rerunType = rerunType;
+    }
+
+    public String getRerunProcessId() {
+        return rerunProcessId;
+    }
+
+    public void setRerunProcessId(String rerunProcessId) {
+        this.rerunProcessId = rerunProcessId;
+    }
 
     @Override
     public boolean equals(Object obj) {

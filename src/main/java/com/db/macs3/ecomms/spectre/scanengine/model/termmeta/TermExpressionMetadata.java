@@ -211,18 +211,53 @@ public class TermExpressionMetadata implements Serializable {
             this.resolvedPatternTree = resolvedPatternTree;
         }
 
-        public int getTermNumber() { return termNumber; }
-        public void setTermNumber(int termNumber) { this.termNumber = termNumber; }
-        public String getTermRegexPattern() { return termRegexPattern; }
-        public void setTermRegexPattern(String termRegexPattern) { this.termRegexPattern = termRegexPattern; }
-        public boolean isRequiresExclusionCheck() { return requiresExclusionCheck; }
-        public void setRequiresExclusionCheck(boolean requiresExclusionCheck) { this.requiresExclusionCheck = requiresExclusionCheck; }
-        public List<Integer> getRequiredExpressionIds() { return requiredExpressionIds; }
-        public void setRequiredExpressionIds(List<Integer> requiredExpressionIds) { this.requiredExpressionIds = requiredExpressionIds; }
-        public List<Integer> getExcludedExpressionIds() { return excludedExpressionIds; }
-        public void setExcludedExpressionIds(List<Integer> excludedExpressionIds) { this.excludedExpressionIds = excludedExpressionIds; }
-        public ResolvedPatternTree getResolvedPatternTree() { return resolvedPatternTree; }
-        public void setResolvedPatternTree(ResolvedPatternTree resolvedPatternTree) { this.resolvedPatternTree = resolvedPatternTree; }
+        public int getTermNumber() {
+            return termNumber;
+        }
+
+        public void setTermNumber(int termNumber) {
+            this.termNumber = termNumber;
+        }
+
+        public String getTermRegexPattern() {
+            return termRegexPattern;
+        }
+
+        public void setTermRegexPattern(String termRegexPattern) {
+            this.termRegexPattern = termRegexPattern;
+        }
+
+        public boolean isRequiresExclusionCheck() {
+            return requiresExclusionCheck;
+        }
+
+        public void setRequiresExclusionCheck(boolean requiresExclusionCheck) {
+            this.requiresExclusionCheck = requiresExclusionCheck;
+        }
+
+        public List<Integer> getRequiredExpressionIds() {
+            return requiredExpressionIds;
+        }
+
+        public void setRequiredExpressionIds(List<Integer> requiredExpressionIds) {
+            this.requiredExpressionIds = requiredExpressionIds;
+        }
+
+        public List<Integer> getExcludedExpressionIds() {
+            return excludedExpressionIds;
+        }
+
+        public void setExcludedExpressionIds(List<Integer> excludedExpressionIds) {
+            this.excludedExpressionIds = excludedExpressionIds;
+        }
+
+        public ResolvedPatternTree getResolvedPatternTree() {
+            return resolvedPatternTree;
+        }
+
+        public void setResolvedPatternTree(ResolvedPatternTree resolvedPatternTree) {
+            this.resolvedPatternTree = resolvedPatternTree;
+        }
 
         /**
          * @return true when this term uses the native Hyperscan COMBINATION
@@ -700,7 +735,12 @@ public class TermExpressionMetadata implements Serializable {
 
     /** Thrown by {@link #parse} on malformed or internally-inconsistent term metadata JSON. */
     public static final class TermMetadataParseException extends RuntimeException {
-        public TermMetadataParseException(String message) { super(message); }
-        public TermMetadataParseException(String message, Throwable cause) { super(message, cause); }
+        public TermMetadataParseException(String message) {
+            super(message);
+        }
+
+        public TermMetadataParseException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

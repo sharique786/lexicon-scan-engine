@@ -31,14 +31,37 @@ public class MessageContent implements Serializable {
         this.cleanText = cleanText;
     }
 
-    public String getHeader() { return header; }
-    public void setHeader(String header) { this.header = header; }
-    public String getRawText() { return rawText; }
-    public void setRawText(String rawText) { this.rawText = rawText; }
-    public String getSubject() { return subject; }
-    public void setSubject(String subject) { this.subject = subject; }
-    public String getCleanText() { return cleanText; }
-    public void setCleanText(String cleanText) { this.cleanText = cleanText; }
+    public String getHeader() {
+        return header;
+    }
+
+    public void setHeader(String header) {
+        this.header = header;
+    }
+
+    public String getRawText() {
+        return rawText;
+    }
+
+    public void setRawText(String rawText) {
+        this.rawText = rawText;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
+    }
+
+    public String getCleanText() {
+        return cleanText;
+    }
+
+    public void setCleanText(String cleanText) {
+        this.cleanText = cleanText;
+    }
 
     @Override
     public boolean equals(Object obj) {

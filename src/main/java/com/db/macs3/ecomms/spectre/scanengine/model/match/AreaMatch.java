@@ -36,12 +36,29 @@ public class AreaMatch implements Serializable {
         this.span = span;
     }
 
-    public MatchArea getArea() { return area; }
-    public void setArea(MatchArea area) { this.area = area; }
-    public String getAttachmentId() { return attachmentId; }
-    public void setAttachmentId(String attachmentId) { this.attachmentId = attachmentId; }
-    public MatchSpan getSpan() { return span; }
-    public void setSpan(MatchSpan span) { this.span = span; }
+    public MatchArea getArea() {
+        return area;
+    }
+
+    public void setArea(MatchArea area) {
+        this.area = area;
+    }
+
+    public String getAttachmentId() {
+        return attachmentId;
+    }
+
+    public void setAttachmentId(String attachmentId) {
+        this.attachmentId = attachmentId;
+    }
+
+    public MatchSpan getSpan() {
+        return span;
+    }
+
+    public void setSpan(MatchSpan span) {
+        this.span = span;
+    }
 
     public static AreaMatch subject(MatchSpan span) {
         return new AreaMatch(MatchArea.SUBJECT, null, span);

@@ -69,16 +69,45 @@ public class FeatureDefinition implements Serializable {
         this.body = body;
     }
 
-    public String getFeatureId() { return featureId; }
-    public void setFeatureId(String featureId) { this.featureId = featureId; }
-    public String getFeatureName() { return featureName; }
-    public void setFeatureName(String featureName) { this.featureName = featureName; }
-    public String getFeatureType() { return featureType; }
-    public void setFeatureType(String featureType) { this.featureType = featureType; }
-    public boolean isNoiseReduction() { return isNoiseReduction; }
-    public void setNoiseReduction(boolean noiseReduction) { isNoiseReduction = noiseReduction; }
-    public Body getBody() { return body; }
-    public void setBody(Body body) { this.body = body; }
+    public String getFeatureId() {
+        return featureId;
+    }
+
+    public void setFeatureId(String featureId) {
+        this.featureId = featureId;
+    }
+
+    public String getFeatureName() {
+        return featureName;
+    }
+
+    public void setFeatureName(String featureName) {
+        this.featureName = featureName;
+    }
+
+    public String getFeatureType() {
+        return featureType;
+    }
+
+    public void setFeatureType(String featureType) {
+        this.featureType = featureType;
+    }
+
+    public boolean isNoiseReduction() {
+        return isNoiseReduction;
+    }
+
+    public void setNoiseReduction(boolean noiseReduction) {
+        isNoiseReduction = noiseReduction;
+    }
+
+    public Body getBody() {
+        return body;
+    }
+
+    public void setBody(Body body) {
+        this.body = body;
+    }
 
     @Override
     public boolean equals(Object obj) {
@@ -137,18 +166,53 @@ public class FeatureDefinition implements Serializable {
             this.scope = scope;
         }
 
-        public Integer getId() { return id; }
-        public void setId(Integer id) { this.id = id; }
-        public String getLexiconName() { return lexiconName; }
-        public void setLexiconName(String lexiconName) { this.lexiconName = lexiconName; }
-        public Integer getObjectId() { return objectId; }
-        public void setObjectId(Integer objectId) { this.objectId = objectId; }
-        public Integer getTotalTermsCount() { return totalTermsCount; }
-        public void setTotalTermsCount(Integer totalTermsCount) { this.totalTermsCount = totalTermsCount; }
-        public Integer getMinimumHits() { return minimumHits; }
-        public void setMinimumHits(Integer minimumHits) { this.minimumHits = minimumHits; }
-        public List<String> getScope() { return scope; }
-        public void setScope(List<String> scope) { this.scope = scope; }
+        public Integer getId() {
+            return id;
+        }
+
+        public void setId(Integer id) {
+            this.id = id;
+        }
+
+        public String getLexiconName() {
+            return lexiconName;
+        }
+
+        public void setLexiconName(String lexiconName) {
+            this.lexiconName = lexiconName;
+        }
+
+        public Integer getObjectId() {
+            return objectId;
+        }
+
+        public void setObjectId(Integer objectId) {
+            this.objectId = objectId;
+        }
+
+        public Integer getTotalTermsCount() {
+            return totalTermsCount;
+        }
+
+        public void setTotalTermsCount(Integer totalTermsCount) {
+            this.totalTermsCount = totalTermsCount;
+        }
+
+        public Integer getMinimumHits() {
+            return minimumHits;
+        }
+
+        public void setMinimumHits(Integer minimumHits) {
+            this.minimumHits = minimumHits;
+        }
+
+        public List<String> getScope() {
+            return scope;
+        }
+
+        public void setScope(List<String> scope) {
+            this.scope = scope;
+        }
 
         /**
          * Case-insensitive scope membership check — sample data mixes
@@ -226,6 +290,7 @@ public class FeatureDefinition implements Serializable {
         public FeatureDefinitionParseException(String message) {
             super(message);
         }
+
         public FeatureDefinitionParseException(String message, Throwable cause) {
             super(message, cause);
         }

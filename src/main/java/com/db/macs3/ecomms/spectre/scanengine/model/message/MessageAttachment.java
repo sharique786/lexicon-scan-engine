@@ -38,14 +38,37 @@ public class MessageAttachment implements Serializable {
         this.cleanText = cleanText;
     }
 
-    public String getAttachmentId() { return attachmentId; }
-    public void setAttachmentId(String attachmentId) { this.attachmentId = attachmentId; }
-    public String getParentAttachmentId() { return parentAttachmentId; }
-    public void setParentAttachmentId(String parentAttachmentId) { this.parentAttachmentId = parentAttachmentId; }
-    public String getFileName() { return fileName; }
-    public void setFileName(String fileName) { this.fileName = fileName; }
-    public String getCleanText() { return cleanText; }
-    public void setCleanText(String cleanText) { this.cleanText = cleanText; }
+    public String getAttachmentId() {
+        return attachmentId;
+    }
+
+    public void setAttachmentId(String attachmentId) {
+        this.attachmentId = attachmentId;
+    }
+
+    public String getParentAttachmentId() {
+        return parentAttachmentId;
+    }
+
+    public void setParentAttachmentId(String parentAttachmentId) {
+        this.parentAttachmentId = parentAttachmentId;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    public String getCleanText() {
+        return cleanText;
+    }
+
+    public void setCleanText(String cleanText) {
+        this.cleanText = cleanText;
+    }
 
     @Override
     public boolean equals(Object obj) {

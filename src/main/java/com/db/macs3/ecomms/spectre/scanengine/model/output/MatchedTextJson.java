@@ -45,8 +45,13 @@ public class MatchedTextJson implements Serializable {
     }
 
     @JsonProperty("hit_details_hs")
-    public List<HitDetail> getHitDetailsHs() { return hitDetailsHs; }
-    public void setHitDetailsHs(List<HitDetail> hitDetailsHs) { this.hitDetailsHs = hitDetailsHs; }
+    public List<HitDetail> getHitDetailsHs() {
+        return hitDetailsHs;
+    }
+
+    public void setHitDetailsHs(List<HitDetail> hitDetailsHs) {
+        this.hitDetailsHs = hitDetailsHs;
+    }
 
     @Override
     public boolean equals(Object obj) {
@@ -91,17 +96,37 @@ public class MatchedTextJson implements Serializable {
         }
 
         @JsonProperty("message_id")
-        public String getMessageId() { return messageId; }
-        public void setMessageId(String messageId) { this.messageId = messageId; }
+        public String getMessageId() {
+            return messageId;
+        }
+
+        public void setMessageId(String messageId) {
+            this.messageId = messageId;
+        }
         @JsonProperty("msg_text")
-        public List<TextHit> getMsgText() { return msgText; }
-        public void setMsgText(List<TextHit> msgText) { this.msgText = msgText; }
+        public List<TextHit> getMsgText() {
+            return msgText;
+        }
+
+        public void setMsgText(List<TextHit> msgText) {
+            this.msgText = msgText;
+        }
         @JsonProperty("subject")
-        public List<TextHit> getSubject() { return subject; }
-        public void setSubject(List<TextHit> subject) { this.subject = subject; }
+        public List<TextHit> getSubject() {
+            return subject;
+        }
+
+        public void setSubject(List<TextHit> subject) {
+            this.subject = subject;
+        }
         @JsonProperty("attachment_text")
-        public List<AttachmentTextHit> getAttachmentText() { return attachmentText; }
-        public void setAttachmentText(List<AttachmentTextHit> attachmentText) { this.attachmentText = attachmentText; }
+        public List<AttachmentTextHit> getAttachmentText() {
+            return attachmentText;
+        }
+
+        public void setAttachmentText(List<AttachmentTextHit> attachmentText) {
+            this.attachmentText = attachmentText;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -154,14 +179,29 @@ public class MatchedTextJson implements Serializable {
         }
 
         @JsonProperty("text")
-        public String getText() { return text; }
-        public void setText(String text) { this.text = text; }
+        public String getText() {
+            return text;
+        }
+
+        public void setText(String text) {
+            this.text = text;
+        }
         @JsonProperty("start")
-        public int getStart() { return start; }
-        public void setStart(int start) { this.start = start; }
+        public int getStart() {
+            return start;
+        }
+
+        public void setStart(int start) {
+            this.start = start;
+        }
         @JsonProperty("length")
-        public int getLength() { return length; }
-        public void setLength(int length) { this.length = length; }
+        public int getLength() {
+            return length;
+        }
+
+        public void setLength(int length) {
+            this.length = length;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -202,11 +242,21 @@ public class MatchedTextJson implements Serializable {
         }
 
         @JsonProperty("attachment_id")
-        public String getAttachmentId() { return attachmentId; }
-        public void setAttachmentId(String attachmentId) { this.attachmentId = attachmentId; }
+        public String getAttachmentId() {
+            return attachmentId;
+        }
+
+        public void setAttachmentId(String attachmentId) {
+            this.attachmentId = attachmentId;
+        }
         @JsonProperty("att_text")
-        public List<TextHit> getAttText() { return attText; }
-        public void setAttText(List<TextHit> attText) { this.attText = attText; }
+        public List<TextHit> getAttText() {
+            return attText;
+        }
+
+        public void setAttText(List<TextHit> attText) {
+            this.attText = attText;
+        }
 
         @Override
         public boolean equals(Object obj) {

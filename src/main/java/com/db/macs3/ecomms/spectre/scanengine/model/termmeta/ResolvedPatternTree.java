@@ -79,12 +79,29 @@ public sealed interface ResolvedPatternTree {
             this.distances = distances;
         }
 
-        public List<Pattern> getLeaves() { return leaves; }
-        public void setLeaves(List<Pattern> leaves) { this.leaves = leaves; }
-        public List<String> getOperators() { return operators; }
-        public void setOperators(List<String> operators) { this.operators = operators; }
-        public List<Integer> getDistances() { return distances; }
-        public void setDistances(List<Integer> distances) { this.distances = distances; }
+        public List<Pattern> getLeaves() {
+            return leaves;
+        }
+
+        public void setLeaves(List<Pattern> leaves) {
+            this.leaves = leaves;
+        }
+
+        public List<String> getOperators() {
+            return operators;
+        }
+
+        public void setOperators(List<String> operators) {
+            this.operators = operators;
+        }
+
+        public List<Integer> getDistances() {
+            return distances;
+        }
+
+        public void setDistances(List<Integer> distances) {
+            this.distances = distances;
+        }
 
         @Override
         public boolean equals(Object obj) {
@@ -126,10 +143,21 @@ public sealed interface ResolvedPatternTree {
             this.excluded = excluded;
         }
 
-        public ResolvedPatternTree getRequired() { return required; }
-        public void setRequired(ResolvedPatternTree required) { this.required = required; }
-        public ResolvedPatternTree getExcluded() { return excluded; }
-        public void setExcluded(ResolvedPatternTree excluded) { this.excluded = excluded; }
+        public ResolvedPatternTree getRequired() {
+            return required;
+        }
+
+        public void setRequired(ResolvedPatternTree required) {
+            this.required = required;
+        }
+
+        public ResolvedPatternTree getExcluded() {
+            return excluded;
+        }
+
+        public void setExcluded(ResolvedPatternTree excluded) {
+            this.excluded = excluded;
+        }
 
         @Override
         public boolean equals(Object obj) {

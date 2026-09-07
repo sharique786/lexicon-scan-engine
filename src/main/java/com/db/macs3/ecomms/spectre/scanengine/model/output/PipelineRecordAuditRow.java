@@ -155,74 +155,277 @@ public class PipelineRecordAuditRow implements Serializable {
         this.rerunProcessId = rerunProcessId;
     }
 
-    public String getProcessId() { return processId; }
-    public void setProcessId(String processId) { this.processId = processId; }
-    public String getTriggerType() { return triggerType; }
-    public void setTriggerType(String triggerType) { this.triggerType = triggerType; }
-    public String getEvalTestId() { return evalTestId; }
-    public void setEvalTestId(String evalTestId) { this.evalTestId = evalTestId; }
-    public String getPipelineExecId() { return pipelineExecId; }
-    public void setPipelineExecId(String pipelineExecId) { this.pipelineExecId = pipelineExecId; }
-    public String getRecordId() { return recordId; }
-    public void setRecordId(String recordId) { this.recordId = recordId; }
-    public String getStageName() { return stageName; }
-    public void setStageName(String stageName) { this.stageName = stageName; }
-    public String getMsgInputFileNm() { return msgInputFileNm; }
-    public void setMsgInputFileNm(String msgInputFileNm) { this.msgInputFileNm = msgInputFileNm; }
-    public String getMsgInputFilePath() { return msgInputFilePath; }
-    public void setMsgInputFilePath(String msgInputFilePath) { this.msgInputFilePath = msgInputFilePath; }
-    public String getMsgOutputFilePath() { return msgOutputFilePath; }
-    public void setMsgOutputFilePath(String msgOutputFilePath) { this.msgOutputFilePath = msgOutputFilePath; }
-    public String getMsgOutputFileType() { return msgOutputFileType; }
-    public void setMsgOutputFileType(String msgOutputFileType) { this.msgOutputFileType = msgOutputFileType; }
-    public String getMsgOutputFileNm() { return msgOutputFileNm; }
-    public void setMsgOutputFileNm(String msgOutputFileNm) { this.msgOutputFileNm = msgOutputFileNm; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public Integer getReturnCode() { return returnCode; }
-    public void setReturnCode(Integer returnCode) { this.returnCode = returnCode; }
-    public String getErrorMessage() { return errorMessage; }
-    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
-    public List<RuleDtlType> getEvaluatedRulesDtls() { return evaluatedRulesDtls; }
-    public void setEvaluatedRulesDtls(List<RuleDtlType> evaluatedRulesDtls) { this.evaluatedRulesDtls = evaluatedRulesDtls; }
-    public Integer getEvaluatedRulesCnt() { return evaluatedRulesCnt; }
-    public void setEvaluatedRulesCnt(Integer evaluatedRulesCnt) { this.evaluatedRulesCnt = evaluatedRulesCnt; }
-    public List<RuleDtlType> getDetectedRulesDtls() { return detectedRulesDtls; }
-    public void setDetectedRulesDtls(List<RuleDtlType> detectedRulesDtls) { this.detectedRulesDtls = detectedRulesDtls; }
-    public Integer getDetectedRulesCnt() { return detectedRulesCnt; }
-    public void setDetectedRulesCnt(Integer detectedRulesCnt) { this.detectedRulesCnt = detectedRulesCnt; }
-    public Integer getSysPromptEvalRulesTokens() { return sysPromptEvalRulesTokens; }
-    public void setSysPromptEvalRulesTokens(Integer sysPromptEvalRulesTokens) { this.sysPromptEvalRulesTokens = sysPromptEvalRulesTokens; }
-    public Integer getInputTokens() { return inputTokens; }
-    public void setInputTokens(Integer inputTokens) { this.inputTokens = inputTokens; }
-    public Integer getOutputTokens() { return outputTokens; }
-    public void setOutputTokens(Integer outputTokens) { this.outputTokens = outputTokens; }
-    public Integer getThinkingTokens() { return thinkingTokens; }
-    public void setThinkingTokens(Integer thinkingTokens) { this.thinkingTokens = thinkingTokens; }
-    public Integer getCachedTokens() { return cachedTokens; }
-    public void setCachedTokens(Integer cachedTokens) { this.cachedTokens = cachedTokens; }
-    public Integer getMsgMatchTextTokens() { return msgMatchTextTokens; }
-    public void setMsgMatchTextTokens(Integer msgMatchTextTokens) { this.msgMatchTextTokens = msgMatchTextTokens; }
-    public Instant getCreatedTs() { return createdTs; }
-    public void setCreatedTs(Instant createdTs) { this.createdTs = createdTs; }
-    public String getCreatedBy() { return createdBy; }
-    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
-    public String getAdditionInfo() { return additionInfo; }
-    public void setAdditionInfo(String additionInfo) { this.additionInfo = additionInfo; }
-    public LocalDate getExecutionDate() { return executionDate; }
-    public void setExecutionDate(LocalDate executionDate) { this.executionDate = executionDate; }
-    public Instant getSentDate() { return sentDate; }
-    public void setSentDate(Instant sentDate) { this.sentDate = sentDate; }
-    public String getRunDate() { return runDate; }
-    public void setRunDate(String runDate) { this.runDate = runDate; }
-    public String getSourceName() { return sourceName; }
-    public void setSourceName(String sourceName) { this.sourceName = sourceName; }
-    public Instant getGeminiRequestStartTime() { return geminiRequestStartTime; }
-    public void setGeminiRequestStartTime(Instant geminiRequestStartTime) { this.geminiRequestStartTime = geminiRequestStartTime; }
-    public Instant getGeminiRequestEndTime() { return geminiRequestEndTime; }
-    public void setGeminiRequestEndTime(Instant geminiRequestEndTime) { this.geminiRequestEndTime = geminiRequestEndTime; }
-    public String getRerunProcessId() { return rerunProcessId; }
-    public void setRerunProcessId(String rerunProcessId) { this.rerunProcessId = rerunProcessId; }
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
+    }
+
+    public String getTriggerType() {
+        return triggerType;
+    }
+
+    public void setTriggerType(String triggerType) {
+        this.triggerType = triggerType;
+    }
+
+    public String getEvalTestId() {
+        return evalTestId;
+    }
+
+    public void setEvalTestId(String evalTestId) {
+        this.evalTestId = evalTestId;
+    }
+
+    public String getPipelineExecId() {
+        return pipelineExecId;
+    }
+
+    public void setPipelineExecId(String pipelineExecId) {
+        this.pipelineExecId = pipelineExecId;
+    }
+
+    public String getRecordId() {
+        return recordId;
+    }
+
+    public void setRecordId(String recordId) {
+        this.recordId = recordId;
+    }
+
+    public String getStageName() {
+        return stageName;
+    }
+
+    public void setStageName(String stageName) {
+        this.stageName = stageName;
+    }
+
+    public String getMsgInputFileNm() {
+        return msgInputFileNm;
+    }
+
+    public void setMsgInputFileNm(String msgInputFileNm) {
+        this.msgInputFileNm = msgInputFileNm;
+    }
+
+    public String getMsgInputFilePath() {
+        return msgInputFilePath;
+    }
+
+    public void setMsgInputFilePath(String msgInputFilePath) {
+        this.msgInputFilePath = msgInputFilePath;
+    }
+
+    public String getMsgOutputFilePath() {
+        return msgOutputFilePath;
+    }
+
+    public void setMsgOutputFilePath(String msgOutputFilePath) {
+        this.msgOutputFilePath = msgOutputFilePath;
+    }
+
+    public String getMsgOutputFileType() {
+        return msgOutputFileType;
+    }
+
+    public void setMsgOutputFileType(String msgOutputFileType) {
+        this.msgOutputFileType = msgOutputFileType;
+    }
+
+    public String getMsgOutputFileNm() {
+        return msgOutputFileNm;
+    }
+
+    public void setMsgOutputFileNm(String msgOutputFileNm) {
+        this.msgOutputFileNm = msgOutputFileNm;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Integer getReturnCode() {
+        return returnCode;
+    }
+
+    public void setReturnCode(Integer returnCode) {
+        this.returnCode = returnCode;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+
+    public List<RuleDtlType> getEvaluatedRulesDtls() {
+        return evaluatedRulesDtls;
+    }
+
+    public void setEvaluatedRulesDtls(List<RuleDtlType> evaluatedRulesDtls) {
+        this.evaluatedRulesDtls = evaluatedRulesDtls;
+    }
+
+    public Integer getEvaluatedRulesCnt() {
+        return evaluatedRulesCnt;
+    }
+
+    public void setEvaluatedRulesCnt(Integer evaluatedRulesCnt) {
+        this.evaluatedRulesCnt = evaluatedRulesCnt;
+    }
+
+    public List<RuleDtlType> getDetectedRulesDtls() {
+        return detectedRulesDtls;
+    }
+
+    public void setDetectedRulesDtls(List<RuleDtlType> detectedRulesDtls) {
+        this.detectedRulesDtls = detectedRulesDtls;
+    }
+
+    public Integer getDetectedRulesCnt() {
+        return detectedRulesCnt;
+    }
+
+    public void setDetectedRulesCnt(Integer detectedRulesCnt) {
+        this.detectedRulesCnt = detectedRulesCnt;
+    }
+
+    public Integer getSysPromptEvalRulesTokens() {
+        return sysPromptEvalRulesTokens;
+    }
+
+    public void setSysPromptEvalRulesTokens(Integer sysPromptEvalRulesTokens) {
+        this.sysPromptEvalRulesTokens = sysPromptEvalRulesTokens;
+    }
+
+    public Integer getInputTokens() {
+        return inputTokens;
+    }
+
+    public void setInputTokens(Integer inputTokens) {
+        this.inputTokens = inputTokens;
+    }
+
+    public Integer getOutputTokens() {
+        return outputTokens;
+    }
+
+    public void setOutputTokens(Integer outputTokens) {
+        this.outputTokens = outputTokens;
+    }
+
+    public Integer getThinkingTokens() {
+        return thinkingTokens;
+    }
+
+    public void setThinkingTokens(Integer thinkingTokens) {
+        this.thinkingTokens = thinkingTokens;
+    }
+
+    public Integer getCachedTokens() {
+        return cachedTokens;
+    }
+
+    public void setCachedTokens(Integer cachedTokens) {
+        this.cachedTokens = cachedTokens;
+    }
+
+    public Integer getMsgMatchTextTokens() {
+        return msgMatchTextTokens;
+    }
+
+    public void setMsgMatchTextTokens(Integer msgMatchTextTokens) {
+        this.msgMatchTextTokens = msgMatchTextTokens;
+    }
+
+    public Instant getCreatedTs() {
+        return createdTs;
+    }
+
+    public void setCreatedTs(Instant createdTs) {
+        this.createdTs = createdTs;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getAdditionInfo() {
+        return additionInfo;
+    }
+
+    public void setAdditionInfo(String additionInfo) {
+        this.additionInfo = additionInfo;
+    }
+
+    public LocalDate getExecutionDate() {
+        return executionDate;
+    }
+
+    public void setExecutionDate(LocalDate executionDate) {
+        this.executionDate = executionDate;
+    }
+
+    public Instant getSentDate() {
+        return sentDate;
+    }
+
+    public void setSentDate(Instant sentDate) {
+        this.sentDate = sentDate;
+    }
+
+    public String getRunDate() {
+        return runDate;
+    }
+
+    public void setRunDate(String runDate) {
+        this.runDate = runDate;
+    }
+
+    public String getSourceName() {
+        return sourceName;
+    }
+
+    public void setSourceName(String sourceName) {
+        this.sourceName = sourceName;
+    }
+
+    public Instant getGeminiRequestStartTime() {
+        return geminiRequestStartTime;
+    }
+
+    public void setGeminiRequestStartTime(Instant geminiRequestStartTime) {
+        this.geminiRequestStartTime = geminiRequestStartTime;
+    }
+
+    public Instant getGeminiRequestEndTime() {
+        return geminiRequestEndTime;
+    }
+
+    public void setGeminiRequestEndTime(Instant geminiRequestEndTime) {
+        this.geminiRequestEndTime = geminiRequestEndTime;
+    }
+
+    public String getRerunProcessId() {
+        return rerunProcessId;
+    }
+
+    public void setRerunProcessId(String rerunProcessId) {
+        this.rerunProcessId = rerunProcessId;
+    }
 
     @Override
     public boolean equals(Object obj) {

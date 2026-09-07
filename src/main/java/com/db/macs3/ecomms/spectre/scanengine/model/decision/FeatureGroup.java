@@ -58,18 +58,53 @@ public class FeatureGroup implements Serializable {
         this.members = members;
     }
 
-    public String getFeatureId() { return featureId; }
-    public void setFeatureId(String featureId) { this.featureId = featureId; }
-    public String getFeatureName() { return featureName; }
-    public void setFeatureName(String featureName) { this.featureName = featureName; }
-    public String getFeatureType() { return featureType; }
-    public void setFeatureType(String featureType) { this.featureType = featureType; }
-    public boolean isNoiseReduction() { return isNoiseReduction; }
-    public void setNoiseReduction(boolean noiseReduction) { this.isNoiseReduction = noiseReduction; }
-    public String getOperator() { return operator; }
-    public void setOperator(String operator) { this.operator = operator; }
-    public List<FeatureDecisionRow> getMembers() { return members; }
-    public void setMembers(List<FeatureDecisionRow> members) { this.members = members; }
+    public String getFeatureId() {
+        return featureId;
+    }
+
+    public void setFeatureId(String featureId) {
+        this.featureId = featureId;
+    }
+
+    public String getFeatureName() {
+        return featureName;
+    }
+
+    public void setFeatureName(String featureName) {
+        this.featureName = featureName;
+    }
+
+    public String getFeatureType() {
+        return featureType;
+    }
+
+    public void setFeatureType(String featureType) {
+        this.featureType = featureType;
+    }
+
+    public boolean isNoiseReduction() {
+        return isNoiseReduction;
+    }
+
+    public void setNoiseReduction(boolean noiseReduction) {
+        this.isNoiseReduction = noiseReduction;
+    }
+
+    public String getOperator() {
+        return operator;
+    }
+
+    public void setOperator(String operator) {
+        this.operator = operator;
+    }
+
+    public List<FeatureDecisionRow> getMembers() {
+        return members;
+    }
+
+    public void setMembers(List<FeatureDecisionRow> members) {
+        this.members = members;
+    }
 
     /** @return true iff {@link #getFeatureType} is {@code disclaimer} (case-insensitive). */
     public boolean isDisclaimer() {

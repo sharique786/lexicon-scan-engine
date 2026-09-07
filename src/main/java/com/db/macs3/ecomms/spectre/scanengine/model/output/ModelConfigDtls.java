@@ -43,16 +43,45 @@ public class ModelConfigDtls implements Serializable {
         this.maxOutputToken = maxOutputToken;
     }
 
-    public String getModelName() { return modelName; }
-    public void setModelName(String modelName) { this.modelName = modelName; }
-    public Float getTemprature() { return temprature; }
-    public void setTemprature(Float temprature) { this.temprature = temprature; }
-    public Float getTopP() { return topP; }
-    public void setTopP(Float topP) { this.topP = topP; }
-    public Integer getThinkingBudget() { return thinkingBudget; }
-    public void setThinkingBudget(Integer thinkingBudget) { this.thinkingBudget = thinkingBudget; }
-    public Integer getMaxOutputToken() { return maxOutputToken; }
-    public void setMaxOutputToken(Integer maxOutputToken) { this.maxOutputToken = maxOutputToken; }
+    public String getModelName() {
+        return modelName;
+    }
+
+    public void setModelName(String modelName) {
+        this.modelName = modelName;
+    }
+
+    public Float getTemprature() {
+        return temprature;
+    }
+
+    public void setTemprature(Float temprature) {
+        this.temprature = temprature;
+    }
+
+    public Float getTopP() {
+        return topP;
+    }
+
+    public void setTopP(Float topP) {
+        this.topP = topP;
+    }
+
+    public Integer getThinkingBudget() {
+        return thinkingBudget;
+    }
+
+    public void setThinkingBudget(Integer thinkingBudget) {
+        this.thinkingBudget = thinkingBudget;
+    }
+
+    public Integer getMaxOutputToken() {
+        return maxOutputToken;
+    }
+
+    public void setMaxOutputToken(Integer maxOutputToken) {
+        this.maxOutputToken = maxOutputToken;
+    }
 
     @Override
     public boolean equals(Object obj) {

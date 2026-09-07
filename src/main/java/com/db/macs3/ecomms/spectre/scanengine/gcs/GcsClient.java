@@ -5,7 +5,10 @@ import com.google.cloud.ReadChannel;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageException;
 import com.google.cloud.storage.StorageOptions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -13,6 +16,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.nio.channels.Channels;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -45,6 +50,8 @@ import java.util.regex.Pattern;
  */
 @Component
 public final class GcsClient implements Serializable {
+
+    private static final Logger log = LoggerFactory.getLogger(GcsClient.class);
 
     private static final Pattern GS_URI_PATTERN = Pattern.compile("^gs://([^/]+)/(.+)$");
 
@@ -87,22 +94,31 @@ public final class GcsClient implements Serializable {
      * grouping from a flat, prefix-based object store).
      */
     public List<String> listImmediateChildDirectories(String bucket, String prefix) {
-        List<String> children = new ArrayList<>();
-        for (Blob blob : storage().list(bucket,
-                Storage.BlobListOption.prefix(prefix),
-                Storage.BlobListOption.currentDirectory()).iterateAll()) {
-            if (blob.isDirectory()) {
-                String blobName = blob.getName(); // e.g. "policy_test/2026-08-16_10-00-00_101/"
-                String childName = blobName.substring(prefix.length());
-                if (childName.endsWith("/")) {
-                    childName = childName.substring(0, childName.length() - 1);
-                }
-                if (!childName.isEmpty()) {
-                    children.add(childName);
+        log.debug("Listing immediate child directories under gs://{}/{}", bucket, prefix);
+        Instant callStart = Instant.now();
+        try {
+            List<String> children = new ArrayList<>();
+            for (Blob blob : storage().list(bucket,
+                    Storage.BlobListOption.prefix(prefix),
+                    Storage.BlobListOption.currentDirectory()).iterateAll()) {
+                if (blob.isDirectory()) {
+                    String blobName = blob.getName(); // e.g. "policy_test/2026-08-16_10-00-00_101/"
+                    String childName = blobName.substring(prefix.length());
+                    if (childName.endsWith("/")) {
+                        childName = childName.substring(0, childName.length() - 1);
+                    }
+                    if (!childName.isEmpty()) {
+                        children.add(childName);
+                    }
                 }
             }
+            log.debug("Found {} child director(y/ies) under gs://{}/{} in {}ms",
+                    children.size(), bucket, prefix, Duration.between(callStart, Instant.now()).toMillis());
+            return children;
+        } catch (StorageException e) {
+            log.error("Failed to list child directories under gs://{}/{}: {}", bucket, prefix, e.getMessage(), e);
+            throw e;
         }
-        return children;
     }
 
     /**
@@ -113,14 +129,31 @@ public final class GcsClient implements Serializable {
      */
     public InputStream openStream(String gsUri) throws IOException {
         BlobId blobId = parseGsUri(gsUri);
-        ReadChannel reader = storage().reader(blobId);
-        return Channels.newInputStream(reader);
+        try {
+            ReadChannel reader = storage().reader(blobId);
+            return Channels.newInputStream(reader);
+        } catch (StorageException e) {
+            // Wrapped into the checked IOException this method already declares — a raw
+            // StorageException (unchecked) thrown from here would otherwise silently bypass
+            // that declared contract, and callers up the stack (HyperscanBundleLoader,
+            // readTextFile below) already handle IOException uniformly.
+            log.error("Failed to open a read stream for {}: {}", gsUri, e.getMessage(), e);
+            throw new IOException("Failed to open a read stream for " + gsUri, e);
+        }
     }
 
     /** Reads a small object's full content as a UTF-8 string — for the {@code BqTableConfig} JSON file. */
     public String readTextFile(String gsUri) throws IOException {
+        log.info("Reading text file {}", gsUri);
+        Instant readStart = Instant.now();
         try (InputStream in = openStream(gsUri)) {
-            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            String content = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            log.info("Read {} bytes from {} in {}ms",
+                    content.length(), gsUri, Duration.between(readStart, Instant.now()).toMillis());
+            return content;
+        } catch (IOException e) {
+            log.error("Failed to read text file {}: {}", gsUri, e.getMessage(), e);
+            throw e;
         }
     }
 
@@ -131,25 +164,44 @@ public final class GcsClient implements Serializable {
      */
     public OutputStream openWriteStream(String gsUri) {
         BlobId blobId = parseGsUri(gsUri);
-        return Channels.newOutputStream(storage().writer(
-                com.google.cloud.storage.BlobInfo.newBuilder(blobId).setContentType("text/csv").build()));
+        try {
+            return Channels.newOutputStream(storage().writer(
+                    com.google.cloud.storage.BlobInfo.newBuilder(blobId).setContentType("text/csv").build()));
+        } catch (StorageException e) {
+            log.error("Failed to open a write stream for {}: {}", gsUri, e.getMessage(), e);
+            throw e;
+        }
     }
 
     /** @return true iff an object exists at {@code gsUri} — used for the "no hyperscan file" / "no AVRO" checks. */
     public boolean exists(String gsUri) {
         BlobId blobId = parseGsUri(gsUri);
-        Blob blob = storage().get(blobId);
-        return blob != null && blob.exists();
+        try {
+            Blob blob = storage().get(blobId);
+            return blob != null && blob.exists();
+        } catch (StorageException e) {
+            log.error("Failed to check existence of {}: {}", gsUri, e.getMessage(), e);
+            throw e;
+        }
     }
 
     /** Lists every object (recursively, no delimiter) under {@code prefix} — for locating AVRO files. */
     public List<String> listAllObjects(String bucket, String prefix) {
-        List<String> names = new ArrayList<>();
-        for (Blob blob : storage().list(bucket, Storage.BlobListOption.prefix(prefix)).iterateAll()) {
-            if (!blob.isDirectory()) {
-                names.add("gs://" + bucket + "/" + blob.getName());
+        log.debug("Listing all objects under gs://{}/{}", bucket, prefix);
+        Instant callStart = Instant.now();
+        try {
+            List<String> names = new ArrayList<>();
+            for (Blob blob : storage().list(bucket, Storage.BlobListOption.prefix(prefix)).iterateAll()) {
+                if (!blob.isDirectory()) {
+                    names.add("gs://" + bucket + "/" + blob.getName());
+                }
             }
+            log.debug("Found {} object(s) under gs://{}/{} in {}ms",
+                    names.size(), bucket, prefix, Duration.between(callStart, Instant.now()).toMillis());
+            return names;
+        } catch (StorageException e) {
+            log.error("Failed to list objects under gs://{}/{}: {}", bucket, prefix, e.getMessage(), e);
+            throw e;
         }
-        return names;
     }
 }

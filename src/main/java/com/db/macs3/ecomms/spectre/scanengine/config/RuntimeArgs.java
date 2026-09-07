@@ -129,13 +129,33 @@ public final class RuntimeArgs implements Serializable {
                 CliArgumentParser.require(parsed, "config_file_path"));
     }
 
-    public List<DatasetDetail> datasetDetails() { return datasetDetails; }
-    public String featurePartitionValue() { return featurePartitionValue; }
-    public String pipelineExecId() { return pipelineExecId; }
-    public String policyEngineId() { return policyEngineId; }
-    public String processId() { return processId; }
-    public String triggerType() { return triggerType; }
-    public String configFilePath() { return configFilePath; }
+    public List<DatasetDetail> datasetDetails() {
+        return datasetDetails;
+    }
+
+    public String featurePartitionValue() {
+        return featurePartitionValue;
+    }
+
+    public String pipelineExecId() {
+        return pipelineExecId;
+    }
+
+    public String policyEngineId() {
+        return policyEngineId;
+    }
+
+    public String processId() {
+        return processId;
+    }
+
+    public String triggerType() {
+        return triggerType;
+    }
+
+    public String configFilePath() {
+        return configFilePath;
+    }
 
     public static final String TRIGGER_TYPE_LIVE = "policy-alert-live";
     public static final String TRIGGER_TYPE_TEST = "policy-alert-test";
@@ -192,8 +212,13 @@ public final class RuntimeArgs implements Serializable {
             this.datasetPartitionValue = datasetPartitionValue;
         }
 
-        public String datasetId() { return datasetId; }
-        public String datasetPartitionValue() { return datasetPartitionValue; }
+        public String datasetId() {
+            return datasetId;
+        }
+
+        public String datasetPartitionValue() {
+            return datasetPartitionValue;
+        }
 
         @Override
         public boolean equals(Object obj) {

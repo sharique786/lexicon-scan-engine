@@ -31,12 +31,29 @@ public class RuleDtlType implements Serializable {
         this.ruleId = ruleId;
     }
 
-    public Integer getRuleVersion() { return ruleVersion; }
-    public void setRuleVersion(Integer ruleVersion) { this.ruleVersion = ruleVersion; }
-    public String getRuleName() { return ruleName; }
-    public void setRuleName(String ruleName) { this.ruleName = ruleName; }
-    public String getRuleId() { return ruleId; }
-    public void setRuleId(String ruleId) { this.ruleId = ruleId; }
+    public Integer getRuleVersion() {
+        return ruleVersion;
+    }
+
+    public void setRuleVersion(Integer ruleVersion) {
+        this.ruleVersion = ruleVersion;
+    }
+
+    public String getRuleName() {
+        return ruleName;
+    }
+
+    public void setRuleName(String ruleName) {
+        this.ruleName = ruleName;
+    }
+
+    public String getRuleId() {
+        return ruleId;
+    }
+
+    public void setRuleId(String ruleId) {
+        this.ruleId = ruleId;
+    }
 
     @Override
     public boolean equals(Object obj) {

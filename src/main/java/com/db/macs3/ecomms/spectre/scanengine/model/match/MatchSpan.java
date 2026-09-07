@@ -37,12 +37,29 @@ public class MatchSpan implements Serializable {
         this.matchedText = matchedText;
     }
 
-    public int getStartCharIndex() { return startCharIndex; }
-    public void setStartCharIndex(int startCharIndex) { this.startCharIndex = startCharIndex; }
-    public int getEndCharIndex() { return endCharIndex; }
-    public void setEndCharIndex(int endCharIndex) { this.endCharIndex = endCharIndex; }
-    public String getMatchedText() { return matchedText; }
-    public void setMatchedText(String matchedText) { this.matchedText = matchedText; }
+    public int getStartCharIndex() {
+        return startCharIndex;
+    }
+
+    public void setStartCharIndex(int startCharIndex) {
+        this.startCharIndex = startCharIndex;
+    }
+
+    public int getEndCharIndex() {
+        return endCharIndex;
+    }
+
+    public void setEndCharIndex(int endCharIndex) {
+        this.endCharIndex = endCharIndex;
+    }
+
+    public String getMatchedText() {
+        return matchedText;
+    }
+
+    public void setMatchedText(String matchedText) {
+        this.matchedText = matchedText;
+    }
 
     public int length() {
         return endCharIndex - startCharIndex;

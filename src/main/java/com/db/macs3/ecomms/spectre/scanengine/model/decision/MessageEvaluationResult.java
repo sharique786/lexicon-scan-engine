@@ -70,20 +70,53 @@ public class MessageEvaluationResult implements Serializable {
         this.suppressedLexiconMatchCount = suppressedLexiconMatchCount;
     }
 
-    public String getMessageId() { return messageId; }
-    public void setMessageId(String messageId) { this.messageId = messageId; }
-    public List<GroupEvaluationResult> getEvaluatedGroups() { return evaluatedGroups; }
-    public void setEvaluatedGroups(List<GroupEvaluationResult> evaluatedGroups) { this.evaluatedGroups = evaluatedGroups; }
-    public boolean isShortCircuited() { return shortCircuited; }
-    public void setShortCircuited(boolean shortCircuited) { this.shortCircuited = shortCircuited; }
-    public List<TermMatchResult> getDisclaimerMatches() { return disclaimerMatches; }
-    public void setDisclaimerMatches(List<TermMatchResult> disclaimerMatches) { this.disclaimerMatches = disclaimerMatches; }
-    public Map<String, List<TermMatchResult>> getFinalLexiconMatchesByFeatureId() { return finalLexiconMatchesByFeatureId; }
+    public String getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(String messageId) {
+        this.messageId = messageId;
+    }
+
+    public List<GroupEvaluationResult> getEvaluatedGroups() {
+        return evaluatedGroups;
+    }
+
+    public void setEvaluatedGroups(List<GroupEvaluationResult> evaluatedGroups) {
+        this.evaluatedGroups = evaluatedGroups;
+    }
+
+    public boolean isShortCircuited() {
+        return shortCircuited;
+    }
+
+    public void setShortCircuited(boolean shortCircuited) {
+        this.shortCircuited = shortCircuited;
+    }
+
+    public List<TermMatchResult> getDisclaimerMatches() {
+        return disclaimerMatches;
+    }
+
+    public void setDisclaimerMatches(List<TermMatchResult> disclaimerMatches) {
+        this.disclaimerMatches = disclaimerMatches;
+    }
+
+    public Map<String, List<TermMatchResult>> getFinalLexiconMatchesByFeatureId() {
+        return finalLexiconMatchesByFeatureId;
+    }
+
     public void setFinalLexiconMatchesByFeatureId(Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId) {
         this.finalLexiconMatchesByFeatureId = finalLexiconMatchesByFeatureId;
     }
-    public int getSuppressedLexiconMatchCount() { return suppressedLexiconMatchCount; }
-    public void setSuppressedLexiconMatchCount(int suppressedLexiconMatchCount) { this.suppressedLexiconMatchCount = suppressedLexiconMatchCount; }
+
+    public int getSuppressedLexiconMatchCount() {
+        return suppressedLexiconMatchCount;
+    }
+
+    public void setSuppressedLexiconMatchCount(int suppressedLexiconMatchCount) {
+        this.suppressedLexiconMatchCount = suppressedLexiconMatchCount;
+    }
 
     @Override
     public boolean equals(Object obj) {

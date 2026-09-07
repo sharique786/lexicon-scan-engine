@@ -25,10 +25,21 @@ public class MessageProcessing implements Serializable {
         this.runHour = runHour;
     }
 
-    public String getRunDate() { return runDate; }
-    public void setRunDate(String runDate) { this.runDate = runDate; }
-    public String getRunHour() { return runHour; }
-    public void setRunHour(String runHour) { this.runHour = runHour; }
+    public String getRunDate() {
+        return runDate;
+    }
+
+    public void setRunDate(String runDate) {
+        this.runDate = runDate;
+    }
+
+    public String getRunHour() {
+        return runHour;
+    }
+
+    public void setRunHour(String runHour) {
+        this.runHour = runHour;
+    }
 
     @Override
     public boolean equals(Object obj) {

@@ -43,12 +43,29 @@ public class RawExpressionMatch implements Serializable {
         this.matches = matches;
     }
 
-    public int getExpressionId() { return expressionId; }
-    public void setExpressionId(int expressionId) { this.expressionId = expressionId; }
-    public String getMatchedPatternText() { return matchedPatternText; }
-    public void setMatchedPatternText(String matchedPatternText) { this.matchedPatternText = matchedPatternText; }
-    public List<AreaMatch> getMatches() { return matches; }
-    public void setMatches(List<AreaMatch> matches) { this.matches = matches; }
+    public int getExpressionId() {
+        return expressionId;
+    }
+
+    public void setExpressionId(int expressionId) {
+        this.expressionId = expressionId;
+    }
+
+    public String getMatchedPatternText() {
+        return matchedPatternText;
+    }
+
+    public void setMatchedPatternText(String matchedPatternText) {
+        this.matchedPatternText = matchedPatternText;
+    }
+
+    public List<AreaMatch> getMatches() {
+        return matches;
+    }
+
+    public void setMatches(List<AreaMatch> matches) {
+        this.matches = matches;
+    }
 
     @Override
     public boolean equals(Object obj) {

@@ -86,17 +86,49 @@ public final class BqTableConfig implements Serializable {
         this.bqOutputRecordAudit = bqOutputRecordAudit;
     }
 
-    public String bqProject() { return bqProject; }
-    public String bqDataset() { return bqDataset; }
-    public String bqViewName() { return bqViewName; }
-    public String bqFeatureMaster() { return bqFeatureMaster; }
-    public String bqLanguageFeatureDec() { return bqLanguageFeatureDec; }
-    public String bqOutputFeatureHitSummary() { return bqOutputFeatureHitSummary; }
-    public String bqOutputHitSummary() { return bqOutputHitSummary; }
-    public String bqOutputHitRestricted() { return bqOutputHitRestricted; }
-    public String bqOutputHitUnrestricted() { return bqOutputHitUnrestricted; }
-    public String bqOutputStageAudit() { return bqOutputStageAudit; }
-    public String bqOutputRecordAudit() { return bqOutputRecordAudit; }
+    public String bqProject() {
+        return bqProject;
+    }
+
+    public String bqDataset() {
+        return bqDataset;
+    }
+
+    public String bqViewName() {
+        return bqViewName;
+    }
+
+    public String bqFeatureMaster() {
+        return bqFeatureMaster;
+    }
+
+    public String bqLanguageFeatureDec() {
+        return bqLanguageFeatureDec;
+    }
+
+    public String bqOutputFeatureHitSummary() {
+        return bqOutputFeatureHitSummary;
+    }
+
+    public String bqOutputHitSummary() {
+        return bqOutputHitSummary;
+    }
+
+    public String bqOutputHitRestricted() {
+        return bqOutputHitRestricted;
+    }
+
+    public String bqOutputHitUnrestricted() {
+        return bqOutputHitUnrestricted;
+    }
+
+    public String bqOutputStageAudit() {
+        return bqOutputStageAudit;
+    }
+
+    public String bqOutputRecordAudit() {
+        return bqOutputRecordAudit;
+    }
 
     /** {@code <bq-project>.<bq-dataset>.<bq-view-name>} — the fully-qualified identifier the Spark BQ connector expects. */
     public String fullyQualifiedViewName() {

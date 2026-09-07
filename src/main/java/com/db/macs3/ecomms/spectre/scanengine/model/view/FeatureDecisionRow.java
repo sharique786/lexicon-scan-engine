@@ -102,34 +102,117 @@ public class FeatureDecisionRow implements Serializable {
         this.policyEngineId = policyEngineId;
     }
 
-    public String getProcessId() { return processId; }
-    public void setProcessId(String processId) { this.processId = processId; }
-    public String getMessageId() { return messageId; }
-    public void setMessageId(String messageId) { this.messageId = messageId; }
-    public LocalDate getDatasetPartition() { return datasetPartition; }
-    public void setDatasetPartition(LocalDate datasetPartition) { this.datasetPartition = datasetPartition; }
-    public String getFeatureTaggingType() { return featureTaggingType; }
-    public void setFeatureTaggingType(String featureTaggingType) { this.featureTaggingType = featureTaggingType; }
-    public String getFeatureType() { return featureType; }
-    public void setFeatureType(String featureType) { this.featureType = featureType; }
-    public Long getFeatureId() { return featureId; }
-    public void setFeatureId(Long featureId) { this.featureId = featureId; }
-    public String getFeatureName() { return featureName; }
-    public void setFeatureName(String featureName) { this.featureName = featureName; }
-    public String getSubFeatureType() { return subFeatureType; }
-    public void setSubFeatureType(String subFeatureType) { this.subFeatureType = subFeatureType; }
-    public String getFeaturesToApply() { return featuresToApply; }
-    public void setFeaturesToApply(String featuresToApply) { this.featuresToApply = featuresToApply; }
-    public String getIsNoiseReduction() { return isNoiseReduction; }
-    public void setIsNoiseReduction(String isNoiseReduction) { this.isNoiseReduction = isNoiseReduction; }
-    public String getOperator() { return operator; }
-    public void setOperator(String operator) { this.operator = operator; }
-    public String getFeatureDefinitionJson() { return featureDefinitionJson; }
-    public void setFeatureDefinitionJson(String featureDefinitionJson) { this.featureDefinitionJson = featureDefinitionJson; }
-    public LocalDate getFeaturePartitionValue() { return featurePartitionValue; }
-    public void setFeaturePartitionValue(LocalDate featurePartitionValue) { this.featurePartitionValue = featurePartitionValue; }
-    public String getPolicyEngineId() { return policyEngineId; }
-    public void setPolicyEngineId(String policyEngineId) { this.policyEngineId = policyEngineId; }
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
+    }
+
+    public String getMessageId() {
+        return messageId;
+    }
+
+    public void setMessageId(String messageId) {
+        this.messageId = messageId;
+    }
+
+    public LocalDate getDatasetPartition() {
+        return datasetPartition;
+    }
+
+    public void setDatasetPartition(LocalDate datasetPartition) {
+        this.datasetPartition = datasetPartition;
+    }
+
+    public String getFeatureTaggingType() {
+        return featureTaggingType;
+    }
+
+    public void setFeatureTaggingType(String featureTaggingType) {
+        this.featureTaggingType = featureTaggingType;
+    }
+
+    public String getFeatureType() {
+        return featureType;
+    }
+
+    public void setFeatureType(String featureType) {
+        this.featureType = featureType;
+    }
+
+    public Long getFeatureId() {
+        return featureId;
+    }
+
+    public void setFeatureId(Long featureId) {
+        this.featureId = featureId;
+    }
+
+    public String getFeatureName() {
+        return featureName;
+    }
+
+    public void setFeatureName(String featureName) {
+        this.featureName = featureName;
+    }
+
+    public String getSubFeatureType() {
+        return subFeatureType;
+    }
+
+    public void setSubFeatureType(String subFeatureType) {
+        this.subFeatureType = subFeatureType;
+    }
+
+    public String getFeaturesToApply() {
+        return featuresToApply;
+    }
+
+    public void setFeaturesToApply(String featuresToApply) {
+        this.featuresToApply = featuresToApply;
+    }
+
+    public String getIsNoiseReduction() {
+        return isNoiseReduction;
+    }
+
+    public void setIsNoiseReduction(String isNoiseReduction) {
+        this.isNoiseReduction = isNoiseReduction;
+    }
+
+    public String getOperator() {
+        return operator;
+    }
+
+    public void setOperator(String operator) {
+        this.operator = operator;
+    }
+
+    public String getFeatureDefinitionJson() {
+        return featureDefinitionJson;
+    }
+
+    public void setFeatureDefinitionJson(String featureDefinitionJson) {
+        this.featureDefinitionJson = featureDefinitionJson;
+    }
+
+    public LocalDate getFeaturePartitionValue() {
+        return featurePartitionValue;
+    }
+
+    public void setFeaturePartitionValue(LocalDate featurePartitionValue) {
+        this.featurePartitionValue = featurePartitionValue;
+    }
+
+    public String getPolicyEngineId() {
+        return policyEngineId;
+    }
+
+    public void setPolicyEngineId(String policyEngineId) {
+        this.policyEngineId = policyEngineId;
+    }
 
     /** @return true iff {@link #getIsNoiseReduction} is exactly {@code "Y"} (case-sensitive, matches upstream). */
     public boolean isNoiseReductionFlag() {

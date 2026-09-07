@@ -16,11 +16,13 @@ import com.db.macs3.ecomms.spectre.scanengine.model.output.LexiconHitSummaryRow;
 import com.db.macs3.ecomms.spectre.scanengine.model.message.ScanMessage;
 import com.db.macs3.ecomms.spectre.scanengine.model.view.FeatureDecisionRow;
 import com.db.macs3.ecomms.spectre.scanengine.output.OutputRowBuilder;
+import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.Row;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -100,6 +102,9 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
 
     @Override
     public Iterator<MessageProcessingResult> call(Iterator<Row> partitionRows) {
+        int partitionId = TaskContext.getPartitionId();
+        log.info("Partition {}: processing starting", partitionId);
+        Instant partitionStart = Instant.now();
         // Constructed ONCE per partition — see class Javadoc. The broadcast .value() call reads
         // the executor-local copy Spark already delivered via its broadcast mechanism — this does
         // not re-fetch or re-serialize anything per partition/task.
@@ -126,7 +131,22 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             while (partitionRows.hasNext()) {
                 results.add(processOneRow(partitionRows.next(), orchestrator));
             }
+
+            long failureCount = results.stream().filter(MessageProcessingResult::isError).count();
+            log.info("Partition {}: processing completed in {}ms — {} message(s) processed, {} failed",
+                    partitionId, Duration.between(partitionStart, Instant.now()).toMillis(),
+                    results.size(), failureCount);
             return results.iterator();
+        } catch (RuntimeException e) {
+            // Per-message failures are already isolated inside processOneRow (see below) — reaching
+            // here means something broke at the PARTITION level instead (bundle loader construction,
+            // prefetch, or an unanticipated error outside the per-row try/catch), which is fatal to
+            // this whole partition's task and must fail the Spark job rather than be silently
+            // swallowed. Logged with elapsed time before rethrow so this partition is identifiable
+            // in the driver's aggregated task-failure output.
+            log.error("Partition {}: processing failed after {}ms: {}",
+                    partitionId, Duration.between(partitionStart, Instant.now()).toMillis(), e.getMessage(), e);
+            throw e;
         }
     }
 

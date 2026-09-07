@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -109,10 +110,26 @@ public class ScanEngineJobRunner {
      *              message GCS bucket locations {@link #runPipeline} needs.
      */
     public void run(String[] args) throws Exception {
-        RuntimeArgs runtimeArgs = RuntimeArgs.parseCliArgs(args);
-        DataprocConfig dataprocConfig = DataprocConfig.parseYaml(
-                new ByteArrayInputStream(gcsClient.readTextFile(runtimeArgs.configFilePath())
-                        .getBytes(StandardCharsets.UTF_8)));
+        log.info("Stage [parse arguments/config]: starting");
+        Instant stageStart = Instant.now();
+        RuntimeArgs runtimeArgs;
+        DataprocConfig dataprocConfig;
+        try {
+            // Nothing has been written to pipeline_stage_audit yet at this point (that requires
+            // tableConfig, which comes FROM the config file this stage reads) — a failure here
+            // would otherwise surface as a raw, context-free stack trace with no indication of
+            // which argument or config file was the problem.
+            runtimeArgs = RuntimeArgs.parseCliArgs(args);
+            dataprocConfig = DataprocConfig.parseYaml(
+                    new ByteArrayInputStream(gcsClient.readTextFile(runtimeArgs.configFilePath())
+                            .getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            log.error("Stage [parse arguments/config]: failed after {}ms: {}",
+                    Duration.between(stageStart, Instant.now()).toMillis(), e.getMessage(), e);
+            throw e;
+        }
+        log.info("Stage [parse arguments/config]: completed in {}ms",
+                Duration.between(stageStart, Instant.now()).toMillis());
         BqTableConfig tableConfig = dataprocConfig.bigquery();
 
         // spark.serializer is a "static" config — only takes effect if set before the
@@ -125,16 +142,19 @@ public class ScanEngineJobRunner {
         applyJobSpecificSparkConf(spark);
 
         Instant jobStart = Instant.now();
+        log.info("Job starting: processId={}, pipelineExecId={}, policyEngineId={}",
+                runtimeArgs.processId(), runtimeArgs.pipelineExecId(), runtimeArgs.policyEngineId());
         writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, null, BqColumns.JobStatus.IN_PROGRESS, null, null);
 
         try {
             runPipeline(spark, runtimeArgs, tableConfig, dataprocConfig);
-            writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, Instant.now(),
-                    BqColumns.JobStatus.SUCCESS, null, null);
+            Instant jobEnd = Instant.now();
+            log.info("Job completed successfully in {}ms", Duration.between(jobStart, jobEnd).toMillis());
+            writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.SUCCESS, null, null);
         } catch (Exception e) {
-            log.error("Job failed: {}", e.getMessage(), e);
-            writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, Instant.now(),
-                    BqColumns.JobStatus.FAILED, 0, e.toString());
+            Instant jobEnd = Instant.now();
+            log.error("Job failed after {}ms: {}", Duration.between(jobStart, jobEnd).toMillis(), e.getMessage(), e);
+            writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.FAILED, 0, e.toString());
             throw e;
         }
     }
@@ -198,29 +218,32 @@ public class ScanEngineJobRunner {
 
         // 1. Resolve the Hyperscan base path — one GCS listing call total for this whole run.
         DataprocConfig.HyperscanGcsConfig hyperscanConfig = dataprocConfig.hyperscan();
-        String hyperscanBasePath = HyperscanPathResolver.resolveBasePath(
+        String hyperscanBasePath = runStage("resolve Hyperscan base path", () -> HyperscanPathResolver.resolveBasePath(
                 hyperscanConfig.hdbGcsBucket(), hyperscanConfig.hdbGcsPrefix(), runtimeArgs.policyEngineId(),
-                gcsClient::listImmediateChildDirectories);
+                gcsClient::listImmediateChildDirectories));
 
-        // 2. Read the view in one query covering every dataset_details entry.
-        Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(
-                spark, tableConfig, runtimeArgs).cache();
+        // 2 + 3. Read the view (one query covering every dataset_details entry), then resolve every
+        // DISTINCT feature referenced to its .zip bundle path and broadcast the resulting small
+        // (feature -> path) map — see class Javadoc "Driver load". collectAsList below is the
+        // stage's real Spark action (the .cache() alone does not force materialisation); the
+        // distinct-feature list itself is bounded by feature count, not message count, so
+        // collecting it to the driver is safe.
+        Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(spark, tableConfig, runtimeArgs).cache();
+        Map<String, String> featureToZipPath = runStage("read view + resolve distinct features", () -> {
+            List<String> distinctFeatureDefJson = viewRows.select(BqColumns.View.FEATURE_DEFINITION)
+                    .distinct().as(Encoders.STRING()).collectAsList();
+            Set<String> distinctFeatures = distinctFeatureDefJson.stream()
+                    .map(FeatureDefinition::parse)
+                    .map(featureDefinition -> featureDefinition.getBody().getLexiconName())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            log.info("Resolved {} distinct lexicon feature(s) for this run", distinctFeatures.size());
 
-        // 3. Resolve every DISTINCT feature referenced to its .zip bundle path, and broadcast the
-        //    resulting small (feature -> path) map — see class Javadoc "Driver load". The
-        //    distinct-feature list itself is bounded by feature count, not message count,
-        //    so collecting it to the driver is safe.
-        List<String> distinctFeatureDefJson = viewRows.select(BqColumns.View.FEATURE_DEFINITION)
-                .distinct().as(Encoders.STRING()).collectAsList();
-        Set<String> distinctFeatures = distinctFeatureDefJson.stream()
-                .map(FeatureDefinition::parse)
-                .map(featureDefinition -> featureDefinition.getBody().getLexiconName())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        Map<String, String> featureToZipPath = new HashMap<>();
-        for (String feature : distinctFeatures) {
-            featureToZipPath.put(feature, HyperscanPathResolver.buildZipPath(hyperscanBasePath, feature));
-        }
+            Map<String, String> zipPaths = new HashMap<>();
+            for (String feature : distinctFeatures) {
+                zipPaths.put(feature, HyperscanPathResolver.buildZipPath(hyperscanBasePath, feature));
+            }
+            return zipPaths;
+        });
         // Broadcast via JavaSparkContext (not the raw Scala SparkContext, which requires an
         // implicit ClassTag that Java code cannot supply naturally) — the standard Java-side
         // way to create a Broadcast. ONE broadcast now — the Compile Service writes one zip
@@ -229,37 +252,72 @@ public class ScanEngineJobRunner {
         JavaSparkContext javaSparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
         Broadcast<Map<String, String>> broadcastFeatureToZipPath = javaSparkContext.broadcast(featureToZipPath);
 
-        // 4. Read + union AVRO messages, restricted to the view's own message_id set.
-        Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
-        DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
-        List<Dataset<Row>> perDatasetMessages = new ArrayList<>();
-        for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
-            perDatasetMessages.add(MessageAvroReader.readDataset(
-                    spark, gcsClient, messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(),
-                    datasetDetail.datasetId(), datasetDetail.datasetPartitionValue(), relevantMessageIds));
-        }
-        Dataset<Row> messages = perDatasetMessages.getFirst();
-        for (int datasetIndex = 1; datasetIndex < perDatasetMessages.size(); datasetIndex++) {
-            messages = messages.unionByName(perDatasetMessages.get(datasetIndex), true);
-        }
+        // 4 + 5. Read + union AVRO messages (restricted to the view's own message_id set), then
+        // aggregate the view by message_id, join, and attach output-facing columns. Both steps stay
+        // lazy transformations here — no Spark action runs until mapPartitions/writeOutputs below —
+        // so this stage's logged duration reflects DAG construction, not actual read/join execution.
+        Dataset<Row> joined = runStage("read AVRO messages + join with view", () -> {
+            Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
+            DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
+            List<Dataset<Row>> perDatasetMessages = new ArrayList<>();
+            for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
+                perDatasetMessages.add(MessageAvroReader.readDataset(
+                        spark, gcsClient, messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(),
+                        datasetDetail.datasetId(), datasetDetail.datasetPartitionValue(), relevantMessageIds));
+            }
+            Dataset<Row> messages = perDatasetMessages.getFirst();
+            for (int datasetIndex = 1; datasetIndex < perDatasetMessages.size(); datasetIndex++) {
+                messages = messages.unionByName(perDatasetMessages.get(datasetIndex), true);
+            }
 
-        // 5. Aggregate the view by message_id, join, attach output-facing columns.
-        Dataset<Row> groupedView = FeatureDecisionViewReader.groupByMessageId(viewRows);
-        Dataset<Row> joined = messages.join(groupedView, BqColumns.View.MESSAGE_ID)
-                .withColumn(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT, functions.lit(runtimeArgs.pipelineExecId()))
-                .withColumn(JoinedRowColumns.CREATED_BY_FOR_OUTPUT, functions.lit(properties.getCreatedBy()))
-                .withColumn(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT,
-                        functions.col(JoinedRowColumns.DATASET_PARTITION_VALUE));
+            Dataset<Row> groupedView = FeatureDecisionViewReader.groupByMessageId(viewRows);
+            return messages.join(groupedView, BqColumns.View.MESSAGE_ID)
+                    .withColumn(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT, functions.lit(runtimeArgs.pipelineExecId()))
+                    .withColumn(JoinedRowColumns.CREATED_BY_FOR_OUTPUT, functions.lit(properties.getCreatedBy()))
+                    .withColumn(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT,
+                            functions.col(JoinedRowColumns.DATASET_PARTITION_VALUE));
+        });
 
-        // 6. mapPartitions — the only place Hyperscan databases are loaded.
+        // 6. mapPartitions — the only place Hyperscan databases are loaded. Still lazy: the actual
+        // scan work happens once the writes in step 7 trigger it.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         properties.getMaxAttachmentSizeBytes(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).cache();
 
-        // 7. Split and write.
-        writeOutputs(spark, tableConfig, runtimeArgs, hyperscanConfig.hdbGcsBucket(), results);
+        // 7. Split and write — this is where steps 4-6's lazy DAG actually executes, as each write
+        // below triggers its own Spark action.
+        runStageVoid("scan messages + write outputs",
+                () -> writeOutputs(spark, tableConfig, runtimeArgs, hyperscanConfig.hdbGcsBucket(), results));
+    }
+
+    /**
+     * Runs one named pipeline stage, logging its start, completion (with elapsed wall-clock
+     * time), and — on failure — the elapsed time up to that failure plus the stage name, before
+     * rethrowing unchanged (the outer {@link #run} still owns deciding overall job
+     * success/failure and writing {@code pipeline_stage_audit}; this only adds stage-level
+     * context to what would otherwise be an undifferentiated exception from deep in the DAG).
+     */
+    private <T> T runStage(String stageName, java.util.function.Supplier<T> stage) {
+        log.info("Stage [{}]: starting", stageName);
+        Instant stageStart = Instant.now();
+        try {
+            T result = stage.get();
+            log.info("Stage [{}]: completed in {}ms", stageName, Duration.between(stageStart, Instant.now()).toMillis());
+            return result;
+        } catch (RuntimeException e) {
+            log.error("Stage [{}]: failed after {}ms: {}",
+                    stageName, Duration.between(stageStart, Instant.now()).toMillis(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    private void runStageVoid(String stageName, Runnable stage) {
+        runStage(stageName, () -> {
+            stage.run();
+            return null;
+        });
     }
 
     private void writeOutputs(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
