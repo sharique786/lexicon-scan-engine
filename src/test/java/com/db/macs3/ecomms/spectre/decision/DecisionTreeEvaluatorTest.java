@@ -25,7 +25,7 @@ class DecisionTreeEvaluatorTest {
     private static final LocalDate SOME_DATE = LocalDate.parse("2026-08-16");
 
     private static FeatureDecisionRow row(String featureId, String featureType, String featuresToApply,
-                                           String isNoiseReduction, String operator) {
+                                           boolean isNoiseReduction, String operator) {
         return new FeatureDecisionRow("proc-1", "msg-101", SOME_DATE, "Lexicon-Tagging",
                 featureType, Long.parseLong(featureId), featureId + "-name", "lexicon", featuresToApply,
                 isNoiseReduction, operator, "{}", SOME_DATE, "101");
@@ -51,10 +51,10 @@ class DecisionTreeEvaluatorTest {
         @DisplayName("an OR group with any member hit short-circuits — no later group is even scanned")
         void orGroupHitShortCircuits() {
             List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(List.of(
-                    row("3", "composite", "lex_a", "Y", "OR"),
-                    row("3", "composite", "lex_b", "Y", "OR"),
-                    row("2", "disclaimer", "disc_1", "N", null),
-                    row("1", "lexicon", "lex_std", "N", null)
+                    row("3", "composite", "lex_a", true, "OR"),
+                    row("3", "composite", "lex_b", true, "OR"),
+                    row("2", "disclaimer", "disc_1", false, null),
+                    row("1", "lexicon", "lex_std", false, null)
             ));
             Map<String, List<TermMatchResult>> canned = new HashMap<>();
             canned.put("lex_a", List.of());
@@ -78,9 +78,9 @@ class DecisionTreeEvaluatorTest {
         @DisplayName("an AND group with only SOME members hit does NOT short-circuit — processing continues")
         void andGroupPartialHitProceeds() {
             List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(List.of(
-                    row("5", "NoiseReduction", "spam_1", "Y", "AND"),
-                    row("5", "NoiseReduction", "spam_2", "Y", "AND"),
-                    row("1", "lexicon", "lex_std", "N", null)
+                    row("5", "NoiseReduction", "spam_1", true, "AND"),
+                    row("5", "NoiseReduction", "spam_2", true, "AND"),
+                    row("1", "lexicon", "lex_std", false, null)
             ));
             Map<String, List<TermMatchResult>> canned = new HashMap<>();
             canned.put("spam_1", List.of(oneMatch("spam_1::1", MatchArea.MESSAGE_BODY, 0, 4, "spam")));
@@ -103,8 +103,8 @@ class DecisionTreeEvaluatorTest {
         @DisplayName("a fully-contained match is suppressed; a partially-overlapping one is NOT")
         void fullContainmentOnly() {
             List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(List.of(
-                    row("2", "disclaimer", "disc_1", "N", null),
-                    row("1", "lexicon", "lex_std", "N", null)
+                    row("2", "disclaimer", "disc_1", false, null),
+                    row("1", "lexicon", "lex_std", false, null)
             ));
             Map<String, List<TermMatchResult>> canned = new HashMap<>();
             canned.put("disc_1", List.of(oneMatch("disc_1::1", MatchArea.MESSAGE_BODY, 10, 34, "confidential information")));
@@ -127,8 +127,8 @@ class DecisionTreeEvaluatorTest {
                      "numeric indices in MESSAGE_BODY — different coordinate spaces")
         void doesNotCrossAreaBoundaries() {
             List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(List.of(
-                    row("2", "disclaimer", "disc_1", "N", null),
-                    row("1", "lexicon", "lex_std", "N", null)
+                    row("2", "disclaimer", "disc_1", false, null),
+                    row("1", "lexicon", "lex_std", false, null)
             ));
             Map<String, List<TermMatchResult>> canned = new HashMap<>();
             canned.put("disc_1", List.of(oneMatch("disc_1::1", MatchArea.SUBJECT, 0, 10, "disclaimer")));
@@ -145,8 +145,8 @@ class DecisionTreeEvaluatorTest {
                      "which evaluated group each surviving match belongs to")
         void preservesPerGroupStructure() {
             List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(List.of(
-                    row("1", "lexicon", "lex_a", "N", null),
-                    row("4", "lexicon", "lex_b", "N", null)
+                    row("1", "lexicon", "lex_a", false, null),
+                    row("4", "lexicon", "lex_b", false, null)
             ));
             Map<String, List<TermMatchResult>> canned = Map.of(
                     "lex_a", List.of(oneMatch("lex_a::1", MatchArea.MESSAGE_BODY, 0, 4, "bomb")),

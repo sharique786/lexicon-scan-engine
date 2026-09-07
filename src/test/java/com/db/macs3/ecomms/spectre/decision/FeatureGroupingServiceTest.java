@@ -19,7 +19,7 @@ class FeatureGroupingServiceTest {
 
     private static FeatureDecisionRow row(String featureId, String featureType, String featureName,
                                            String subFeatureType, String featuresToApply,
-                                           String isNoiseReduction, String operator) {
+                                           boolean isNoiseReduction, String operator) {
         return new FeatureDecisionRow("proc-1", "msg-101", SOME_DATE, "Lexicon-Tagging",
                 featureType, Long.parseLong(featureId), featureName, subFeatureType, featuresToApply,
                 isNoiseReduction, operator, "{}", SOME_DATE, "101");
@@ -32,10 +32,10 @@ class FeatureGroupingServiceTest {
         // msg-101 scenario: featureId=1 standalone lexicon, featureId=2 disclaimer,
         // featureId=3 composite/NoiseReduction with 2 OR'd sub-features.
         private final List<FeatureDecisionRow> rows = List.of(
-                row("1", "lexicon", "lexicon_mkt_cond_1", null, "lexicon_mkt_cond_1", "N", null),
-                row("2", "disclaimer", "std_disclaimer_1", null, "std_disclaimer_1", "N", null),
-                row("3", "composite", "NotNewsLetter", "lexicon", "lexicon_mkt_cond_2", "Y", "OR"),
-                row("3", "composite", "NotNewsLetter", "lexicon", "lexicon_mkt_cond_3", "Y", "OR")
+                row("1", "lexicon", "lexicon_mkt_cond_1", null, "lexicon_mkt_cond_1", false, null),
+                row("2", "disclaimer", "std_disclaimer_1", null, "std_disclaimer_1", false, null),
+                row("3", "composite", "NotNewsLetter", "lexicon", "lexicon_mkt_cond_2", true, "OR"),
+                row("3", "composite", "NotNewsLetter", "lexicon", "lexicon_mkt_cond_3", true, "OR")
         );
         private final List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(rows);
 
@@ -86,8 +86,8 @@ class FeatureGroupingServiceTest {
     @DisplayName("a NoiseReduction group with AND operator is parsed correctly")
     void parsesAndOperatorGroup() {
         List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(List.of(
-                row("5", "NoiseReduction", "NotNewsLetter2", "lexicon", "lexicon_spam_1", "Y", "AND"),
-                row("5", "NoiseReduction", "NotNewsLetter2", "lexicon", "lexicon_spam_2", "Y", "AND")
+                row("5", "NoiseReduction", "NotNewsLetter2", "lexicon", "lexicon_spam_1", true, "AND"),
+                row("5", "NoiseReduction", "NotNewsLetter2", "lexicon", "lexicon_spam_2", true, "AND")
         ));
         assertThat(groups).hasSize(1);
         assertThat(groups.get(0).getOperator()).isEqualTo("AND");
@@ -101,8 +101,8 @@ class FeatureGroupingServiceTest {
         @DisplayName("inconsistent featureType across rows sharing a featureId throws")
         void rejectsInconsistentFeatureType() {
             List<FeatureDecisionRow> badRows = List.of(
-                    row("9", "lexicon", "X", null, "x1", "N", null),
-                    row("9", "composite", "X", null, "x2", "N", null)
+                    row("9", "lexicon", "X", null, "x1", false, null),
+                    row("9", "composite", "X", null, "x2", false, null)
             );
             assertThatThrownBy(() -> FeatureGroupingService.groupAndOrder(badRows))
                     .isInstanceOf(IllegalArgumentException.class);
@@ -112,8 +112,8 @@ class FeatureGroupingServiceTest {
         @DisplayName("a multi-member group with no operator throws")
         void rejectsMissingOperator() {
             List<FeatureDecisionRow> badRows = List.of(
-                    row("10", "composite", "Y", "lexicon", "a", "Y", null),
-                    row("10", "composite", "Y", "lexicon", "b", "Y", null)
+                    row("10", "composite", "Y", "lexicon", "a", true, null),
+                    row("10", "composite", "Y", "lexicon", "b", true, null)
             );
             assertThatThrownBy(() -> FeatureGroupingService.groupAndOrder(badRows))
                     .isInstanceOf(IllegalArgumentException.class);

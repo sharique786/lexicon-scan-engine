@@ -31,7 +31,7 @@ class OutputRowBuilderTest {
     private static FeatureDecisionRow row(String featureId, String featureType, String featuresToApply, String defJson) {
         return new FeatureDecisionRow("proc-1", "msg-101", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
                 featureType, Long.parseLong(featureId), featureId + "-name", null, featuresToApply,
-                "N", null, defJson, DATASET_PARTITION_VALUE, "101");
+                false, null, defJson, DATASET_PARTITION_VALUE, "101");
     }
 
     private static String defJson(String feature, int totalTerms, int minHits) {
@@ -165,7 +165,7 @@ class OutputRowBuilderTest {
             List<FeatureDecisionRow> nrRows = List.of(
                     new FeatureDecisionRow("proc-1", "msg-102", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
                             "NoiseReduction", 9L, "9-name", null, "spam-1",
-                            "Y", null, defJson("spam-1", 3, 1), DATASET_PARTITION_VALUE, "101"),
+                            true, null, defJson("spam-1", 3, 1), DATASET_PARTITION_VALUE, "101"),
                     row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1))
             );
             List<FeatureGroup> nrGroups = FeatureGroupingService.groupAndOrder(nrRows);

@@ -66,9 +66,6 @@ public final class BqColumns {
         public static final String NOISE_REDUCTION   = "NoiseReduction";
     }
 
-    public static final String YES = "Y";
-    public static final String NO  = "N";
-
     public static final String OPERATOR_OR  = "OR";
     public static final String OPERATOR_AND = "AND";
 

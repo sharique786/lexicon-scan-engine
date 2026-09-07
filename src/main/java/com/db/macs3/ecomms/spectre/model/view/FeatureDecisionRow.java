@@ -1,7 +1,5 @@
 package com.db.macs3.ecomms.spectre.model.view;
 
-import com.db.macs3.ecomms.spectre.constants.BqColumns;
-
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -21,8 +19,8 @@ import java.util.Objects;
  * <p><b>Data types rechecked against the live view (this revision):</b>
  * {@link #getDatasetPartition}/{@link #getFeaturePartitionValue} are DATE
  * columns, and {@link #getFeatureId} is a LONG (INTEGER) column — NOT plain
- * STRING, despite the rest of this row being string-typed. {@link ViewRowConverter
- * ViewRowConverter} previously read every column via {@code row.getString(...)},
+ * STRING, despite the rest of this row being string-typed.
+ * ViewRowConverter previously read every column via {@code row.getString(...)},
  * which throws {@code ClassCastException} for these three at real-query time
  * (never caught by the unit tests, which construct this class directly rather
  * than through a real Spark {@code Row}). {@link #getFeatureId} stays a
@@ -46,7 +44,7 @@ public class FeatureDecisionRow implements Serializable {
     private String featureName;
     private String subFeatureType;
     private String featuresToApply;
-    private String isNoiseReduction;
+    private boolean isNoiseReduction;
     private String operator;
     private String featureDefinitionJson;
     private LocalDate featurePartitionValue;
@@ -72,8 +70,9 @@ public class FeatureDecisionRow implements Serializable {
      *                                 gets looked up inside {@code feature_definition.body.lexiconName}
      *                                 to resolve the {@code .hdb} filename, NOT {@code featureName}
      *                                 (which may be a composite parent's display label)
-     * @param isNoiseReduction         {@code "Y"} / {@code "N"} — string, not boolean, matching the
-     *                                 view's own column type
+     * @param isNoiseReduction         the group's {@code is_noise_reduction} flag — BOOLEAN in the
+     *                                 view, not the {@code "Y"}/{@code "N"} string an earlier
+     *                                 revision of this class assumed
      * @param operator                 {@code "OR"} / {@code "AND"} / null — combines sibling rows
      *                                 sharing the same {@code featureId} (composite/NoiseReduction only)
      * @param featureDefinitionJson    raw JSON string — parsed on demand via
@@ -84,7 +83,7 @@ public class FeatureDecisionRow implements Serializable {
     public FeatureDecisionRow(String processId, String messageId, LocalDate datasetPartition,
                                String featureTaggingType, String featureType, Long featureId,
                                String featureName, String subFeatureType, String featuresToApply,
-                               String isNoiseReduction, String operator, String featureDefinitionJson,
+                               boolean isNoiseReduction, String operator, String featureDefinitionJson,
                                LocalDate featurePartitionValue, String policyEngineId) {
         this.processId = processId;
         this.messageId = messageId;
@@ -174,11 +173,11 @@ public class FeatureDecisionRow implements Serializable {
         this.featuresToApply = featuresToApply;
     }
 
-    public String getIsNoiseReduction() {
+    public boolean isNoiseReduction() {
         return isNoiseReduction;
     }
 
-    public void setIsNoiseReduction(String isNoiseReduction) {
+    public void setNoiseReduction(boolean isNoiseReduction) {
         this.isNoiseReduction = isNoiseReduction;
     }
 
@@ -214,11 +213,6 @@ public class FeatureDecisionRow implements Serializable {
         this.policyEngineId = policyEngineId;
     }
 
-    /** @return true iff {@link #getIsNoiseReduction} is exactly {@code "Y"} (case-sensitive, matches upstream). */
-    public boolean isNoiseReductionFlag() {
-        return BqColumns.YES.equals(isNoiseReduction);
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
@@ -228,7 +222,8 @@ public class FeatureDecisionRow implements Serializable {
             return false;
         }
         FeatureDecisionRow other = (FeatureDecisionRow) obj;
-        return Objects.equals(processId, other.processId)
+        return isNoiseReduction == other.isNoiseReduction
+                && Objects.equals(processId, other.processId)
                 && Objects.equals(messageId, other.messageId)
                 && Objects.equals(datasetPartition, other.datasetPartition)
                 && Objects.equals(featureTaggingType, other.featureTaggingType)
@@ -237,7 +232,6 @@ public class FeatureDecisionRow implements Serializable {
                 && Objects.equals(featureName, other.featureName)
                 && Objects.equals(subFeatureType, other.subFeatureType)
                 && Objects.equals(featuresToApply, other.featuresToApply)
-                && Objects.equals(isNoiseReduction, other.isNoiseReduction)
                 && Objects.equals(operator, other.operator)
                 && Objects.equals(featureDefinitionJson, other.featureDefinitionJson)
                 && Objects.equals(featurePartitionValue, other.featurePartitionValue)

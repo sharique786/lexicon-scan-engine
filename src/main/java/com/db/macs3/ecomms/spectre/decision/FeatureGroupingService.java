@@ -84,7 +84,7 @@ public final class FeatureGroupingService {
                 featureId,
                 first.getFeatureName(),
                 first.getFeatureType(),
-                first.isNoiseReductionFlag(),
+                first.isNoiseReduction(),
                 operator,
                 members);
     }
@@ -96,10 +96,10 @@ public final class FeatureGroupingService {
                         "featureId=" + featureId + " has inconsistent featureType across its member rows: '"
                         + first.getFeatureType() + "' vs '" + row.getFeatureType() + "'");
             }
-            if (!sameValue(row.getIsNoiseReduction(), first.getIsNoiseReduction())) {
+            if (row.isNoiseReduction() != first.isNoiseReduction()) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent is_noise_reduction across its member rows: '"
-                        + first.getIsNoiseReduction() + "' vs '" + row.getIsNoiseReduction() + "'");
+                        + first.isNoiseReduction() + "' vs '" + row.isNoiseReduction() + "'");
             }
             if (members.size() > 1 && !sameValue(row.getOperator(), first.getOperator())) {
                 throw new IllegalArgumentException(

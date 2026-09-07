@@ -116,7 +116,7 @@ class FeatureScanOrchestratorTest {
     private static FeatureDecisionRow row(String featureId, String featuresToApply, String defJson) {
         return new FeatureDecisionRow("proc-1", "msg-101", SOME_DATE, "Lexicon-Tagging",
                 "lexicon", Long.parseLong(featureId), featureId + "-name", null, featuresToApply,
-                "N", null, defJson, SOME_DATE, "101");
+                false, null, defJson, SOME_DATE, "101");
     }
 
     private static String defJson(String feature, String... scopes) {

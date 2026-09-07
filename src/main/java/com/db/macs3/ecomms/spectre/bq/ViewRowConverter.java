@@ -20,10 +20,11 @@ import java.time.LocalDate;
  * underlying column names at all.
  *
  * <p><b>Not every column is STRING (rechecked against the live view):</b>
- * {@code dataset_partition}/{@code feature_partition_value} are DATE, and
- * {@code feature_id} is LONG (INTEGER) — reading any of these three via
- * {@code Row.getString} throws {@code ClassCastException} at real-query
- * time. {@link #getDateOrNull} and {@link #getLongOrNull} read those three;
+ * {@code dataset_partition}/{@code feature_partition_value} are DATE,
+ * {@code feature_id} is LONG (INTEGER), and {@code is_noise_reduction} is
+ * BOOLEAN — reading any of these four via {@code Row.getString} throws
+ * {@code ClassCastException} at real-query time. {@link #getDateOrNull},
+ * {@link #getLongOrNull}, and {@link #getBooleanOrDefault} read those four;
  * every other column is genuinely STRING and stays on {@link #getStringOrNull}.
  */
 public final class ViewRowConverter implements Serializable {
@@ -41,7 +42,7 @@ public final class ViewRowConverter implements Serializable {
                 getStringOrNull(row, BqColumns.View.FEATURE_NAME),
                 getStringOrNull(row, BqColumns.View.SUB_FEATURE_TYPE),
                 getStringOrNull(row, BqColumns.View.FEATURES_TO_APPLY),
-                getStringOrNull(row, BqColumns.View.IS_NOISE_REDUCTION),
+                getBooleanOrDefault(row, BqColumns.View.IS_NOISE_REDUCTION),
                 getStringOrNull(row, BqColumns.View.OPERATOR),
                 getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION),
                 getDateOrNull(row, BqColumns.View.FEATURE_PARTITION_VALUE),
@@ -57,6 +58,12 @@ public final class ViewRowConverter implements Serializable {
     private static Long getLongOrNull(Row row, String columnName) {
         int idx = row.fieldIndex(columnName);
         return row.isNullAt(idx) ? null : row.getLong(idx);
+    }
+
+    /** {@code is_noise_reduction} is NOT modelled as nullable — a null value reads as {@code false}. */
+    private static boolean getBooleanOrDefault(Row row, String columnName) {
+        int idx = row.fieldIndex(columnName);
+        return !row.isNullAt(idx) && row.getBoolean(idx);
     }
 
     /**
