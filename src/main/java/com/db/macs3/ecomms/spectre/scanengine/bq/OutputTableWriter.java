@@ -367,11 +367,20 @@ public final class OutputTableWriter {
     // feature-hit-summary) — at "millions of messages" scale, indirect's single batch load job
     // outperforms the direct Storage Write API's per-row/per-batch overhead. See
     // writeAppendDirect below for the two small audit tables, where the opposite tradeoff wins.
+    //
+    // useAvroLogicalTypes=true: without it, the BQ load job ignores the Avro logicalType
+    // annotation Spark attaches to DATE/TIMESTAMP columns (dataset_partition_value/created_ts
+    // here) and reads the underlying physical Avro type literally — failing with "Field
+    // dataset_partition_value has incompatible types. Configured schema: date; Avro file:
+    // integer." even though the actual data is correct. Defaults to false; only meaningful
+    // alongside intermediateFormat=avro. See GoogleCloudDataproc/spark-bigquery-connector
+    // issues #300 and #612, and the connector's own README ("useAvroLogicalTypes").
     private static void writeAppend(Dataset<Row> dataset, String fullyQualifiedTable) {
         dataset.write()
                 .format("bigquery")
                 .option("table", fullyQualifiedTable)
                 .option("intermediateFormat", "avro")
+                .option("useAvroLogicalTypes", "true")
                 .mode(SaveMode.Append)
                 .save();
     }
