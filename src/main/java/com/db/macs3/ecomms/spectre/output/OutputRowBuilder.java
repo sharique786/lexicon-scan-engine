@@ -37,16 +37,17 @@ public final class OutputRowBuilder {
     /**
      * Builds the {@code lexicon-hit-summary} row for one message — one
      * {@link LexiconHitSummaryRow.EvaluatedLexicon} entry per EVALUATED
-     * group (see {@link LexiconHitSummaryRow} class Javadoc for why this is
-     * per-group, not per-sub-feature-member), regardless of feature type
-     * (NoiseReduction/Disclaimer/Lexicon all included) — reflecting
-     * everything {@code DecisionTreeEvaluator} actually evaluated for this
-     * message, stopping wherever it stopped.
+     * group that matched at least one term (see {@link LexiconHitSummaryRow}
+     * class Javadoc for why this is per-group, not per-sub-feature-member),
+     * regardless of feature type (NoiseReduction/Disclaimer/Lexicon all
+     * included) — a group {@code DecisionTreeEvaluator} evaluated but which
+     * matched nothing (empty {@code termDtls}, {@code regexHitCount == 0})
+     * is omitted entirely, not included with a zero count.
      *
      * <p>Uses each group's RAW (pre-disclaimer-suppression) matches, since
-     * this table is a broad "what did we check and find" summary, not the
-     * alert-worthy detail {@code lexicon-hit-restricted}/{@code -unrestricted}
-     * carry (see {@link #buildDetailRow}, which uses the suppressed set).
+     * this table is a broad "what did we hit" summary, not the alert-worthy
+     * detail {@code lexicon-hit-restricted}/{@code -unrestricted} carry (see
+     * {@link #buildDetailRow}, which uses the suppressed set).
      */
     public static LexiconHitSummaryRow buildSummaryRow(String messageId, String processId, String pipelineExecId,
                                                        LocalDate datasetPartitionValue,
@@ -75,12 +76,17 @@ public final class OutputRowBuilder {
                 }
             }
 
-            evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(
-                    groupResult.getGroup().getFeatureId(),
-                    groupResult.getGroup().getFeatureName(),
-                    totalTermsCount,
-                    (long) termDtls.size(),
-                    termDtls));
+            // Only report a group that actually matched something — a group this job evaluated
+            // but which had zero matching terms (regexHitCount == termDtls.size()) is noise for a
+            // "what hit" summary, not evaluation audit trail (that's pipeline_stage_audit's job).
+            if (!termDtls.isEmpty()) {
+                evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(
+                        groupResult.getGroup().getFeatureId(),
+                        groupResult.getGroup().getFeatureName(),
+                        totalTermsCount,
+                        (long) termDtls.size(),
+                        termDtls));
+            }
         }
 
         return new LexiconHitSummaryRow(

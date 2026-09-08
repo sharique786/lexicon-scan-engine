@@ -24,10 +24,14 @@ import java.util.Objects;
  * {@code body.lexiconName}) it came from, since {@code term_id} is
  * {@code <feature>::<index>}.
  *
- * <p>Only groups that were ACTUALLY evaluated appear — a NoiseReduction
- * group short-circuit means every later group (further NoiseReduction, the
- * Disclaimer group, all Lexicon groups) simply has no entry at all here,
- * since {@code DecisionTreeEvaluator} never evaluated them.
+ * <p>Only groups that were ACTUALLY evaluated AND matched at least one term
+ * appear — a NoiseReduction group short-circuit means every later group
+ * (further NoiseReduction, the Disclaimer group, all Lexicon groups) simply
+ * has no entry at all here, since {@code DecisionTreeEvaluator} never
+ * evaluated them; separately, a group that WAS evaluated but matched
+ * nothing ({@link EvaluatedLexicon#getRegexHitCount} would be zero) is
+ * likewise omitted by {@code OutputRowBuilder#buildSummaryRow} — this table
+ * reports what hit, not an evaluation audit trail.
  *
  * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
  * schema verbatim (rechecked against the live table): {@code evaluated_lexicons}

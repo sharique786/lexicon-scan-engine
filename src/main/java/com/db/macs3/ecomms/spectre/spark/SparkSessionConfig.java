@@ -31,7 +31,7 @@ public class SparkSessionConfig {
     @Bean
     public SparkSession sparkSession() {
         SparkSession spark = SparkSession.builder()
-                .appName("lexicon-scan-engine")
+                .appName("spectre-lexicon-tagging-engine")
                 .config(SparkConfigKeys.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
                 .getOrCreate();
         applyJobSpecificSparkConf(spark);
