@@ -424,7 +424,7 @@ public final class OutputTableWriter {
                     .option("table", fullyQualifiedTable)
                     .option("intermediateFormat", "avro")
                     .option("useAvroLogicalTypes", "true")
-                    .mode(SaveMode.Append)
+                    .mode(SaveMode.Overwrite)
                     .save();
             succeeded = true;
         } catch (RuntimeException e) {

@@ -18,7 +18,6 @@ import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RuntimeConfig;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 import org.slf4j.Logger;
@@ -84,6 +83,12 @@ import java.util.stream.Collectors;
  * per-message results, every output table) stays a Spark {@code Dataset}
  * from creation to write — this driver never calls {@code .collect()} on any
  * of them.
+ *
+ * <p>The {@code SparkSession}/{@code JavaSparkContext} this class runs
+ * against are built and configured by {@link SparkSessionConfig}, not here —
+ * see that class for the job-specific Spark runtime config (AQE/skew-join
+ * thresholds, shuffle partitions, max partition bytes) previously applied
+ * inline in this class.
  */
 @Service
 public class ScanEngineJobRunner {
@@ -92,10 +97,22 @@ public class ScanEngineJobRunner {
 
     private final GcsClient gcsClient;
     private final ScanEngineProperties properties;
+    private final SparkSession sparkSession;
+    private final JavaSparkContext javaSparkContext;
 
-    public ScanEngineJobRunner(GcsClient gcsClient, ScanEngineProperties properties) {
+    /**
+     * {@code sparkSession}/{@code javaSparkContext} are injected rather than
+     * built here — see {@link SparkSessionConfig}, which owns both beans
+     * (including the job-specific Spark runtime config this class used to
+     * apply itself) so this class only orchestrates the pipeline against an
+     * already-configured session.
+     */
+    public ScanEngineJobRunner(GcsClient gcsClient, ScanEngineProperties properties,
+                               SparkSession sparkSession, JavaSparkContext javaSparkContext) {
         this.gcsClient = gcsClient;
         this.properties = properties;
+        this.sparkSession = sparkSession;
+        this.javaSparkContext = javaSparkContext;
     }
 
     /**
@@ -130,85 +147,22 @@ public class ScanEngineJobRunner {
                 Duration.between(stageStart, Instant.now()).toMillis());
         BqTableConfig tableConfig = dataprocConfig.bigquery();
 
-        // spark.serializer is a "static" config — only takes effect if set before the
-        // SparkContext is actually constructed, via SparkSession.builder().config(...), never
-        // via spark.conf().set(...) afterward.
-        SparkSession spark = SparkSession.builder()
-                .appName("lexicon-scan-engine")
-                .config(SparkConfigKeys.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-                .getOrCreate();
-        applyJobSpecificSparkConf(spark);
-
         Instant jobStart = Instant.now();
         log.info("Job starting: processId={}, pipelineExecId={}, policyEngineId={}",
                 runtimeArgs.processId(), runtimeArgs.pipelineExecId(), runtimeArgs.policyEngineId());
-        writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, null, BqColumns.JobStatus.IN_PROGRESS, null, null);
+        writeStageAudit(sparkSession, tableConfig, runtimeArgs, jobStart, null, BqColumns.JobStatus.IN_PROGRESS, null, null);
 
         try {
-            runPipeline(spark, runtimeArgs, tableConfig, dataprocConfig);
+            runPipeline(sparkSession, runtimeArgs, tableConfig, dataprocConfig);
             Instant jobEnd = Instant.now();
             log.info("Job completed successfully in {}ms", Duration.between(jobStart, jobEnd).toMillis());
-            writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.SUCCESS, null, null);
+            writeStageAudit(sparkSession, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.SUCCESS, null, null);
         } catch (Exception e) {
             Instant jobEnd = Instant.now();
             log.error("Job failed after {}ms: {}", Duration.between(jobStart, jobEnd).toMillis(), e.getMessage(), e);
-            writeStageAudit(spark, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.FAILED, 0, e.toString());
+            writeStageAudit(sparkSession, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.FAILED, 0, e.toString());
             throw e;
         }
-    }
-
-    /**
-     * Sets this job's OWN critical performance/skew-handling configs
-     * explicitly, rather than trusting the shared Dataproc cluster's
-     * {@code spark-defaults.conf} to already suit this specific workload —
-     * see README "Performance & scalability" for the full reasoning. On a
-     * cluster shared with other tenants, global defaults reflect whatever
-     * mix of OTHER jobs has driven them, not this job's own two independent
-     * skew sources (a single message's attachment text can be far larger
-     * than the median; a single message's applicable-lexicon-feature count
-     * can also be far larger than the median, independently of attachment
-     * size) — every setting below is a per-{@code SparkSession} RUNTIME
-     * config, safe to set here (unlike {@code spark.serializer}, a "static"
-     * config that must be set on the builder before {@code getOrCreate()} —
-     * see the caller).
-     */
-    private void applyJobSpecificSparkConf(SparkSession spark) {
-        RuntimeConfig conf = spark.conf();
-
-        // AQE + skew-join splitting: on by default since Spark 3.2, but never assumed here —
-        // this job's correctness/performance under skew depends on it, so it is asserted
-        // explicitly rather than hoped for.
-        conf.set(SparkConfigKeys.ADAPTIVE_ENABLED, "true");
-        conf.set(SparkConfigKeys.ADAPTIVE_COALESCE_PARTITIONS_ENABLED, "true");
-        conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_ENABLED, "true");
-        // Tightened from Spark's own defaults (factor 5, 256MB threshold): a single message
-        // with an unusually large attachment can dwarf the median shuffle-partition size by
-        // far more than 5x while still being one real, unsplittable row — the default
-        // threshold can under-react to exactly this job's specific skew shape. Reasoned
-        // defaults, treated as a starting point to monitor and adjust against real production
-        // message-size distributions.
-        conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_SKEWED_PARTITION_FACTOR, "3");
-        conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_SKEWED_PARTITION_THRESHOLD_BYTES, "128m");
-        conf.set(SparkConfigKeys.ADAPTIVE_ADVISORY_PARTITION_SIZE_BYTES, "64m");
-
-        // spark.sql.shuffle.partitions: Spark's own hardcoded default (200) has no relationship
-        // to how many executor cores THIS run actually has on a shared, dynamically-allocated
-        // cluster — computed here relative to the driver's own view of available parallelism at
-        // job start instead, floored at 200 so a slow dynamic-allocation ramp-up at startup
-        // never produces an under-parallelised shuffle. AQE's coalescePartitions still merges
-        // this back down post-shuffle as actual data volume allows.
-        int defaultParallelism = spark.sparkContext().defaultParallelism();
-        conf.set(SparkConfigKeys.SHUFFLE_PARTITIONS, String.valueOf(Math.max(200, defaultParallelism * 3)));
-
-        // Smaller AVRO read-side partitions: the default 128MB max-partition-bytes groups
-        // messages into a read partition purely by source-file byte range, with no awareness
-        // that one of those bytes might belong to a single message's giant attachment — a
-        // smaller ceiling here means fewer OTHER messages get bundled alongside a large one
-        // into the same initial partition, reducing (not eliminating — a single giant record
-        // is still a single giant record) the odds that one partition's read+decode cost
-        // dominates the whole stage's wall-clock time before AQE's post-shuffle rebalancing
-        // even has a chance to help.
-        conf.set(SparkConfigKeys.FILES_MAX_PARTITION_BYTES, "67108864"); // 64MB
     }
 
     private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig,
@@ -242,12 +196,12 @@ public class ScanEngineJobRunner {
             }
             return zipPaths;
         });
-        // Broadcast via JavaSparkContext (not the raw Scala SparkContext, which requires an
-        // implicit ClassTag that Java code cannot supply naturally) — the standard Java-side
-        // way to create a Broadcast. ONE broadcast now — the Compile Service writes one zip
-        // bundle per feature (containing both the .hdb and the term-metadata JSON), so
-        // HyperscanBundleLoader needs only one feature -> path map — see that class Javadoc.
-        JavaSparkContext javaSparkContext = JavaSparkContext.fromSparkContext(spark.sparkContext());
+        // Broadcast via the injected JavaSparkContext (see SparkSessionConfig; not the raw Scala
+        // SparkContext, which requires an implicit ClassTag that Java code cannot supply
+        // naturally) — the standard Java-side way to create a Broadcast. ONE broadcast now — the
+        // Compile Service writes one zip bundle per feature (containing both the .hdb and the
+        // term-metadata JSON), so HyperscanBundleLoader needs only one feature -> path map — see
+        // that class Javadoc.
         Broadcast<Map<String, String>> broadcastFeatureToZipPath = javaSparkContext.broadcast(featureToZipPath);
 
         // 4 + 5. Read + union AVRO messages (restricted to the view's own message_id set), then
