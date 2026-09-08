@@ -30,9 +30,9 @@ import java.util.regex.Pattern;
  *
  * <h2>Algorithm</h2>
  * <p>Each leaf is matched via {@code Matcher.find()} against the real text;
- * occurrences are mapped to word indices via {@code \S+} word spans. NEAR
+ * occurrences are mapped to word indices via {@link #wordSpans}. NEAR
  * allows either direction while FOLLOWEDBY requires strictly increasing
- * indices; gap is the count of whole words strictly between two chosen
+ * indices; gap is the count of whole "words" strictly between two chosen
  * indices. Every satisfying leaf-occurrence combination is enumerated (not
  * just the first), each becoming one output {@link MatchSpan} spanning the
  * earliest-to-latest chosen leaf span — needed because
@@ -40,6 +40,26 @@ import java.util.regex.Pattern;
  * individual occurrence for every other term kind already; collapsing a
  * proximity term to a single synthetic "matched: yes" hit would under-report
  * genuine repeated violations.
+ *
+ * <h2>CJK: character-based "words," not {@code \S+} tokens</h2>
+ * <p>Chinese/Japanese/Korean text has no whitespace between words at all — a
+ * whole CJK sentence can be one single {@code \S+} run. Treating that as ONE
+ * "word" would be a genuine correctness bug, not just an imprecision: two
+ * CJK leaf occurrences landing in the same whitespace-delimited run would
+ * both resolve to the SAME word index, making {@code gap} negative (they
+ * fail {@code gap >= 0}) and {@code FOLLOWEDBY}'s strict-increase check fail
+ * outright — a term whose two halves sit right next to each other in the
+ * same sentence, the closest possible proximity, would be reported as NOT
+ * matching. {@link #wordSpans} instead gives every individual Han
+ * (Chinese/Japanese Kanji)/Hiragana/Katakana/Hangul (Korean) codepoint its
+ * OWN word-span, so {@code NEAR{n}}/{@code FOLLOWEDBY{n}}'s {@code n} counts
+ * actual CJK CHARACTERS strictly between two matches, exactly as it counts
+ * whitespace-delimited tokens for Latin/Cyrillic/etc. text — see that
+ * method's Javadoc for why this only needs to special-case CJK scripts.
+ * Hebrew needs no special handling here: it IS whitespace-delimited (just
+ * right-to-left), and a Java {@code String} always holds LOGICAL character
+ * order regardless of visual RTL rendering, so ordinary token counting is
+ * already correct for it.
  */
 final class ResolvedPatternAreaEvaluator {
 
@@ -165,22 +185,85 @@ final class ResolvedPatternAreaEvaluator {
         return occurrences;
     }
 
+    /**
+     * Splits {@code text} into "word" spans for gap-counting purposes: a
+     * maximal run of non-whitespace, non-CJK codepoints counts as ONE word
+     * (the same result {@code \S+} would give), but every individual CJK
+     * codepoint (see {@link #isCjkCodePoint}) is its OWN word, one
+     * character wide — see class Javadoc "CJK" for why. Iterates by
+     * codepoint, not by {@code char}, so a supplementary-plane CJK Extension
+     * character (a surrogate pair — rare, but real) is counted as the ONE
+     * character it actually is, not two.
+     */
     private static List<int[]> wordSpans(String text) {
         List<int[]> spans = new ArrayList<>();
-        Matcher matcher = Pattern.compile("\\S+").matcher(text);
-        while (matcher.find()) {
-            spans.add(new int[]{matcher.start(), matcher.end()});
+        int length = text.length();
+        int tokenStart = -1;
+        int index = 0;
+        while (index < length) {
+            int codePoint = text.codePointAt(index);
+            int codePointWidth = Character.charCount(codePoint);
+            if (Character.isWhitespace(codePoint)) {
+                if (tokenStart >= 0) {
+                    spans.add(new int[]{tokenStart, index});
+                    tokenStart = -1;
+                }
+            } else if (isCjkCodePoint(codePoint)) {
+                if (tokenStart >= 0) {
+                    spans.add(new int[]{tokenStart, index});
+                    tokenStart = -1;
+                }
+                spans.add(new int[]{index, index + codePointWidth});
+            } else if (tokenStart < 0) {
+                tokenStart = index;
+            }
+            index += codePointWidth;
+        }
+        if (tokenStart >= 0) {
+            spans.add(new int[]{tokenStart, length});
         }
         return spans;
     }
 
+    /**
+     * Han (Chinese characters — also Japanese Kanji), Hiragana/Katakana
+     * (Japanese), and Hangul (Korean): the scripts with no whitespace word
+     * boundaries, where {@code NEAR}/{@code FOLLOWEDBY} distance must be
+     * counted per character — see class Javadoc "CJK." Everything else
+     * (Latin, Cyrillic, Hebrew, Arabic, ...) keeps ordinary whitespace-token
+     * counting.
+     */
+    private static boolean isCjkCodePoint(int codePoint) {
+        Character.UnicodeScript script = Character.UnicodeScript.of(codePoint);
+        return script == Character.UnicodeScript.HAN
+                || script == Character.UnicodeScript.HIRAGANA
+                || script == Character.UnicodeScript.KATAKANA
+                || script == Character.UnicodeScript.HANGUL;
+    }
+
+    /**
+     * Binary search (not a linear scan) for the LAST word whose start is
+     * {@code < charOffset} — {@link #wordSpans} always returns spans in
+     * increasing start-offset order, so this is safe. Matters more now than
+     * it used to: a long CJK message body's {@code words} list has roughly
+     * one entry PER CHARACTER (see class Javadoc "CJK"), not per
+     * whitespace-token, so a linear scan here would be O(text length) per
+     * leaf occurrence rather than O(log text length).
+     */
     private static int wordIndexAtOrBefore(List<int[]> words, int charOffset) {
-        for (int wordIndex = words.size() - 1; wordIndex >= 0; wordIndex--) {
-            if (words.get(wordIndex)[0] < charOffset) {
-                return wordIndex;
+        int low = 0;
+        int high = words.size() - 1;
+        int result = -1;
+        while (low <= high) {
+            int mid = (low + high) >>> 1;
+            if (words.get(mid)[0] < charOffset) {
+                result = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
             }
         }
-        return -1;
+        return result;
     }
 
     private record LeafOccurrence(int startChar, int endChar, int endWordIndex) {
