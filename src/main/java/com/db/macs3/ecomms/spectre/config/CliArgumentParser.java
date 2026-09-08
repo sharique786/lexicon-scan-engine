@@ -20,7 +20,8 @@ public final class CliArgumentParser {
 
     private static final String PREFIX = "--";
 
-    private CliArgumentParser() {}
+    private CliArgumentParser() {
+    }
 
     public static Map<String, String> parse(String[] args) {
         Map<String, String> result = new LinkedHashMap<>();
@@ -41,7 +42,9 @@ public final class CliArgumentParser {
         return result;
     }
 
-    /** @throws IllegalArgumentException if {@code key} is missing or blank in {@code args} */
+    /**
+     * @throws IllegalArgumentException if {@code key} is missing or blank in {@code args}
+     */
     public static String require(Map<String, String> args, String key) {
         String value = args.get(key);
         if (value == null || value.isBlank()) {

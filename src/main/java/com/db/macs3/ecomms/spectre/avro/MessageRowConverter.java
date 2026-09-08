@@ -26,7 +26,8 @@ import java.util.List;
  */
 public final class MessageRowConverter implements Serializable {
 
-    private MessageRowConverter() {}
+    private MessageRowConverter() {
+    }
 
     public static ScanMessage fromRow(Row row, String datasetPartitionValue, boolean restricted) {
         String messageId = getStringOrNull(row, AvroConstants.FIELD_MESSAGE_ID);

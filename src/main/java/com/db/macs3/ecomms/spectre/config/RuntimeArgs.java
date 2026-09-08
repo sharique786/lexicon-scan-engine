@@ -72,23 +72,23 @@ public final class RuntimeArgs implements Serializable {
     private final String configFilePath;
 
     /**
-     * @param datasetDetails            one entry per dataset this run processes
-     * @param featurePartitionValue     query parameter passed to the view — see
-     *                                   {@code BqColumns.View#PARAM_FEATURE_PARTITION_VALUE}
-     * @param pipelineExecId             this pipeline execution's identifier
-     * @param policyEngineId              which policy engine's compiled features to use
-     * @param processId                    this process run's identifier
-     * @param triggerType                  {@code "policy-alert-live"} or {@code "policy-alert-test"}
-     * @param configFilePath                GCS path to the {@link DataprocConfig} YAML file
+     * @param datasetDetails        one entry per dataset this run processes
+     * @param featurePartitionValue query parameter passed to the view — see
+     *                              {@code BqColumns.View#PARAM_FEATURE_PARTITION_VALUE}
+     * @param pipelineExecId        this pipeline execution's identifier
+     * @param policyEngineId        which policy engine's compiled features to use
+     * @param processId             this process run's identifier
+     * @param triggerType           {@code "policy-alert-live"} or {@code "policy-alert-test"}
+     * @param configFilePath        GCS path to the {@link DataprocConfig} YAML file
      */
     @JsonCreator
     public RuntimeArgs(@JsonProperty("dataset_details") List<DatasetDetail> datasetDetails,
-                        @JsonProperty("feature_partition_value") String featurePartitionValue,
-                        @JsonProperty("pipeline_exec_id") String pipelineExecId,
-                        @JsonProperty("policy_engine_id") String policyEngineId,
-                        @JsonProperty("process_id") String processId,
-                        @JsonProperty("trigger_type") String triggerType,
-                        @JsonProperty("config_file_path") String configFilePath) {
+                       @JsonProperty("feature_partition_value") String featurePartitionValue,
+                       @JsonProperty("pipeline_exec_id") String pipelineExecId,
+                       @JsonProperty("policy_engine_id") String policyEngineId,
+                       @JsonProperty("process_id") String processId,
+                       @JsonProperty("trigger_type") String triggerType,
+                       @JsonProperty("config_file_path") String configFilePath) {
         this.datasetDetails = datasetDetails;
         this.featurePartitionValue = featurePartitionValue;
         this.pipelineExecId = pipelineExecId;
@@ -105,7 +105,7 @@ public final class RuntimeArgs implements Serializable {
      * inside a larger JSON body.
      *
      * @throws IllegalArgumentException if any required argument is missing,
-     *          blank, or malformed (via {@link CliArgumentParser})
+     *                                  blank, or malformed (via {@link CliArgumentParser})
      */
     public static RuntimeArgs parseCliArgs(String[] args) {
         Map<String, String> parsed = CliArgumentParser.parse(args);
@@ -113,7 +113,8 @@ public final class RuntimeArgs implements Serializable {
         String datasetDetailsJson = CliArgumentParser.require(parsed, "dataset_details");
         List<DatasetDetail> datasetDetails;
         try {
-            datasetDetails = MAPPER.readValue(datasetDetailsJson, new TypeReference<List<DatasetDetail>>() {});
+            datasetDetails = MAPPER.readValue(datasetDetailsJson, new TypeReference<List<DatasetDetail>>() {
+            });
         } catch (Exception e) {
             throw new IllegalArgumentException(
                     "Malformed --dataset_details JSON: " + datasetDetailsJson, e);
@@ -207,7 +208,7 @@ public final class RuntimeArgs implements Serializable {
 
         @JsonCreator
         public DatasetDetail(@JsonProperty("dataset_id") String datasetId,
-                              @JsonProperty("dataset_partition_value") String datasetPartitionValue) {
+                             @JsonProperty("dataset_partition_value") String datasetPartitionValue) {
             this.datasetId = datasetId;
             this.datasetPartitionValue = datasetPartitionValue;
         }

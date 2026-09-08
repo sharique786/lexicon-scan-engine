@@ -32,21 +32,21 @@ public class FeatureGroup implements Serializable {
     private List<FeatureDecisionRow> members;
 
     /**
-     * @param featureId          groups {@link #getMembers} — all share this value
-     * @param featureName         the (possibly composite/parent) display name
-     * @param featureType          {@link BqColumns.FeatureType} value
-     * @param isNoiseReduction     true iff ANY member row is flagged {@code is_noise_reduction=Y} —
-     *                              in practice all members of one group share the same flag,
-     *                              but this does not assume that
-     * @param operator              {@code OR}/{@code AND}, combining {@link #getMembers} when there is
-     *                              more than one — null for a single-member group, where it is
-     *                              meaningless (that one member's own hit status IS the group's)
-     * @param members                one row per sub-feature actually applied under this
-     *                              {@code featureId} — each row's {@code featuresToApply} names the
-     *                              lexicon feature to load/scan for that member
+     * @param featureId        groups {@link #getMembers} — all share this value
+     * @param featureName      the (possibly composite/parent) display name
+     * @param featureType      {@link BqColumns.FeatureType} value
+     * @param isNoiseReduction true iff ANY member row is flagged {@code is_noise_reduction=Y} —
+     *                         in practice all members of one group share the same flag,
+     *                         but this does not assume that
+     * @param operator         {@code OR}/{@code AND}, combining {@link #getMembers} when there is
+     *                         more than one — null for a single-member group, where it is
+     *                         meaningless (that one member's own hit status IS the group's)
+     * @param members          one row per sub-feature actually applied under this
+     *                         {@code featureId} — each row's {@code featuresToApply} names the
+     *                         lexicon feature to load/scan for that member
      */
     public FeatureGroup(String featureId, String featureName, String featureType,
-                         boolean isNoiseReduction, String operator, List<FeatureDecisionRow> members) {
+                        boolean isNoiseReduction, String operator, List<FeatureDecisionRow> members) {
         if (members == null || members.isEmpty()) {
             throw new IllegalArgumentException("FeatureGroup requires at least one member row for featureId=" + featureId);
         }
@@ -106,12 +106,16 @@ public class FeatureGroup implements Serializable {
         this.members = members;
     }
 
-    /** @return true iff {@link #getFeatureType} is {@code disclaimer} (case-insensitive). */
+    /**
+     * @return true iff {@link #getFeatureType} is {@code disclaimer} (case-insensitive).
+     */
     public boolean isDisclaimer() {
         return BqColumns.FeatureType.DISCLAIMER.equalsIgnoreCase(featureType);
     }
 
-    /** @return true iff {@link #getMembers} has more than one row, i.e. {@link #getOperator} is meaningful. */
+    /**
+     * @return true iff {@link #getMembers} has more than one row, i.e. {@link #getOperator} is meaningful.
+     */
     public boolean isMultiMember() {
         return members.size() > 1;
     }

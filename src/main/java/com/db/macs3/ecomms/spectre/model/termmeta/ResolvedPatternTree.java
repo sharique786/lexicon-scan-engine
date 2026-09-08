@@ -1,7 +1,5 @@
 package com.db.macs3.ecomms.spectre.model.termmeta;
 
-import java.io.Serial;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -184,7 +182,9 @@ public sealed interface ResolvedPatternTree {
 
     int JAVA_LEAF_FLAGS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
 
-    /** {@link Chain#getOperators()} values. */
+    /**
+     * {@link Chain#getOperators()} values.
+     */
     String OPERATOR_NEAR = "NEAR";
     String OPERATOR_FOLLOWEDBY = "FOLLOWEDBY";
 
@@ -202,11 +202,11 @@ public sealed interface ResolvedPatternTree {
      * @throws TermExpressionMetadata.TermMetadataParseException on any structural mismatch
      */
     static ResolvedPatternTree build(String feature, String termId, String resolvedPatterns,
-                                      List<String> regexPatternLeaves) {
+                                     List<String> regexPatternLeaves) {
         if (regexPatternLeaves == null || regexPatternLeaves.isEmpty()) {
             throw new TermExpressionMetadata.TermMetadataParseException(
                     "Term '" + termId + "' in feature '" + feature + "' has a resolvedPatterns value but no "
-                    + "regexPattern/translatedPattern leaves to zip it against.");
+                            + "regexPattern/translatedPattern leaves to zip it against.");
         }
         ShapeNode shape = parseShape(feature, termId, resolvedPatterns.trim());
         Iterator<String> cursor = regexPatternLeaves.iterator();
@@ -214,7 +214,7 @@ public sealed interface ResolvedPatternTree {
         if (cursor.hasNext()) {
             throw new TermExpressionMetadata.TermMetadataParseException(
                     "Term '" + termId + "' in feature '" + feature + "': regexPattern has more leaves than "
-                    + "resolvedPatterns' shape implies (" + regexPatternLeaves.size() + " provided).");
+                            + "resolvedPatterns' shape implies (" + regexPatternLeaves.size() + " provided).");
         }
         return tree;
     }
@@ -234,12 +234,29 @@ public sealed interface ResolvedPatternTree {
                 this.distances = distances;
             }
 
-            int getLeafCount() { return leafCount; }
-            void setLeafCount(int leafCount) { this.leafCount = leafCount; }
-            List<String> getOperators() { return operators; }
-            void setOperators(List<String> operators) { this.operators = operators; }
-            List<Integer> getDistances() { return distances; }
-            void setDistances(List<Integer> distances) { this.distances = distances; }
+            int getLeafCount() {
+                return leafCount;
+            }
+
+            void setLeafCount(int leafCount) {
+                this.leafCount = leafCount;
+            }
+
+            List<String> getOperators() {
+                return operators;
+            }
+
+            void setOperators(List<String> operators) {
+                this.operators = operators;
+            }
+
+            List<Integer> getDistances() {
+                return distances;
+            }
+
+            void setDistances(List<Integer> distances) {
+                this.distances = distances;
+            }
         }
 
         non-sealed class AndNotShape implements ShapeNode {
@@ -252,10 +269,21 @@ public sealed interface ResolvedPatternTree {
                 this.excluded = excluded;
             }
 
-            ShapeNode getRequired() { return required; }
-            void setRequired(ShapeNode required) { this.required = required; }
-            ShapeNode getExcluded() { return excluded; }
-            void setExcluded(ShapeNode excluded) { this.excluded = excluded; }
+            ShapeNode getRequired() {
+                return required;
+            }
+
+            void setRequired(ShapeNode required) {
+                this.required = required;
+            }
+
+            ShapeNode getExcluded() {
+                return excluded;
+            }
+
+            void setExcluded(ShapeNode excluded) {
+                this.excluded = excluded;
+            }
         }
     }
 
@@ -305,7 +333,9 @@ public sealed interface ResolvedPatternTree {
         return new ShapeNode.ChainShape(leafCount, operators, distances);
     }
 
-    /** First TOP-level (paren-depth 0) occurrence of {@code marker}, or -1. */
+    /**
+     * First TOP-level (paren-depth 0) occurrence of {@code marker}, or -1.
+     */
     static int findTopLevel(String text, String marker) {
         int depth = 0;
         for (int charIndex = 0; charIndex <= text.length() - marker.length(); charIndex++) {
@@ -336,7 +366,7 @@ public sealed interface ResolvedPatternTree {
         }
         throw new TermExpressionMetadata.TermMetadataParseException(
                 "Term '" + termId + "' in feature '" + feature + "' has unbalanced parentheses in "
-                + "resolvedPatterns: " + text);
+                        + "resolvedPatterns: " + text);
     }
 
     // ── Zipping the discovered shape against regexPattern's leaves ──────────
@@ -353,7 +383,7 @@ public sealed interface ResolvedPatternTree {
             if (!cursor.hasNext()) {
                 throw new TermExpressionMetadata.TermMetadataParseException(
                         "Term '" + termId + "' in feature '" + feature + "': resolvedPatterns' shape implies more "
-                        + "leaves than regexPattern/translatedPattern provides.");
+                                + "leaves than regexPattern/translatedPattern provides.");
             }
             leaves.add(Pattern.compile(cursor.next(), JAVA_LEAF_FLAGS));
         }

@@ -22,10 +22,10 @@ public class MatchSpan implements Serializable {
     private String matchedText;
 
     /**
-     * @param startCharIndex    inclusive start offset in the ORIGINAL text
-     * @param endCharIndex       exclusive end offset in the ORIGINAL text
-     * @param matchedText         the substring of the ORIGINAL text this match covers —
-     *                             {@code originalText.substring(startCharIndex, endCharIndex)}
+     * @param startCharIndex inclusive start offset in the ORIGINAL text
+     * @param endCharIndex   exclusive end offset in the ORIGINAL text
+     * @param matchedText    the substring of the ORIGINAL text this match covers —
+     *                       {@code originalText.substring(startCharIndex, endCharIndex)}
      */
     public MatchSpan(int startCharIndex, int endCharIndex, String matchedText) {
         if (startCharIndex < 0 || endCharIndex < startCharIndex) {
@@ -67,10 +67,10 @@ public class MatchSpan implements Serializable {
 
     /**
      * @return true iff this span is entirely inside {@code other} — the
-     *         "full containment" rule used for disclaimer-precedence
-     *         suppression (see {@code DecisionTreeEvaluator}); a span that
-     *         merely overlaps {@code other} without being fully inside it
-     *         returns false.
+     * "full containment" rule used for disclaimer-precedence
+     * suppression (see {@code DecisionTreeEvaluator}); a span that
+     * merely overlaps {@code other} without being fully inside it
+     * returns false.
      */
     public boolean isFullyContainedIn(MatchSpan other) {
         return this.startCharIndex >= other.startCharIndex && this.endCharIndex <= other.endCharIndex;

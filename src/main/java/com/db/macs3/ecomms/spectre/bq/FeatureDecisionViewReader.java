@@ -39,10 +39,13 @@ public final class FeatureDecisionViewReader {
 
     private static final Logger log = LoggerFactory.getLogger(FeatureDecisionViewReader.class);
 
-    /** Alias for the aggregated per-message array-of-struct column {@link #groupByMessageId} produces. */
+    /**
+     * Alias for the aggregated per-message array-of-struct column {@link #groupByMessageId} produces.
+     */
     private static final String FEATURES_COLUMN = "features";
 
-    private FeatureDecisionViewReader() {}
+    private FeatureDecisionViewReader() {
+    }
 
     /**
      * Reads and filters the view in ONE query covering every entry of
@@ -52,7 +55,7 @@ public final class FeatureDecisionViewReader {
      * per dataset and unioning the results.
      */
     public static Dataset<Row> readFiltered(SparkSession spark, BqTableConfig tableConfig,
-                                             RuntimeArgs runtimeArgs) {
+                                            RuntimeArgs runtimeArgs) {
 
         String datasetPartitionIn = runtimeArgs.datasetDetails().stream()
                 .map(dv -> "'" + dv.datasetPartitionValue() + "'")

@@ -77,7 +77,8 @@ import java.util.Map;
  */
 public final class HyperscanScanService {
 
-    private HyperscanScanService() {}
+    private HyperscanScanService() {
+    }
 
     /**
      * Scans {@code stripResult}'s already-stripped text against
@@ -87,26 +88,26 @@ public final class HyperscanScanService {
      * tagged with {@code area}/{@code attachmentId}). No expression-id
      * resolution or AND NOT evaluation happens here — see class Javadoc.
      *
-     * @param stripResult   this area's text, already HTML-stripped ONCE per message
-     *                       (see class Javadoc) — {@link HtmlStrippingService#strip} for
-     *                       subject/body, {@link HtmlStrippingService#identity} for
-     *                       attachment {@code cleanText} (never needs stripping)
-     * @param database       a loaded Hyperscan database — see {@code HyperscanBundleLoader}
-     * @param area             which part of the message this text is
-     * @param attachmentId    required (non-null) iff {@code area == ATTACHMENT}; null otherwise
-     * @param scanner          the CALLER's own {@link Scanner} instance — reused across every scan
-     *                       call for the caller's whole partition/thread lifetime; this method
-     *                       calls {@link Scanner#allocScratch} against {@code database} every call
-     *                       (cheap/idempotent per the wrapper's own contract — "must be called at
-     *                       least once with each database... before scan is called," calling it
-     *                       more often than strictly needed is safe) but never constructs or closes
-     *                       the {@code Scanner} itself
+     * @param stripResult  this area's text, already HTML-stripped ONCE per message
+     *                     (see class Javadoc) — {@link HtmlStrippingService#strip} for
+     *                     subject/body, {@link HtmlStrippingService#identity} for
+     *                     attachment {@code cleanText} (never needs stripping)
+     * @param database     a loaded Hyperscan database — see {@code HyperscanBundleLoader}
+     * @param area         which part of the message this text is
+     * @param attachmentId required (non-null) iff {@code area == ATTACHMENT}; null otherwise
+     * @param scanner      the CALLER's own {@link Scanner} instance — reused across every scan
+     *                     call for the caller's whole partition/thread lifetime; this method
+     *                     calls {@link Scanner#allocScratch} against {@code database} every call
+     *                     (cheap/idempotent per the wrapper's own contract — "must be called at
+     *                     least once with each database... before scan is called," calling it
+     *                     more often than strictly needed is safe) but never constructs or closes
+     *                     the {@code Scanner} itself
      * @return raw matches found, empty if {@code stripResult}'s text is blank or nothing matched
      * @throws HyperscanScanException if the native scan call itself fails (scratch allocation,
-     *                                  a corrupted database, etc.)
+     *                                a corrupted database, etc.)
      */
     public static List<RawExpressionMatch> scan(HtmlStrippingService.StripResult stripResult, Database database,
-                                                  MatchArea area, String attachmentId, Scanner scanner) {
+                                                MatchArea area, String attachmentId, Scanner scanner) {
         String strippedText = stripResult.strippedText();
         if (strippedText == null || strippedText.isBlank()) {
             return List.of();
@@ -139,8 +140,8 @@ public final class HyperscanScanService {
     }
 
     private static RawExpressionMatch toRawExpressionMatch(int expressionId, List<Match> matchesForExpression,
-                                                             HtmlStrippingService.StripResult stripResult,
-                                                             MatchArea area, String attachmentId) {
+                                                           HtmlStrippingService.StripResult stripResult,
+                                                           MatchArea area, String attachmentId) {
         // The pattern text comes directly from the match's own Expression object. Every match
         // sharing this expressionId carries the identical Expression instance, so reading it
         // from the first one is sufficient.
@@ -161,7 +162,9 @@ public final class HyperscanScanService {
         return new RawExpressionMatch(expressionId, matchedPatternText, areaMatches);
     }
 
-    /** Thrown when the native Hyperscan scan call itself fails. */
+    /**
+     * Thrown when the native Hyperscan scan call itself fails.
+     */
     public static final class HyperscanScanException extends RuntimeException {
         public HyperscanScanException(String message, Throwable cause) {
             super(message, cause);

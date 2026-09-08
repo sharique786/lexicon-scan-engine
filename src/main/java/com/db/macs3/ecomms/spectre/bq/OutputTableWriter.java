@@ -2,7 +2,13 @@ package com.db.macs3.ecomms.spectre.bq;
 
 import com.db.macs3.ecomms.spectre.config.BqTableConfig;
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
-import com.db.macs3.ecomms.spectre.model.output.*;
+import com.db.macs3.ecomms.spectre.model.output.FeatureHitSummaryRow;
+import com.db.macs3.ecomms.spectre.model.output.LexiconHitDetailRow;
+import com.db.macs3.ecomms.spectre.model.output.LexiconHitSummaryRow;
+import com.db.macs3.ecomms.spectre.model.output.ModelConfigDtls;
+import com.db.macs3.ecomms.spectre.model.output.PipelineRecordAuditRow;
+import com.db.macs3.ecomms.spectre.model.output.PipelineStageAuditRow;
+import com.db.macs3.ecomms.spectre.model.output.RuleDtlType;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -29,7 +35,7 @@ import java.util.stream.Collectors;
  *
  * <p>For the four message-scale tables (lexicon-hit-summary/-restricted/
  * -unrestricted, feature-hit-summary), the {@code Dataset<Row>} itself is
- * built by the caller — {@link com.db.macs3.ecomms.spectre.spark.ScanEngineJobRunner#writeOutputs}
+ * built by the caller — {@link com.db.macs3.ecomms.spectre.spark.ScanEngineJobRunner writeOutputs}
  * calls {@code Dataset<MessageProcessingResult>.mapPartitions(...)} directly,
  * against one of the dedicated {@link org.apache.spark.api.java.function.MapPartitionsFunction}
  * classes in {@code spark/} ({@code SummaryRowMapper}, {@code DetailRowMapper},
@@ -69,7 +75,8 @@ public final class OutputTableWriter {
 
     private static final Logger log = LoggerFactory.getLogger(OutputTableWriter.class);
 
-    private OutputTableWriter() {}
+    private OutputTableWriter() {
+    }
 
     /**
      * Converts a {@code List<Row>} bound for ANY ARRAY-typed {@link StructField}

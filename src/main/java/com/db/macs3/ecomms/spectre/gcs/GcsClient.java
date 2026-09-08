@@ -57,8 +57,11 @@ public final class GcsClient implements Serializable {
 
     private transient Storage storage;
 
-    /** Default constructor — the real, lazily-initialised {@link Storage} client (production/Spring use). */
-    public GcsClient() {}
+    /**
+     * Default constructor — the real, lazily-initialised {@link Storage} client (production/Spring use).
+     */
+    public GcsClient() {
+    }
 
     /**
      * Test-only constructor — injects a pre-built {@link Storage} (a Mockito mock in every
@@ -78,7 +81,9 @@ public final class GcsClient implements Serializable {
         return storage;
     }
 
-    /** Parses {@code gs://bucket/path/to/object} into a {@link BlobId}. */
+    /**
+     * Parses {@code gs://bucket/path/to/object} into a {@link BlobId}.
+     */
     public static BlobId parseGsUri(String gsUri) {
         Matcher matcher = GS_URI_PATTERN.matcher(gsUri);
         if (!matcher.matches()) {
@@ -142,7 +147,9 @@ public final class GcsClient implements Serializable {
         }
     }
 
-    /** Reads a small object's full content as a UTF-8 string — for the {@code BqTableConfig} JSON file. */
+    /**
+     * Reads a small object's full content as a UTF-8 string — for the {@code BqTableConfig} JSON file.
+     */
     public String readTextFile(String gsUri) throws IOException {
         log.info("Reading text file {}", gsUri);
         Instant readStart = Instant.now();
@@ -173,7 +180,9 @@ public final class GcsClient implements Serializable {
         }
     }
 
-    /** @return true iff an object exists at {@code gsUri} — used for the "no hyperscan file" / "no AVRO" checks. */
+    /**
+     * @return true iff an object exists at {@code gsUri} — used for the "no hyperscan file" / "no AVRO" checks.
+     */
     public boolean exists(String gsUri) {
         BlobId blobId = parseGsUri(gsUri);
         try {
@@ -185,7 +194,9 @@ public final class GcsClient implements Serializable {
         }
     }
 
-    /** Lists every object (recursively, no delimiter) under {@code prefix} — for locating AVRO files. */
+    /**
+     * Lists every object (recursively, no delimiter) under {@code prefix} — for locating AVRO files.
+     */
     public List<String> listAllObjects(String bucket, String prefix) {
         log.debug("Listing all objects under gs://{}/{}", bucket, prefix);
         Instant callStart = Instant.now();

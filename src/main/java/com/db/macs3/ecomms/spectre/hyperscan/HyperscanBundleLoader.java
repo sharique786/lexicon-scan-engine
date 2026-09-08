@@ -86,7 +86,9 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         InputStream openStream(String gcsPath) throws IOException;
     }
 
-    /** One feature's loaded database AND term metadata, extracted from the same zip bundle. */
+    /**
+     * One feature's loaded database AND term metadata, extracted from the same zip bundle.
+     */
     public record LexiconBundle(Database database, TermExpressionMetadata metadata) {
     }
 
@@ -95,15 +97,15 @@ public final class HyperscanBundleLoader implements AutoCloseable {
     private final LruCache<String, LexiconBundle> cache;
 
     /**
-     * @param featureToZipPath   resolved feature → {@code .zip} GCS path — the small,
-     *                            broadcast-from-driver map (see {@code HyperscanPathResolver#buildZipPath})
-     * @param streamer             opens a byte stream for a GCS path
-     * @param maxCachedBundles    bounds this partition's cumulative cached-bundle count — a single
-     *                            bound now covers both the native database and its metadata together,
-     *                            since they are always loaded/evicted as one unit
+     * @param featureToZipPath resolved feature → {@code .zip} GCS path — the small,
+     *                         broadcast-from-driver map (see {@code HyperscanPathResolver#buildZipPath})
+     * @param streamer         opens a byte stream for a GCS path
+     * @param maxCachedBundles bounds this partition's cumulative cached-bundle count — a single
+     *                         bound now covers both the native database and its metadata together,
+     *                         since they are always loaded/evicted as one unit
      */
     public HyperscanBundleLoader(Map<String, String> featureToZipPath, GcsByteStreamer streamer,
-                                  int maxCachedBundles) {
+                                 int maxCachedBundles) {
         this.featureToZipPath = featureToZipPath;
         this.streamer = streamer;
         this.cache = new LruCache<>(maxCachedBundles);
@@ -114,19 +116,23 @@ public final class HyperscanBundleLoader implements AutoCloseable {
      * its zip bundle on first request within this partition.
      *
      * @throws HyperscanPathResolver.HyperscanFileNotFoundException if {@code feature} has no resolved path
-     * @throws HyperscanFileLoadException if the GCS stream, zip extraction, {@link Database#load},
-     *          or {@link TermExpressionMetadata#parse} call fails
+     * @throws HyperscanFileLoadException                           if the GCS stream, zip extraction, {@link Database#load},
+     *                                                              or {@link TermExpressionMetadata#parse} call fails
      */
     public LexiconBundle load(String feature) {
         return cache.computeIfAbsent(feature, this::loadFresh);
     }
 
-    /** Convenience for callers that only need the database — see {@link #load}. */
+    /**
+     * Convenience for callers that only need the database — see {@link #load}.
+     */
     public Database loadDatabase(String feature) {
         return load(feature).database();
     }
 
-    /** Convenience for callers that only need the term metadata — see {@link #load}. */
+    /**
+     * Convenience for callers that only need the term metadata — see {@link #load}.
+     */
     public TermExpressionMetadata loadMetadata(String feature) {
         return load(feature).metadata();
     }
@@ -147,8 +153,8 @@ public final class HyperscanBundleLoader implements AutoCloseable {
      * the first time {@link #load} actually needs it. Prefetching must never
      * be why a partition fails that would otherwise have succeeded.
      *
-     * @param features   candidate features to warm — duplicates and features already
-     *                    cached are harmless (deduplicated / naturally re-verified here)
+     * @param features candidate features to warm — duplicates and features already
+     *                 cached are harmless (deduplicated / naturally re-verified here)
      */
     public void prefetch(Collection<String> features) {
         if (features == null || features.isEmpty()) {
@@ -201,14 +207,16 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         if (path == null) {
             throw new HyperscanPathResolver.HyperscanFileNotFoundException(
                     "No resolved zip bundle path for feature '" + feature + "' — it was not present in the "
-                    + "driver-resolved feature-to-path map. This indicates the view returned a feature "
-                    + "this job's path resolution never saw, which should not happen if both derive from "
-                    + "the same view query result.");
+                            + "driver-resolved feature-to-path map. This indicates the view returned a feature "
+                            + "this job's path resolution never saw, which should not happen if both derive from "
+                            + "the same view query result.");
         }
         return path;
     }
 
-    /** The two entries a feature's zip bundle must contain — raw bytes, not yet parsed. */
+    /**
+     * The two entries a feature's zip bundle must contain — raw bytes, not yet parsed.
+     */
     private record ZipEntryBytes(byte[] hdbBytes, String metadataJson) {
     }
 
@@ -232,18 +240,18 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         } catch (IOException | RuntimeException e) {
             throw new HyperscanFileLoadException(
                     "Failed to read zip bundle for feature '" + feature + "' from " + path
-                    + ": " + e.getMessage(), e);
+                            + ": " + e.getMessage(), e);
         }
 
         if (hdbBytes == null) {
             throw new HyperscanFileLoadException(
                     "Zip bundle for feature '" + feature + "' at " + path + " has no entry named '"
-                    + TermIdBuilder.hdbFileName(feature) + "' — entries found: " + entryNames);
+                            + TermIdBuilder.hdbFileName(feature) + "' — entries found: " + entryNames);
         }
         if (metadataJson == null) {
             throw new HyperscanFileLoadException(
                     "Zip bundle for feature '" + feature + "' at " + path + " has no entry named '"
-                    + TermIdBuilder.termMetadataFileName(feature) + "' — entries found: " + entryNames);
+                            + TermIdBuilder.termMetadataFileName(feature) + "' — entries found: " + entryNames);
         }
         return new ZipEntryBytes(hdbBytes, metadataJson);
     }
@@ -259,11 +267,13 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         } catch (IOException | RuntimeException e) {
             throw new HyperscanFileLoadException(
                     "Failed to load Hyperscan database or term metadata for feature '" + feature
-                    + "' extracted from " + path + ": " + e.getMessage(), e);
+                            + "' extracted from " + path + ": " + e.getMessage(), e);
         }
     }
 
-    /** Strips any directory prefix a zip entry name might carry, e.g. {@code "sub/dir/x.hdb"} -> {@code "x.hdb"}. */
+    /**
+     * Strips any directory prefix a zip entry name might carry, e.g. {@code "sub/dir/x.hdb"} -> {@code "x.hdb"}.
+     */
     private static String baseName(String entryName) {
         int slash = Math.max(entryName.lastIndexOf('/'), entryName.lastIndexOf('\\'));
         return slash < 0 ? entryName : entryName.substring(slash + 1);
@@ -275,7 +285,9 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         return out.toByteArray();
     }
 
-    /** @return how many bundles are currently cached in this partition's loader. */
+    /**
+     * @return how many bundles are currently cached in this partition's loader.
+     */
     public int cachedCount() {
         return cache.size();
     }

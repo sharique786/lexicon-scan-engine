@@ -35,28 +35,28 @@ public class ScanMessage implements Serializable {
     private boolean restricted;
 
     /**
-     * @param messageId    joins to {@code FeatureDecisionRow.getMessageId}
-     * @param source        channel/source-system identification
-     * @param content       the message body — header, subject, raw/clean text
-     * @param attachments   zero or more attached files' extracted text
-     * @param processing    {@code run_date}/{@code run_hour} — used to resolve which
-     *                       AVRO partition this message was read from
-     * @param datasetPartitionValue  {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for
-     *                                 the dataset this message came from — populated by the reader
-     *                                 ({@code MessageAvroReader}), not present in the AVRO itself;
-     *                                 this is the source of the {@code dataset_partition_value}
-     *                                 column all 4 per-message output tables carry (see
-     *                                 {@code OutputRowBuilder})
-     * @param restricted             true if this message was read from a {@code restricted/}
-     *                                 GCS subfolder, false if {@code unrestricted/} — populated
-     *                                 by the reader from the source file path, not present in
-     *                                 the AVRO itself; determines which output table
-     *                                 (lexicon-hit-restricted vs -unrestricted) this message's
-     *                                 hits are written to
+     * @param messageId             joins to {@code FeatureDecisionRow.getMessageId}
+     * @param source                channel/source-system identification
+     * @param content               the message body — header, subject, raw/clean text
+     * @param attachments           zero or more attached files' extracted text
+     * @param processing            {@code run_date}/{@code run_hour} — used to resolve which
+     *                              AVRO partition this message was read from
+     * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for
+     *                              the dataset this message came from — populated by the reader
+     *                              ({@code MessageAvroReader}), not present in the AVRO itself;
+     *                              this is the source of the {@code dataset_partition_value}
+     *                              column all 4 per-message output tables carry (see
+     *                              {@code OutputRowBuilder})
+     * @param restricted            true if this message was read from a {@code restricted/}
+     *                              GCS subfolder, false if {@code unrestricted/} — populated
+     *                              by the reader from the source file path, not present in
+     *                              the AVRO itself; determines which output table
+     *                              (lexicon-hit-restricted vs -unrestricted) this message's
+     *                              hits are written to
      */
     public ScanMessage(String messageId, MessageSource source, MessageContent content,
-                        List<MessageAttachment> attachments, MessageProcessing processing,
-                        String datasetPartitionValue, boolean restricted) {
+                       List<MessageAttachment> attachments, MessageProcessing processing,
+                       String datasetPartitionValue, boolean restricted) {
         this.messageId = messageId;
         this.source = source;
         this.content = content;
@@ -122,7 +122,9 @@ public class ScanMessage implements Serializable {
         this.restricted = restricted;
     }
 
-    /** @return {@link #getAttachments}, or an empty list if the AVRO record had no attachments field/a null one. */
+    /**
+     * @return {@link #getAttachments}, or an empty list if the AVRO record had no attachments field/a null one.
+     */
     public List<MessageAttachment> attachmentsOrEmpty() {
         return attachments == null ? List.of() : attachments;
     }

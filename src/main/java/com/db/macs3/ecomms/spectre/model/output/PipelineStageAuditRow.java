@@ -64,42 +64,42 @@ public class PipelineStageAuditRow implements Serializable {
     private String rerunProcessId;
 
     /**
-     * @param processId              the process run this stage belongs to
-     * @param triggerType             {@code "policy-alert-live"} / {@code "policy-alert-test"}
-     * @param evalTestId              the evaluation/test run this stage belongs to, when triggered
-     *                                 as part of one; null otherwise
-     * @param pipelineExecId          the pipeline execution this stage belongs to
-     * @param stageName                identifies this job/stage (e.g. {@code "lexicon-scan-engine"})
-     * @param composerDagName        the triggering Composer DAG's name
-     * @param composerDagPath         the triggering Composer DAG's path
-     * @param dprocScriptName          this Dataproc job's identifying script/jar name
-     * @param dprocScriptPath           this Dataproc job's script/jar path
-     * @param modelConfigDtls           the generative-model configuration this stage ran with, when
-     *                                  this stage invokes one; null otherwise (see {@link ModelConfigDtls})
-     * @param startTime                  UTC
-     * @param endTime                     UTC; null on the {@code IN_PROGRESS} row
-     * @param jobStatus                  {@code IN_PROGRESS} / {@code SUCCESS} / {@code FAILED} —
-     *                                  see {@code BqColumns.JobStatus}
-     * @param inputFileCount              number of input files this stage processed
-     * @param outputFileCount             number of output files this stage produced
-     * @param inputRecordCount            number of input records this stage processed
-     * @param outputRecordCount           number of output records this stage produced
-     * @param errorCount                  INTEGER, matching the delivered schema's column type (previously STRING)
-     * @param errorMessage                 top-level failure summary, null on success
-     * @param additionalInfo                free-form context (e.g. input/output row counts)
-     * @param logPath                       GCS path to this stage's run log, when available
-     * @param executionDate                 the logical run date this execution covers
-     * @param rerunFlg                       whether this row represents a rerun of a previous execution
-     * @param rerunType                      the kind of rerun, when {@code rerunFlg} is set
-     * @param rerunProcessId                 the original {@code processId} being rerun, when {@code rerunFlg} is set
+     * @param processId         the process run this stage belongs to
+     * @param triggerType       {@code "policy-alert-live"} / {@code "policy-alert-test"}
+     * @param evalTestId        the evaluation/test run this stage belongs to, when triggered
+     *                          as part of one; null otherwise
+     * @param pipelineExecId    the pipeline execution this stage belongs to
+     * @param stageName         identifies this job/stage (e.g. {@code "lexicon-scan-engine"})
+     * @param composerDagName   the triggering Composer DAG's name
+     * @param composerDagPath   the triggering Composer DAG's path
+     * @param dprocScriptName   this Dataproc job's identifying script/jar name
+     * @param dprocScriptPath   this Dataproc job's script/jar path
+     * @param modelConfigDtls   the generative-model configuration this stage ran with, when
+     *                          this stage invokes one; null otherwise (see {@link ModelConfigDtls})
+     * @param startTime         UTC
+     * @param endTime           UTC; null on the {@code IN_PROGRESS} row
+     * @param jobStatus         {@code IN_PROGRESS} / {@code SUCCESS} / {@code FAILED} —
+     *                          see {@code BqColumns.JobStatus}
+     * @param inputFileCount    number of input files this stage processed
+     * @param outputFileCount   number of output files this stage produced
+     * @param inputRecordCount  number of input records this stage processed
+     * @param outputRecordCount number of output records this stage produced
+     * @param errorCount        INTEGER, matching the delivered schema's column type (previously STRING)
+     * @param errorMessage      top-level failure summary, null on success
+     * @param additionalInfo    free-form context (e.g. input/output row counts)
+     * @param logPath           GCS path to this stage's run log, when available
+     * @param executionDate     the logical run date this execution covers
+     * @param rerunFlg          whether this row represents a rerun of a previous execution
+     * @param rerunType         the kind of rerun, when {@code rerunFlg} is set
+     * @param rerunProcessId    the original {@code processId} being rerun, when {@code rerunFlg} is set
      */
     public PipelineStageAuditRow(String processId, String triggerType, String evalTestId, String pipelineExecId,
-                                  String stageName, String composerDagName, String composerDagPath,
-                                  String dprocScriptName, String dprocScriptPath, ModelConfigDtls modelConfigDtls,
-                                  Instant startTime, Instant endTime, String jobStatus, Integer inputFileCount,
-                                  Integer outputFileCount, Integer inputRecordCount, Integer outputRecordCount,
-                                  Integer errorCount, String errorMessage, String additionalInfo, String logPath,
-                                  LocalDate executionDate, String rerunFlg, String rerunType, String rerunProcessId) {
+                                 String stageName, String composerDagName, String composerDagPath,
+                                 String dprocScriptName, String dprocScriptPath, ModelConfigDtls modelConfigDtls,
+                                 Instant startTime, Instant endTime, String jobStatus, Integer inputFileCount,
+                                 Integer outputFileCount, Integer inputRecordCount, Integer outputRecordCount,
+                                 Integer errorCount, String errorMessage, String additionalInfo, String logPath,
+                                 LocalDate executionDate, String rerunFlg, String rerunType, String rerunProcessId) {
         this.processId = processId;
         this.triggerType = triggerType;
         this.evalTestId = evalTestId;

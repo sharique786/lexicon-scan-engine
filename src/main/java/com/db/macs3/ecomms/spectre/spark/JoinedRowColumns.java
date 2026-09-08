@@ -11,11 +11,14 @@ package com.db.macs3.ecomms.spectre.spark;
  */
 final class JoinedRowColumns {
 
-    private JoinedRowColumns() {}
+    private JoinedRowColumns() {
+    }
 
     static final String FEATURES = "features";
     static final String RESTRICTED = "restricted";
-    /** Tagged by {@code MessageAvroReader} — see class Javadoc. */
+    /**
+     * Tagged by {@code MessageAvroReader} — see class Javadoc.
+     */
     static final String DATASET_PARTITION_VALUE = "dataset_partition_value";
     static final String PIPELINE_EXEC_ID_FOR_OUTPUT = "pipeline_exec_id_for_output";
     static final String CREATED_BY_FOR_OUTPUT = "created_by_for_output";

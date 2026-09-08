@@ -19,10 +19,10 @@ public class AreaMatch implements Serializable {
     private MatchSpan span;
 
     /**
-     * @param area            which part of the message this match is in
-     * @param attachmentId    non-null iff {@code area == ATTACHMENT} — identifies WHICH
-     *                          attachment (a message can have several)
-     * @param span             the match's original-text position and text
+     * @param area         which part of the message this match is in
+     * @param attachmentId non-null iff {@code area == ATTACHMENT} — identifies WHICH
+     *                     attachment (a message can have several)
+     * @param span         the match's original-text position and text
      */
     public AreaMatch(MatchArea area, String attachmentId, MatchSpan span) {
         if (area == MatchArea.ATTACHMENT && (attachmentId == null || attachmentId.isBlank())) {

@@ -51,40 +51,40 @@ public class FeatureDecisionRow implements Serializable {
     private String policyEngineId;
 
     /**
-     * @param processId              the process run this row belongs to
-     * @param messageId               joins to the AVRO message dataset's {@code message_id}
-     * @param datasetPartition        the view's own partition column (distinct from the
-     *                                 Airflow-supplied {@code dataset_partition_value} used to
-     *                                 query the view — see {@code FeatureDecisionViewReader}); DATE
-     * @param featureTaggingType      e.g. {@code "Lexicon-Tagging"} — carried through to
-     *                                 {@code feature-hit-summary.feature_hit_type} verbatim
-     * @param featureType              {@link com.db.macs3.ecomms.spectre.constants.BqColumns.FeatureType} —
-     *                                 {@code lexicon}, {@code composite}, {@code disclaimer}, or {@code NoiseReduction}
-     * @param featureId                groups rows belonging to the same (possibly composite) feature —
-     *                                 see {@code FeatureGroupingService}; LONG (INTEGER) in the view,
-     *                                 not STRING
-     * @param featureName              the feature's display name (parent name for a composite grouping)
-     * @param subFeatureType           non-null (currently always {@code "lexicon"}) when this row is
-     *                                 one sub-feature of a composite/NoiseReduction grouping
-     * @param featuresToApply          the actual lexicon feature name for THIS row — this is what
-     *                                 gets looked up inside {@code feature_definition.body.lexiconName}
-     *                                 to resolve the {@code .hdb} filename, NOT {@code featureName}
-     *                                 (which may be a composite parent's display label)
-     * @param isNoiseReduction         the group's {@code is_noise_reduction} flag — BOOLEAN in the
-     *                                 view, not the {@code "Y"}/{@code "N"} string an earlier
-     *                                 revision of this class assumed
-     * @param operator                 {@code "OR"} / {@code "AND"} / null — combines sibling rows
-     *                                 sharing the same {@code featureId} (composite/NoiseReduction only)
-     * @param featureDefinitionJson    raw JSON string — parsed on demand via
-     *                                 {@link com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition#parse}
-     * @param featurePartitionValue    the feature-master partition this row was tagged under; DATE
-     * @param policyEngineId           the policy engine this feature belongs to
+     * @param processId             the process run this row belongs to
+     * @param messageId             joins to the AVRO message dataset's {@code message_id}
+     * @param datasetPartition      the view's own partition column (distinct from the
+     *                              Airflow-supplied {@code dataset_partition_value} used to
+     *                              query the view — see {@code FeatureDecisionViewReader}); DATE
+     * @param featureTaggingType    e.g. {@code "Lexicon-Tagging"} — carried through to
+     *                              {@code feature-hit-summary.feature_hit_type} verbatim
+     * @param featureType           {@link com.db.macs3.ecomms.spectre.constants.BqColumns.FeatureType} —
+     *                              {@code lexicon}, {@code composite}, {@code disclaimer}, or {@code NoiseReduction}
+     * @param featureId             groups rows belonging to the same (possibly composite) feature —
+     *                              see {@code FeatureGroupingService}; LONG (INTEGER) in the view,
+     *                              not STRING
+     * @param featureName           the feature's display name (parent name for a composite grouping)
+     * @param subFeatureType        non-null (currently always {@code "lexicon"}) when this row is
+     *                              one sub-feature of a composite/NoiseReduction grouping
+     * @param featuresToApply       the actual lexicon feature name for THIS row — this is what
+     *                              gets looked up inside {@code feature_definition.body.lexiconName}
+     *                              to resolve the {@code .hdb} filename, NOT {@code featureName}
+     *                              (which may be a composite parent's display label)
+     * @param isNoiseReduction      the group's {@code is_noise_reduction} flag — BOOLEAN in the
+     *                              view, not the {@code "Y"}/{@code "N"} string an earlier
+     *                              revision of this class assumed
+     * @param operator              {@code "OR"} / {@code "AND"} / null — combines sibling rows
+     *                              sharing the same {@code featureId} (composite/NoiseReduction only)
+     * @param featureDefinitionJson raw JSON string — parsed on demand via
+     *                              {@link com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition#parse}
+     * @param featurePartitionValue the feature-master partition this row was tagged under; DATE
+     * @param policyEngineId        the policy engine this feature belongs to
      */
     public FeatureDecisionRow(String processId, String messageId, LocalDate datasetPartition,
-                               String featureTaggingType, String featureType, Long featureId,
-                               String featureName, String subFeatureType, String featuresToApply,
-                               boolean isNoiseReduction, String operator, String featureDefinitionJson,
-                               LocalDate featurePartitionValue, String policyEngineId) {
+                              String featureTaggingType, String featureType, Long featureId,
+                              String featureName, String subFeatureType, String featuresToApply,
+                              boolean isNoiseReduction, String operator, String featureDefinitionJson,
+                              LocalDate featurePartitionValue, String policyEngineId) {
         this.processId = processId;
         this.messageId = messageId;
         this.datasetPartition = datasetPartition;

@@ -26,24 +26,25 @@ import org.apache.spark.sql.functions;
  */
 public final class MessageAvroReader {
 
-    private MessageAvroReader() {}
+    private MessageAvroReader() {
+    }
 
     /**
-     * @param baseBucket              {@code DataprocConfig.messages().msgGcsBucket()}
-     * @param datasetPathPrefix        {@code DataprocConfig.messages().msgGcsPrefix()} — e.g.
-     *                                 {@code "coreapp-trans"}, without a trailing slash
-     * @param datasetId                 which {@code <datasetPathPrefix>/<dataset_id>/} folder to read —
-     *                                 GCS path only; not itself tagged onto the resulting rows
-     * @param datasetPartitionValue     {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for
-     *                                 this same dataset — tagged onto every row read here, verbatim
-     * @param relevantMessageIds        restrict to these ids only — the view's own
-     *                                 {@code message_id} set
+     * @param baseBucket            {@code DataprocConfig.messages().msgGcsBucket()}
+     * @param datasetPathPrefix     {@code DataprocConfig.messages().msgGcsPrefix()} — e.g.
+     *                              {@code "coreapp-trans"}, without a trailing slash
+     * @param datasetId             which {@code <datasetPathPrefix>/<dataset_id>/} folder to read —
+     *                              GCS path only; not itself tagged onto the resulting rows
+     * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for
+     *                              this same dataset — tagged onto every row read here, verbatim
+     * @param relevantMessageIds    restrict to these ids only — the view's own
+     *                              {@code message_id} set
      * @throws NoAvroFilesFoundException if neither the {@code restricted/} nor
-     *          {@code unrestricted/} subfolder has any {@code .avro} file
+     *                                   {@code unrestricted/} subfolder has any {@code .avro} file
      */
     public static Dataset<Row> readDataset(SparkSession spark, GcsClient gcsClient, String baseBucket,
-                                            String datasetPathPrefix, String datasetId, String datasetPartitionValue,
-                                            Dataset<Row> relevantMessageIds) {
+                                           String datasetPathPrefix, String datasetId, String datasetPartitionValue,
+                                           Dataset<Row> relevantMessageIds) {
         String datasetPrefix = datasetPathPrefix + "/" + datasetId + "/";
         String restrictedPrefix = datasetPrefix + AvroConstants.RESTRICTED_SUBFOLDER;
         String unrestrictedPrefix = datasetPrefix + AvroConstants.UNRESTRICTED_SUBFOLDER;
@@ -56,7 +57,7 @@ public final class MessageAvroReader {
         if (!hasRestrictedFiles && !hasUnrestrictedFiles) {
             throw new NoAvroFilesFoundException(
                     "No AVRO files found for dataset_id='" + datasetId + "' under either " + restrictedPath
-                    + " or " + unrestrictedPath);
+                            + " or " + unrestrictedPath);
         }
 
         Dataset<Row> combinedMessages = null;
@@ -84,7 +85,9 @@ public final class MessageAvroReader {
                 .withColumn(AvroConstants.COLUMN_RESTRICTED, functions.lit(restricted));
     }
 
-    /** Thrown when a dataset has no AVRO files in either subfolder. */
+    /**
+     * Thrown when a dataset has no AVRO files in either subfolder.
+     */
     public static final class NoAvroFilesFoundException extends RuntimeException {
         public NoAvroFilesFoundException(String message) {
             super(message);

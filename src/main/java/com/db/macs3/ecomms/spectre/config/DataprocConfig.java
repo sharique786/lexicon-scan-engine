@@ -81,10 +81,10 @@ public final class DataprocConfig implements Serializable {
 
     @JsonCreator
     public DataprocConfig(@JsonProperty("project_id") String projectId,
-                           @JsonProperty("region") String region,
-                           @JsonProperty("cluster_name") String clusterName,
-                           @JsonProperty("workflow_timeout_seconds") Long workflowTimeoutSeconds,
-                           @JsonProperty("spectre") SpectreConfig spectre) {
+                          @JsonProperty("region") String region,
+                          @JsonProperty("cluster_name") String clusterName,
+                          @JsonProperty("workflow_timeout_seconds") Long workflowTimeoutSeconds,
+                          @JsonProperty("spectre") SpectreConfig spectre) {
         this.projectId = projectId;
         this.region = region;
         this.clusterName = clusterName;
@@ -175,7 +175,9 @@ public final class DataprocConfig implements Serializable {
                 + ", workflowTimeoutSeconds=" + workflowTimeoutSeconds + ", spectre=" + spectre + "]";
     }
 
-    /** {@code spectre:} — one level of nesting above {@code engine:}. */
+    /**
+     * {@code spectre:} — one level of nesting above {@code engine:}.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class SpectreConfig implements Serializable {
         private final EngineConfig engine;
@@ -205,7 +207,9 @@ public final class DataprocConfig implements Serializable {
         }
     }
 
-    /** {@code spectre.engine:} — carries the three subsections this job actually reads. */
+    /**
+     * {@code spectre.engine:} — carries the three subsections this job actually reads.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class EngineConfig implements Serializable {
         private final HyperscanGcsConfig hyperscan;
@@ -214,8 +218,8 @@ public final class DataprocConfig implements Serializable {
 
         @JsonCreator
         public EngineConfig(@JsonProperty("hyperscan") HyperscanGcsConfig hyperscan,
-                             @JsonProperty("messages") MessagesGcsConfig messages,
-                             @JsonProperty("bigquery") BqTableConfig bigquery) {
+                            @JsonProperty("messages") MessagesGcsConfig messages,
+                            @JsonProperty("bigquery") BqTableConfig bigquery) {
             this.hyperscan = hyperscan;
             this.messages = messages;
             this.bigquery = bigquery;
@@ -264,7 +268,7 @@ public final class DataprocConfig implements Serializable {
 
         @JsonCreator
         public HyperscanGcsConfig(@JsonProperty("hdb-gcs-bucket") String hdbGcsBucket,
-                                   @JsonProperty("hdb-gcs-prefix") String hdbGcsPrefix) {
+                                  @JsonProperty("hdb-gcs-prefix") String hdbGcsPrefix) {
             this.hdbGcsBucket = hdbGcsBucket;
             this.hdbGcsPrefix = hdbGcsPrefix;
         }
@@ -309,7 +313,7 @@ public final class DataprocConfig implements Serializable {
 
         @JsonCreator
         public MessagesGcsConfig(@JsonProperty("msg-gcs-bucket") String msgGcsBucket,
-                                  @JsonProperty("msg-gcs-prefix") String msgGcsPrefix) {
+                                 @JsonProperty("msg-gcs-prefix") String msgGcsPrefix) {
             this.msgGcsBucket = msgGcsBucket;
             this.msgGcsPrefix = msgGcsPrefix;
         }

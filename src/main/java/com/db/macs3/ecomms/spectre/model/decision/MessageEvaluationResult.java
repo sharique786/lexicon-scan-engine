@@ -33,35 +33,35 @@ public class MessageEvaluationResult implements Serializable {
     private int suppressedLexiconMatchCount;
 
     /**
-     * @param messageId                        the message this result is for
-     * @param evaluatedGroups                   every group that WAS evaluated, in processing
-     *                                           order — stops early (per {@link #isShortCircuited})
-     * @param shortCircuited                     true iff a NoiseReduction group was a hit,
-     *                                           meaning Disclaimer and Lexicon groups were
-     *                                           never evaluated at all
-     * @param disclaimerMatches                   every disclaimer match found (empty if there was
-     *                                           no disclaimer group, or it had no matches) — used to
-     *                                           suppress overlapping Lexicon matches; disclaimer
-     *                                           matches themselves are never suppressed
-     * @param finalLexiconMatchesByFeatureId      Lexicon-category matches AFTER disclaimer-overlap
-     *                                           suppression (full containment only — see
-     *                                           {@code DecisionTreeEvaluator}), keyed by
-     *                                           {@code featureId} (i.e. by {@link FeatureGroup#getFeatureId()})
-     *                                           so a downstream row builder can reconstruct which
-     *                                           evaluated group each surviving match belongs to — this
-     *                                           is what {@code lexicon-hit-summary}/{@code -restricted}/
-     *                                           {@code -unrestricted} are built from; empty when
-     *                                           {@link #isShortCircuited} is true. A {@code featureId} with
-     *                                           zero surviving matches after suppression is absent from
-     *                                           this map entirely, not present with an empty list.
-     * @param suppressedLexiconMatchCount        how many raw Lexicon matches were discarded by
-     *                                           disclaimer-overlap suppression, for observability/audit —
-     *                                           not itself written to any output table
+     * @param messageId                      the message this result is for
+     * @param evaluatedGroups                every group that WAS evaluated, in processing
+     *                                       order — stops early (per {@link #isShortCircuited})
+     * @param shortCircuited                 true iff a NoiseReduction group was a hit,
+     *                                       meaning Disclaimer and Lexicon groups were
+     *                                       never evaluated at all
+     * @param disclaimerMatches              every disclaimer match found (empty if there was
+     *                                       no disclaimer group, or it had no matches) — used to
+     *                                       suppress overlapping Lexicon matches; disclaimer
+     *                                       matches themselves are never suppressed
+     * @param finalLexiconMatchesByFeatureId Lexicon-category matches AFTER disclaimer-overlap
+     *                                       suppression (full containment only — see
+     *                                       {@code DecisionTreeEvaluator}), keyed by
+     *                                       {@code featureId} (i.e. by {@link FeatureGroup#getFeatureId()})
+     *                                       so a downstream row builder can reconstruct which
+     *                                       evaluated group each surviving match belongs to — this
+     *                                       is what {@code lexicon-hit-summary}/{@code -restricted}/
+     *                                       {@code -unrestricted} are built from; empty when
+     *                                       {@link #isShortCircuited} is true. A {@code featureId} with
+     *                                       zero surviving matches after suppression is absent from
+     *                                       this map entirely, not present with an empty list.
+     * @param suppressedLexiconMatchCount    how many raw Lexicon matches were discarded by
+     *                                       disclaimer-overlap suppression, for observability/audit —
+     *                                       not itself written to any output table
      */
     public MessageEvaluationResult(String messageId, List<GroupEvaluationResult> evaluatedGroups,
-                                    boolean shortCircuited, List<TermMatchResult> disclaimerMatches,
-                                    Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId,
-                                    int suppressedLexiconMatchCount) {
+                                   boolean shortCircuited, List<TermMatchResult> disclaimerMatches,
+                                   Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId,
+                                   int suppressedLexiconMatchCount) {
         this.messageId = messageId;
         this.evaluatedGroups = evaluatedGroups;
         this.shortCircuited = shortCircuited;

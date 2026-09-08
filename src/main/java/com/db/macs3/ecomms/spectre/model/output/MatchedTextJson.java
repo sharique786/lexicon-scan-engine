@@ -86,9 +86,9 @@ public class MatchedTextJson implements Serializable {
 
         @JsonCreator
         public HitDetail(@JsonProperty("message_id") String messageId,
-                          @JsonProperty("msg_text") List<TextHit> msgText,
-                          @JsonProperty("subject") List<TextHit> subject,
-                          @JsonProperty("attachment_text") List<AttachmentTextHit> attachmentText) {
+                         @JsonProperty("msg_text") List<TextHit> msgText,
+                         @JsonProperty("subject") List<TextHit> subject,
+                         @JsonProperty("attachment_text") List<AttachmentTextHit> attachmentText) {
             this.messageId = messageId;
             this.msgText = msgText;
             this.subject = subject;
@@ -103,6 +103,7 @@ public class MatchedTextJson implements Serializable {
         public void setMessageId(String messageId) {
             this.messageId = messageId;
         }
+
         @JsonProperty("msg_text")
         public List<TextHit> getMsgText() {
             return msgText;
@@ -111,6 +112,7 @@ public class MatchedTextJson implements Serializable {
         public void setMsgText(List<TextHit> msgText) {
             this.msgText = msgText;
         }
+
         @JsonProperty("subject")
         public List<TextHit> getSubject() {
             return subject;
@@ -119,6 +121,7 @@ public class MatchedTextJson implements Serializable {
         public void setSubject(List<TextHit> subject) {
             this.subject = subject;
         }
+
         @JsonProperty("attachment_text")
         public List<AttachmentTextHit> getAttachmentText() {
             return attachmentText;
@@ -165,14 +168,14 @@ public class MatchedTextJson implements Serializable {
         private int length;
 
         /**
-         * @param text      the matched text (stripped-text form — see {@code HtmlStrippingService})
-         * @param start      original-text start character index
-         * @param length     original-text span length ({@code end - start})
+         * @param text   the matched text (stripped-text form — see {@code HtmlStrippingService})
+         * @param start  original-text start character index
+         * @param length original-text span length ({@code end - start})
          */
         @JsonCreator
         public TextHit(@JsonProperty("text") String text,
-                        @JsonProperty("start") int start,
-                        @JsonProperty("length") int length) {
+                       @JsonProperty("start") int start,
+                       @JsonProperty("length") int length) {
             this.text = text;
             this.start = start;
             this.length = length;
@@ -186,6 +189,7 @@ public class MatchedTextJson implements Serializable {
         public void setText(String text) {
             this.text = text;
         }
+
         @JsonProperty("start")
         public int getStart() {
             return start;
@@ -194,6 +198,7 @@ public class MatchedTextJson implements Serializable {
         public void setStart(int start) {
             this.start = start;
         }
+
         @JsonProperty("length")
         public int getLength() {
             return length;
@@ -236,7 +241,7 @@ public class MatchedTextJson implements Serializable {
 
         @JsonCreator
         public AttachmentTextHit(@JsonProperty("attachment_id") String attachmentId,
-                                  @JsonProperty("att_text") List<TextHit> attText) {
+                                 @JsonProperty("att_text") List<TextHit> attText) {
             this.attachmentId = attachmentId;
             this.attText = attText;
         }
@@ -249,6 +254,7 @@ public class MatchedTextJson implements Serializable {
         public void setAttachmentId(String attachmentId) {
             this.attachmentId = attachmentId;
         }
+
         @JsonProperty("att_text")
         public List<TextHit> getAttText() {
             return attText;

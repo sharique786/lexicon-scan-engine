@@ -23,13 +23,13 @@ public class MessageAttachment implements Serializable {
     private String cleanText;
 
     /**
-     * @param attachmentId          this attachment's identifier
-     * @param parentAttachmentId    identifier of a parent attachment, when this one is
-     *                                nested/derived from another (e.g. an extracted embedded file)
-     * @param fileName                original filename
-     * @param cleanText               extracted text content to scan — subject to the
-     *                                {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} size limit,
-     *                                see {@code ScanEngineProperties}
+     * @param attachmentId       this attachment's identifier
+     * @param parentAttachmentId identifier of a parent attachment, when this one is
+     *                           nested/derived from another (e.g. an extracted embedded file)
+     * @param fileName           original filename
+     * @param cleanText          extracted text content to scan — subject to the
+     *                           {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} size limit,
+     *                           see {@code ScanEngineProperties}
      */
     public MessageAttachment(String attachmentId, String parentAttachmentId, String fileName, String cleanText) {
         this.attachmentId = attachmentId;

@@ -22,7 +22,7 @@ import java.util.Map;
  *
  * <h2>Noise reduction: evaluated group-by-group, short-circuits on first hit</h2>
  * <p>Each NoiseReduction-category group is evaluated independently, using
- * ONLY its own {@link FeatureGroup#operator()} across its own members —
+ * ONLY its own {@link FeatureGroup#getOperator()} across its own members —
  * there is no additional combination operator ACROSS different
  * {@code featureId}s. Groups are evaluated in order; the moment any one of
  * them is a hit, evaluation stops immediately — no further NoiseReduction
@@ -55,17 +55,18 @@ public final class DecisionTreeEvaluator {
         List<TermMatchResult> scan(FeatureDecisionRow row);
     }
 
-    private DecisionTreeEvaluator() {}
+    private DecisionTreeEvaluator() {
+    }
 
     /**
-     * @param messageId      the message being evaluated, for the result's identity
-     * @param orderedGroups   from {@code FeatureGroupingService.groupAndOrder} — MUST already
-     *                         be in NoiseReduction → Disclaimer → Lexicon order; this method
-     *                         does not re-sort
-     * @param scanner          scans one row on demand
+     * @param messageId     the message being evaluated, for the result's identity
+     * @param orderedGroups from {@code FeatureGroupingService.groupAndOrder} — MUST already
+     *                      be in NoiseReduction → Disclaimer → Lexicon order; this method
+     *                      does not re-sort
+     * @param scanner       scans one row on demand
      */
     public static MessageEvaluationResult evaluate(String messageId, List<FeatureGroup> orderedGroups,
-                                                     FeatureRowScanner scanner) {
+                                                   FeatureRowScanner scanner) {
         List<GroupEvaluationResult> evaluatedGroups = new ArrayList<>();
         List<TermMatchResult> disclaimerMatches = new ArrayList<>();
 
@@ -98,12 +99,14 @@ public final class DecisionTreeEvaluator {
         return spans;
     }
 
-    /** One record per {@link #suppressDisclaimerOverlapsAcrossGroups} call: the surviving Lexicon matches and how many were suppressed. */
+    /**
+     * One record per {@link #suppressDisclaimerOverlapsAcrossGroups} call: the surviving Lexicon matches and how many were suppressed.
+     */
     private record SuppressionOutcome(Map<String, List<TermMatchResult>> finalByFeatureId, int totalSuppressed) {
     }
 
     private static SuppressionOutcome suppressDisclaimerOverlapsAcrossGroups(List<GroupEvaluationResult> evaluatedGroups,
-                                                                               List<AreaMatch> disclaimerSpans) {
+                                                                             List<AreaMatch> disclaimerSpans) {
         Map<String, List<TermMatchResult>> finalByFeatureId = new LinkedHashMap<>();
         int totalSuppressed = 0;
         for (GroupEvaluationResult groupResult : evaluatedGroups) {
@@ -142,7 +145,7 @@ public final class DecisionTreeEvaluator {
      * Resolves a group's overall hit status from its members' individual hit
      * statuses — single-member groups need no operator (that one member's
      * hit status IS the group's); multi-member groups apply
-     * {@link FeatureGroup#operator()}: OR = any member hit, AND = every
+     * {@link FeatureGroup#getOperator()}: OR = any member hit, AND = every
      * member hit.
      */
     private static boolean resolveGroupHit(FeatureGroup group, Map<FeatureDecisionRow, Boolean> memberHit) {
@@ -154,7 +157,7 @@ public final class DecisionTreeEvaluator {
         if (!isOr && !isAnd) {
             throw new IllegalStateException(
                     "featureId=" + group.getFeatureId() + " has an unrecognised operator: '" + group.getOperator()
-                    + "' — expected OR or AND.");
+                            + "' — expected OR or AND.");
         }
         if (isOr) {
             return memberHit.values().stream().anyMatch(Boolean::booleanValue);
@@ -181,8 +184,13 @@ public final class DecisionTreeEvaluator {
             this.suppressedCount = suppressedCount;
         }
 
-        List<TermMatchResult> kept() { return kept; }
-        int suppressedCount() { return suppressedCount; }
+        List<TermMatchResult> kept() {
+            return kept;
+        }
+
+        int suppressedCount() {
+            return suppressedCount;
+        }
     }
 
     /**
@@ -194,7 +202,7 @@ public final class DecisionTreeEvaluator {
      * {@link TermMatchResult} requires at least one match.
      */
     private static Suppression suppressDisclaimerOverlaps(List<TermMatchResult> rawGroupMatches,
-                                                            List<AreaMatch> disclaimerSpans) {
+                                                          List<AreaMatch> disclaimerSpans) {
         if (disclaimerSpans.isEmpty()) {
             return new Suppression(rawGroupMatches, 0);
         }
@@ -222,7 +230,9 @@ public final class DecisionTreeEvaluator {
         return new Suppression(kept, suppressedCount);
     }
 
-    /** True iff two matches are in the same coordinate space — same area, and same attachment if the area is ATTACHMENT. */
+    /**
+     * True iff two matches are in the same coordinate space — same area, and same attachment if the area is ATTACHMENT.
+     */
     private static boolean sameAreaScope(AreaMatch first, AreaMatch second) {
         if (first.getArea() != second.getArea()) {
             return false;

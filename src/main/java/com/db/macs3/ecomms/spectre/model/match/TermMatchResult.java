@@ -21,13 +21,13 @@ public class TermMatchResult implements Serializable {
     private List<AreaMatch> matches;
 
     /**
-     * @param termId              {@code <body.lexiconName>::<index>} — see
-     *                              {@code TermIdBuilder}
-     * @param termRegexPattern    the compiled Hyperscan pattern text for this term,
-     *                              for {@code lexicon-hit-summary.term_dtls.term_regex_pattern}
-     * @param matches               every occurrence found, tagged by area — non-empty
-     *                              (a term with zero matches is simply absent from a
-     *                              feature's result, not represented by an empty-matches instance)
+     * @param termId           {@code <body.lexiconName>::<index>} — see
+     *                         {@code TermIdBuilder}
+     * @param termRegexPattern the compiled Hyperscan pattern text for this term,
+     *                         for {@code lexicon-hit-summary.term_dtls.term_regex_pattern}
+     * @param matches          every occurrence found, tagged by area — non-empty
+     *                         (a term with zero matches is simply absent from a
+     *                         feature's result, not represented by an empty-matches instance)
      */
     public TermMatchResult(String termId, String termRegexPattern, List<AreaMatch> matches) {
         if (matches == null || matches.isEmpty()) {

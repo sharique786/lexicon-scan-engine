@@ -49,30 +49,30 @@ public final class BqTableConfig implements Serializable {
     private final String bqOutputRecordAudit;
 
     /**
-     * @param bqProject                     the GCP project {@code bqDataset}/{@code bqViewName} live in
-     * @param bqDataset                       BQ dataset containing {@code vw_src_msg_lexicon_decision_mapping}
-     * @param bqViewName                      the view's own name
-     * @param bqFeatureMaster                  fully-qualified — see class Javadoc "new fields"
-     * @param bqLanguageFeatureDec              fully-qualified — see class Javadoc "new fields"
-     * @param bqOutputFeatureHitSummary         fully-qualified {@code feature-hit-summary} table
-     * @param bqOutputHitSummary                 fully-qualified {@code lexicon-hit-summary} table
-     * @param bqOutputHitRestricted               fully-qualified {@code lexicon-hit-restricted} table
-     * @param bqOutputHitUnrestricted              fully-qualified {@code lexicon-hit-unrestricted} table
-     * @param bqOutputStageAudit                    fully-qualified {@code pipeline-stage-audit} table
-     * @param bqOutputRecordAudit                    fully-qualified {@code pipeline-record-audit} table
+     * @param bqProject                 the GCP project {@code bqDataset}/{@code bqViewName} live in
+     * @param bqDataset                 BQ dataset containing {@code vw_src_msg_lexicon_decision_mapping}
+     * @param bqViewName                the view's own name
+     * @param bqFeatureMaster           fully-qualified — see class Javadoc "new fields"
+     * @param bqLanguageFeatureDec      fully-qualified — see class Javadoc "new fields"
+     * @param bqOutputFeatureHitSummary fully-qualified {@code feature-hit-summary} table
+     * @param bqOutputHitSummary        fully-qualified {@code lexicon-hit-summary} table
+     * @param bqOutputHitRestricted     fully-qualified {@code lexicon-hit-restricted} table
+     * @param bqOutputHitUnrestricted   fully-qualified {@code lexicon-hit-unrestricted} table
+     * @param bqOutputStageAudit        fully-qualified {@code pipeline-stage-audit} table
+     * @param bqOutputRecordAudit       fully-qualified {@code pipeline-record-audit} table
      */
     @JsonCreator
     public BqTableConfig(@JsonProperty("bq-project") String bqProject,
-                          @JsonProperty("bq-dataset") String bqDataset,
-                          @JsonProperty("bq-view-name") String bqViewName,
-                          @JsonProperty("bq-feature-master") String bqFeatureMaster,
-                          @JsonProperty("bq-language-feature-dec") String bqLanguageFeatureDec,
-                          @JsonProperty("bq-output-feature-hit-summary") String bqOutputFeatureHitSummary,
-                          @JsonProperty("bq-output-hit-summary") String bqOutputHitSummary,
-                          @JsonProperty("bq-output-hit-restricted") String bqOutputHitRestricted,
-                          @JsonProperty("bq-output-hit-unrestricted") String bqOutputHitUnrestricted,
-                          @JsonProperty("bq-output-stage-audit") String bqOutputStageAudit,
-                          @JsonProperty("bq-output-record-audit") String bqOutputRecordAudit) {
+                         @JsonProperty("bq-dataset") String bqDataset,
+                         @JsonProperty("bq-view-name") String bqViewName,
+                         @JsonProperty("bq-feature-master") String bqFeatureMaster,
+                         @JsonProperty("bq-language-feature-dec") String bqLanguageFeatureDec,
+                         @JsonProperty("bq-output-feature-hit-summary") String bqOutputFeatureHitSummary,
+                         @JsonProperty("bq-output-hit-summary") String bqOutputHitSummary,
+                         @JsonProperty("bq-output-hit-restricted") String bqOutputHitRestricted,
+                         @JsonProperty("bq-output-hit-unrestricted") String bqOutputHitUnrestricted,
+                         @JsonProperty("bq-output-stage-audit") String bqOutputStageAudit,
+                         @JsonProperty("bq-output-record-audit") String bqOutputRecordAudit) {
         this.bqProject = bqProject;
         this.bqDataset = bqDataset;
         this.bqViewName = bqViewName;
@@ -130,7 +130,9 @@ public final class BqTableConfig implements Serializable {
         return bqOutputRecordAudit;
     }
 
-    /** {@code <bq-project>.<bq-dataset>.<bq-view-name>} — the fully-qualified identifier the Spark BQ connector expects. */
+    /**
+     * {@code <bq-project>.<bq-dataset>.<bq-view-name>} — the fully-qualified identifier the Spark BQ connector expects.
+     */
     public String fullyQualifiedViewName() {
         return bqProject + "." + bqDataset + "." + bqViewName;
     }

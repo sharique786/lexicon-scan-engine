@@ -45,22 +45,22 @@ public class FeatureHitSummaryRow implements Serializable {
     private String pipelineExecId;
 
     /**
-     * @param messageId                  the message this row is for
-     * @param features                       one entry per evaluated feature group — only groups
-     *                                     {@code DecisionTreeEvaluator} actually evaluated (a
-     *                                     noise-reduction short-circuit means later groups are absent)
-     * @param datasetPartitionValue      {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
-     *                                    dataset this message came from — see {@code ScanMessage} class Javadoc
-     * @param featureHitType                carried verbatim from the view's {@code feature_tagging_type}
-     *                                     column (e.g. {@code "Lexicon-Tagging"})
-     * @param createdBy                      the writing job's identity; NULLABLE per the delivered schema
-     * @param createdTs                       write time, UTC; NULLABLE per the delivered schema
-     * @param processId                     the process run this row belongs to
-     * @param pipelineExecId               the pipeline execution this row belongs to
+     * @param messageId             the message this row is for
+     * @param features              one entry per evaluated feature group — only groups
+     *                              {@code DecisionTreeEvaluator} actually evaluated (a
+     *                              noise-reduction short-circuit means later groups are absent)
+     * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                              dataset this message came from — see {@code ScanMessage} class Javadoc
+     * @param featureHitType        carried verbatim from the view's {@code feature_tagging_type}
+     *                              column (e.g. {@code "Lexicon-Tagging"})
+     * @param createdBy             the writing job's identity; NULLABLE per the delivered schema
+     * @param createdTs             write time, UTC; NULLABLE per the delivered schema
+     * @param processId             the process run this row belongs to
+     * @param pipelineExecId        the pipeline execution this row belongs to
      */
     public FeatureHitSummaryRow(String messageId, List<Feature> features, LocalDate datasetPartitionValue,
-                                 String featureHitType, String createdBy, Instant createdTs,
-                                 String processId, String pipelineExecId) {
+                                String featureHitType, String createdBy, Instant createdTs,
+                                String processId, String pipelineExecId) {
         this.messageId = messageId;
         this.features = features;
         this.datasetPartitionValue = datasetPartitionValue;
@@ -181,18 +181,18 @@ public class FeatureHitSummaryRow implements Serializable {
         private List<SubFeature> subFeatures;
 
         /**
-         * @param id                  the group's {@code feature_id}, parsed to an integer
-         * @param name                 the group's {@code feature_name}
-         * @param type                  the group's {@code feature_type}
-         * @param isNoiseReduction     the group's {@code is_noise_reduction} flag; NULLABLE per the
-         *                              delivered schema
-         * @param hitStatus             the group's OVERALL resolved hit status — see class Javadoc;
-         *                              NULLABLE per the delivered schema
-         * @param subFeatures            one entry per member row; empty for a single-member group
-         *                              (a standalone lexicon/disclaimer has nothing further to break down)
+         * @param id               the group's {@code feature_id}, parsed to an integer
+         * @param name             the group's {@code feature_name}
+         * @param type             the group's {@code feature_type}
+         * @param isNoiseReduction the group's {@code is_noise_reduction} flag; NULLABLE per the
+         *                         delivered schema
+         * @param hitStatus        the group's OVERALL resolved hit status — see class Javadoc;
+         *                         NULLABLE per the delivered schema
+         * @param subFeatures      one entry per member row; empty for a single-member group
+         *                         (a standalone lexicon/disclaimer has nothing further to break down)
          */
         public Feature(long id, String name, String type, Boolean isNoiseReduction,
-                        Boolean hitStatus, List<SubFeature> subFeatures) {
+                       Boolean hitStatus, List<SubFeature> subFeatures) {
             this.id = id;
             this.name = name;
             this.type = type;
@@ -288,12 +288,12 @@ public class FeatureHitSummaryRow implements Serializable {
         private Boolean hitStatus;
 
         /**
-         * @param type          the member row's {@code sub_feature_type}
-         * @param name           the member row's {@code features_to_apply} — the actual lexicon
-         *                       feature name this sub-feature applied
-         * @param hitStatus      this ONE member's own hit status (any term match at all — see
-         *                       {@code DecisionTreeEvaluator} class Javadoc on minimumHits);
-         *                       NULLABLE per the delivered schema
+         * @param type      the member row's {@code sub_feature_type}
+         * @param name      the member row's {@code features_to_apply} — the actual lexicon
+         *                  feature name this sub-feature applied
+         * @param hitStatus this ONE member's own hit status (any term match at all — see
+         *                  {@code DecisionTreeEvaluator} class Javadoc on minimumHits);
+         *                  NULLABLE per the delivered schema
          */
         public SubFeature(String type, String name, Boolean hitStatus) {
             this.type = type;

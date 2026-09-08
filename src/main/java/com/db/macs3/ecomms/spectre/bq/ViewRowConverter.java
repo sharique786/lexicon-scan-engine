@@ -29,7 +29,8 @@ import java.time.LocalDate;
  */
 public final class ViewRowConverter implements Serializable {
 
-    private ViewRowConverter() {}
+    private ViewRowConverter() {
+    }
 
     public static FeatureDecisionRow fromRow(Row row) {
         return new FeatureDecisionRow(
@@ -66,7 +67,9 @@ public final class ViewRowConverter implements Serializable {
         return row.isNullAt(idx) ? null : row.getLong(idx);
     }
 
-    /** {@code is_noise_reduction} is NOT modelled as nullable — a null value reads as {@code false}. */
+    /**
+     * {@code is_noise_reduction} is NOT modelled as nullable — a null value reads as {@code false}.
+     */
     private static boolean getBooleanOrDefault(Row row, String columnName) {
         int idx = row.fieldIndex(columnName);
         return !row.isNullAt(idx) && row.getBoolean(idx);

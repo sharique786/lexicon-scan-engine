@@ -45,7 +45,9 @@ final class ResolvedPatternAreaEvaluator {
 
     private static final Logger log = LoggerFactory.getLogger(ResolvedPatternAreaEvaluator.class);
 
-    /** Output cap: at most this many distinct occurrence spans reported per area. */
+    /**
+     * Output cap: at most this many distinct occurrence spans reported per area.
+     */
     private static final int MAX_HITS_PER_AREA = 50;
 
     /**
@@ -61,13 +63,13 @@ final class ResolvedPatternAreaEvaluator {
     }
 
     /**
-     * @param tree               the term's parsed resolved-pattern tree
-     * @param areaOriginalText   ONE scanned area's real original message text (subject,
-     *                           message body, or one attachment's clean text) — never
-     *                           text from more than one area
+     * @param tree             the term's parsed resolved-pattern tree
+     * @param areaOriginalText ONE scanned area's real original message text (subject,
+     *                         message body, or one attachment's clean text) — never
+     *                         text from more than one area
      * @return every satisfying occurrence found, capped at {@link #MAX_HITS_PER_AREA} and
-     *         deduplicated by resulting span — empty if the tree's condition is not
-     *         satisfied anywhere in this text
+     * deduplicated by resulting span — empty if the tree's condition is not
+     * satisfied anywhere in this text
      */
     static List<MatchSpan> findMatchingSpans(ResolvedPatternTree tree, String areaOriginalText) {
         if (areaOriginalText == null || areaOriginalText.isBlank()) {
@@ -106,9 +108,9 @@ final class ResolvedPatternAreaEvaluator {
     }
 
     private static void backtrack(List<List<LeafOccurrence>> occurrencesPerLeaf, List<String> operators,
-                                   List<Integer> distances, int leafIndex, LeafOccurrence previous,
-                                   LeafOccurrence[] chosen, String areaOriginalText,
-                                   Set<MatchSpan> collected, int[] visits) {
+                                  List<Integer> distances, int leafIndex, LeafOccurrence previous,
+                                  LeafOccurrence[] chosen, String areaOriginalText,
+                                  Set<MatchSpan> collected, int[] visits) {
         if (collected.size() >= MAX_HITS_PER_AREA || visits[0]++ > MAX_BACKTRACK_VISITS) {
             return;
         }
@@ -167,7 +169,7 @@ final class ResolvedPatternAreaEvaluator {
         List<int[]> spans = new ArrayList<>();
         Matcher matcher = Pattern.compile("\\S+").matcher(text);
         while (matcher.find()) {
-            spans.add(new int[] {matcher.start(), matcher.end()});
+            spans.add(new int[]{matcher.start(), matcher.end()});
         }
         return spans;
     }

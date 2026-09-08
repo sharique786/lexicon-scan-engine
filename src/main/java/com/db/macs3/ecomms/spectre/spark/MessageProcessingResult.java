@@ -40,18 +40,18 @@ public class MessageProcessingResult implements Serializable {
     }
 
     /**
-     * @param messageId               the message this result is for
-     * @param restricted                which output table ({@code lexicon-hit-restricted} vs
-     *                                 {@code -unrestricted}) {@link #getDetailRow()} belongs to
-     * @param datasetPartitionValue     carried through for the audit/error path
-     * @param summaryRow                 null iff {@link #isError()}
-     * @param detailRow                   may be null on success (see class Javadoc); always null on error
-     * @param featureHitSummaryRow       null iff {@link #isError()}
-     * @param errorMessage                null on success; the failure detail otherwise
+     * @param messageId             the message this result is for
+     * @param restricted            which output table ({@code lexicon-hit-restricted} vs
+     *                              {@code -unrestricted}) {@link #getDetailRow()} belongs to
+     * @param datasetPartitionValue carried through for the audit/error path
+     * @param summaryRow            null iff {@link #isError()}
+     * @param detailRow             may be null on success (see class Javadoc); always null on error
+     * @param featureHitSummaryRow  null iff {@link #isError()}
+     * @param errorMessage          null on success; the failure detail otherwise
      */
     public MessageProcessingResult(String messageId, boolean restricted, String datasetPartitionValue,
-                                    LexiconHitSummaryRow summaryRow, LexiconHitDetailRow detailRow,
-                                    FeatureHitSummaryRow featureHitSummaryRow, String errorMessage) {
+                                   LexiconHitSummaryRow summaryRow, LexiconHitDetailRow detailRow,
+                                   FeatureHitSummaryRow featureHitSummaryRow, String errorMessage) {
         this.messageId = messageId;
         this.restricted = restricted;
         this.datasetPartitionValue = datasetPartitionValue;
@@ -122,14 +122,14 @@ public class MessageProcessingResult implements Serializable {
     }
 
     public static MessageProcessingResult success(String messageId, boolean restricted, String datasetPartitionValue,
-                                                    LexiconHitSummaryRow summaryRow, LexiconHitDetailRow detailRow,
-                                                    FeatureHitSummaryRow featureHitSummaryRow) {
+                                                  LexiconHitSummaryRow summaryRow, LexiconHitDetailRow detailRow,
+                                                  FeatureHitSummaryRow featureHitSummaryRow) {
         return new MessageProcessingResult(
                 messageId, restricted, datasetPartitionValue, summaryRow, detailRow, featureHitSummaryRow, null);
     }
 
     public static MessageProcessingResult failure(String messageId, boolean restricted, String datasetPartitionValue,
-                                                    String errorMessage) {
+                                                  String errorMessage) {
         return new MessageProcessingResult(
                 messageId, restricted, datasetPartitionValue, null, null, null, errorMessage);
     }

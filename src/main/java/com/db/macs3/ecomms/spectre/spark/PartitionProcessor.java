@@ -10,10 +10,10 @@ import com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
+import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
 import com.db.macs3.ecomms.spectre.model.output.FeatureHitSummaryRow;
 import com.db.macs3.ecomms.spectre.model.output.LexiconHitDetailRow;
 import com.db.macs3.ecomms.spectre.model.output.LexiconHitSummaryRow;
-import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 import com.db.macs3.ecomms.spectre.output.OutputRowBuilder;
 import org.apache.spark.TaskContext;
@@ -80,7 +80,9 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
 
     private static final Logger log = LoggerFactory.getLogger(PartitionProcessor.class);
 
-    /** See class Javadoc "Bounded lookahead prefetch" — deliberately small and fixed, not partition-sized. */
+    /**
+     * See class Javadoc "Bounded lookahead prefetch" — deliberately small and fixed, not partition-sized.
+     */
     private static final int PREFETCH_LOOKAHEAD_ROWS = 200;
 
     private final org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast;
@@ -88,13 +90,13 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     private final int maxCachedDatabasesPerPartition;
 
     /**
-     * @param featureToZipPathBroadcast   a Spark {@link org.apache.spark.broadcast.Broadcast} of the
-     *                                     feature → {@code .zip} bundle path map — genuinely broadcast
-     *                                     (sent once per executor JVM, not re-serialized per task) — see
-     *                                     {@code ScanEngineJobRunner} for construction
+     * @param featureToZipPathBroadcast a Spark {@link org.apache.spark.broadcast.Broadcast} of the
+     *                                  feature → {@code .zip} bundle path map — genuinely broadcast
+     *                                  (sent once per executor JVM, not re-serialized per task) — see
+     *                                  {@code ScanEngineJobRunner} for construction
      */
     public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
-                               Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition) {
+                              Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition) {
         this.featureToZipPathBroadcast = featureToZipPathBroadcast;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
         this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
@@ -110,7 +112,7 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         // not re-fetch or re-serialize anything per partition/task.
         GcsClient gcsClient = new GcsClient();
         try (HyperscanBundleLoader bundleLoader = new HyperscanBundleLoader(
-                     featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
+                featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
              FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes)) {
 
             // Bounded lookahead + concurrent prefetch — see class Javadoc. lookaheadBuffer holds
@@ -202,15 +204,10 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                 viewRows.add(ViewRowConverter.fromRow(featureRow));
             }
 
-            List<FeatureGroup> orderedGroups = FeatureGroupingService.groupAndOrder(viewRows);
-            DecisionTreeEvaluator.FeatureRowScanner scanner = orchestrator.scannerFor(message);
-            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate(message.getMessageId(), orderedGroups, scanner);
-
             String processId = viewRows.getFirst().getProcessId();
             // pipelineExecId/createdBy are not view columns — carried through as extra columns
             // attached during the join stage (see ScanEngineJobRunner), not read from the view itself.
             String pipelineExecId = row.getAs(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT);
-            String featureTaggingType = viewRows.getFirst().getFeatureTaggingType();
             String createdBy = row.getAs(JoinedRowColumns.CREATED_BY_FOR_OUTPUT);
             // process_id/pipeline_exec_id/created_by are REQUIRED on every output table — same
             // fail-this-message-only reasoning as the message_id/dataset_partition_value checks above.
@@ -227,6 +224,10 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                         "created_by_for_output is null/blank for message_id=" + message.getMessageId());
             }
             Instant now = Instant.now();
+            List<FeatureGroup> orderedGroups = FeatureGroupingService.groupAndOrder(viewRows);
+            DecisionTreeEvaluator.FeatureRowScanner scanner = orchestrator.scannerFor(message);
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate(message.getMessageId(), orderedGroups, scanner);
+            String featureTaggingType = viewRows.getFirst().getFeatureTaggingType();
 
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
                     message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);

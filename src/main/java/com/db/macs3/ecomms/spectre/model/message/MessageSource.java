@@ -4,7 +4,9 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-/** {@code source} block of the AVRO message schema. */
+/**
+ * {@code source} block of the AVRO message schema.
+ */
 public class MessageSource implements Serializable {
 
     @Serial
@@ -16,10 +18,10 @@ public class MessageSource implements Serializable {
     private String srcSysConvId;
 
     /**
-     * @param channelName    {@code "chat"} / {@code "email"} / {@code "voice"}
-     * @param sourceName      the originating system's display name
-     * @param srcSysName      the originating system's identifier
-     * @param srcSysConvId    the originating system's conversation/thread identifier
+     * @param channelName  {@code "chat"} / {@code "email"} / {@code "voice"}
+     * @param sourceName   the originating system's display name
+     * @param srcSysName   the originating system's identifier
+     * @param srcSysConvId the originating system's conversation/thread identifier
      */
     public MessageSource(String channelName, String sourceName, String srcSysName, String srcSysConvId) {
         this.channelName = channelName;

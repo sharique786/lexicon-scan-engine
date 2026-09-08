@@ -44,19 +44,19 @@ public class LexiconHitDetailRow implements Serializable {
     private Instant createdTs;
 
     /**
-     * @param messageId                  the message this row is for
-     * @param processId                   the process run this row belongs to
-     * @param pipelineExecId              the pipeline execution this row belongs to
-     * @param evaluatedLexicons            one entry per Lexicon-category group that had at least
-     *                                    one surviving (post-suppression) match
-     * @param datasetPartitionValue      {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
-     *                                    dataset this message came from — see {@code ScanMessage} class Javadoc
-     * @param createdBy                    the writing job's identity
-     * @param createdTs                     write time, UTC
+     * @param messageId             the message this row is for
+     * @param processId             the process run this row belongs to
+     * @param pipelineExecId        the pipeline execution this row belongs to
+     * @param evaluatedLexicons     one entry per Lexicon-category group that had at least
+     *                              one surviving (post-suppression) match
+     * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                              dataset this message came from — see {@code ScanMessage} class Javadoc
+     * @param createdBy             the writing job's identity
+     * @param createdTs             write time, UTC
      */
     public LexiconHitDetailRow(String messageId, String processId, String pipelineExecId,
-                                List<EvaluatedLexicon> evaluatedLexicons, LocalDate datasetPartitionValue,
-                                String createdBy, Instant createdTs) {
+                               List<EvaluatedLexicon> evaluatedLexicons, LocalDate datasetPartitionValue,
+                               String createdBy, Instant createdTs) {
         this.messageId = messageId;
         this.processId = processId;
         this.pipelineExecId = pipelineExecId;
@@ -163,8 +163,8 @@ public class LexiconHitDetailRow implements Serializable {
         private List<TermDtl> termDtls;
 
         /**
-         * @param id          the group's {@code feature_id}
-         * @param termDtls     one entry per distinct term with a surviving match
+         * @param id       the group's {@code feature_id}
+         * @param termDtls one entry per distinct term with a surviving match
          */
         public EvaluatedLexicon(String id, List<TermDtl> termDtls) {
             this.id = id;
@@ -218,9 +218,9 @@ public class LexiconHitDetailRow implements Serializable {
             private String matchedText;
 
             /**
-             * @param termId          {@code <feature>::<index>}
-             * @param matchedText    the serialised {@link MatchedTextJson} for this term — see that
-             *                        class for the exact structure
+             * @param termId      {@code <feature>::<index>}
+             * @param matchedText the serialised {@link MatchedTextJson} for this term — see that
+             *                    class for the exact structure
              */
             public TermDtl(String termId, String matchedText) {
                 this.termId = termId;

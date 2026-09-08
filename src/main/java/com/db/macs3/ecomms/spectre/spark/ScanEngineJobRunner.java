@@ -100,12 +100,12 @@ public class ScanEngineJobRunner {
 
     /**
      * @param args the 7 {@code --key=value} Dataproc submit arguments Composer
-     *              now supplies — see {@link RuntimeArgs} class Javadoc for the
-     *              full list and a sample invocation. {@code --config_file_path}
-     *              is a GCS path to a {@link DataprocConfig} YAML file, read
-     *              here to obtain the {@link BqTableConfig} (its
-     *              {@code spectre.engine.bigquery} section) plus the Hyperscan/
-     *              message GCS bucket locations {@link #runPipeline} needs.
+     *             now supplies — see {@link RuntimeArgs} class Javadoc for the
+     *             full list and a sample invocation. {@code --config_file_path}
+     *             is a GCS path to a {@link DataprocConfig} YAML file, read
+     *             here to obtain the {@link BqTableConfig} (its
+     *             {@code spectre.engine.bigquery} section) plus the Hyperscan/
+     *             message GCS bucket locations {@link #runPipeline} needs.
      */
     public void run(String[] args) throws Exception {
         log.info("Stage [parse arguments/config]: starting");
@@ -212,7 +212,7 @@ public class ScanEngineJobRunner {
     }
 
     private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig,
-                              DataprocConfig dataprocConfig) {
+                             DataprocConfig dataprocConfig) {
 
         // 1. Resolve the Hyperscan base path — one GCS listing call total for this whole run.
         DataprocConfig.HyperscanGcsConfig hyperscanConfig = dataprocConfig.hyperscan();
@@ -331,7 +331,7 @@ public class ScanEngineJobRunner {
     // PipelineRecordAuditRowMapper — all in this package) avoids that failure mode structurally,
     // not just by careful lambda-capture discipline.
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                               String csvMirrorBucket, Dataset<MessageProcessingResult> results) {
+                              String csvMirrorBucket, Dataset<MessageProcessingResult> results) {
         Dataset<Row> summaryRows = results.mapPartitions(
                 new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA));
         OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
@@ -364,9 +364,11 @@ public class ScanEngineJobRunner {
         }
     }
 
-    /** Mirrors the restricted detail rows to a single CSV file on GCS. */
+    /**
+     * Mirrors the restricted detail rows to a single CSV file on GCS.
+     */
     private void writeRestrictedCsvMirror(RuntimeArgs runtimeArgs, String csvMirrorBucket,
-                                           Dataset<Row> restrictedDetailRows) {
+                                          Dataset<Row> restrictedDetailRows) {
         String csvPath = "gs://" + csvMirrorBucket + "/" + runtimeArgs.policyEngineId()
                 + "/" + runtimeArgs.processId() + "/restricted/" + runtimeArgs.pipelineExecId() + ".csv";
         // Spark's own CSV writer cannot represent nested array/struct columns directly — the
@@ -383,15 +385,17 @@ public class ScanEngineJobRunner {
     }
 
 
-    /** Placeholder for the NOT NULL Composer DAG / Dataproc script columns until real values are wired through. */
+    /**
+     * Placeholder for the NOT NULL Composer DAG / Dataproc script columns until real values are wired through.
+     */
     private static final String STAGE_AUDIT_UNKNOWN_STRING = "N/A";
 
     /**
      * @param errorCount INTEGER, per the delivered schema (was STRING in an earlier revision)
      */
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                                  Instant startTime, Instant endTime, String status,
-                                  Integer errorCount, String errorMessage) {
+                                 Instant startTime, Instant endTime, String status,
+                                 Integer errorCount, String errorMessage) {
         // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath: neither RuntimeArgs nor
         // DataprocConfig currently carries Composer DAG or Dataproc script name/path values, but the
         // delivered schema marks all four NOT NULL (see PipelineStageAuditRow class Javadoc) — a real

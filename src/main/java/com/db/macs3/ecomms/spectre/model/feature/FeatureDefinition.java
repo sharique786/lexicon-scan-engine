@@ -262,10 +262,10 @@ public class FeatureDefinition implements Serializable {
      * Parses a raw {@code feature_definition} JSON string.
      *
      * @throws FeatureDefinitionParseException if the JSON is malformed or
-     *                                           missing the required {@code body.lexiconName} value —
-     *                                           every feature this engine scans with MUST resolve to
-     *                                           a {@code .hdb} filename, so a definition without one
-     *                                           is treated as an error, not silently skipped
+     *                                         missing the required {@code body.lexiconName} value —
+     *                                         every feature this engine scans with MUST resolve to
+     *                                         a {@code .hdb} filename, so a definition without one
+     *                                         is treated as an error, not silently skipped
      */
     public static FeatureDefinition parse(String rawJson) {
         if (rawJson == null || rawJson.isBlank()) {
@@ -285,7 +285,9 @@ public class FeatureDefinition implements Serializable {
         return parsed;
     }
 
-    /** Thrown by {@link #parse} on malformed or incomplete {@code feature_definition} JSON. */
+    /**
+     * Thrown by {@link #parse} on malformed or incomplete {@code feature_definition} JSON.
+     */
     public static final class FeatureDefinitionParseException extends RuntimeException {
         public FeatureDefinitionParseException(String message) {
             super(message);

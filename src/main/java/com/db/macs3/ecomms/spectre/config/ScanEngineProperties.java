@@ -33,17 +33,25 @@ public class ScanEngineProperties {
 
     private static final String DEFAULT_STAGE_IDENTITY = "lexicon-scan-engine";
 
-    /** See class Javadoc — bound via {@code @Value}, not this class's own relaxed binding. */
+    /**
+     * See class Javadoc — bound via {@code @Value}, not this class's own relaxed binding.
+     */
     @Value("${SPECTRE_MAX_ATTACHMENT_SIZE_BYTES:#{null}}")
     private Long maxAttachmentSizeBytes;
 
-    /** Bounds each Spark partition's cached-bundle count (database + term metadata together) — see {@code HyperscanBundleLoader}. */
+    /**
+     * Bounds each Spark partition's cached-bundle count (database + term metadata together) — see {@code HyperscanBundleLoader}.
+     */
     private int maxCachedDatabasesPerPartition = 20;
 
-    /** The identity written to every output/audit row's {@code created_by} column. */
+    /**
+     * The identity written to every output/audit row's {@code created_by} column.
+     */
     private String createdBy = DEFAULT_STAGE_IDENTITY;
 
-    /** This job's {@code pipeline_stage_audit.stage_name} identity. */
+    /**
+     * This job's {@code pipeline_stage_audit.stage_name} identity.
+     */
     private String stageName = DEFAULT_STAGE_IDENTITY;
 
     public Long getMaxAttachmentSizeBytes() {

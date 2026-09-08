@@ -38,13 +38,13 @@ public class LexiconScanEngineApplication {
 
     /**
      * @param args the 7 {@code --key=value} Dataproc submit arguments Composer
-     *              supplies (see {@code RuntimeArgs} class Javadoc for the full
-     *              list, including {@code --config_file_path}, a GCS path to a
-     *              {@code DataprocConfig} YAML file). Spring Boot's own
-     *              argument parsing is bypassed for these (they look like
-     *              {@code --key=value} but are job arguments, not
-     *              {@code --spring.*} style properties) — they are read
-     *              directly from {@code args} after the Spring context starts.
+     *             supplies (see {@code RuntimeArgs} class Javadoc for the full
+     *             list, including {@code --config_file_path}, a GCS path to a
+     *             {@code DataprocConfig} YAML file). Spring Boot's own
+     *             argument parsing is bypassed for these (they look like
+     *             {@code --key=value} but are job arguments, not
+     *             {@code --spring.*} style properties) — they are read
+     *             directly from {@code args} after the Spring context starts.
      */
     public static void main(String[] args) throws Exception {
         ConfigurableApplicationContext context = SpringApplication.run(LexiconScanEngineApplication.class, args);

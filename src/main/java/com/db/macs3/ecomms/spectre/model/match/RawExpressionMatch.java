@@ -23,16 +23,16 @@ public class RawExpressionMatch implements Serializable {
     private List<AreaMatch> matches;
 
     /**
-     * @param expressionId        the raw Hyperscan expression id, as reported on a {@code Match} —
-     *                              may belong to a simple/decomposed term's own reportable id, or to
-     *                              ONE of an AND NOT term's required/excluded ids; the caller
-     *                              (with {@code TermExpressionMetadata}) determines which
-     * @param matchedPatternText   the pattern text read directly off the {@code Match}'s own
-     *                              {@code Expression} — reliable for a plain or COMBINATION
-     *                              expression's own text; not meaningful as a display value for an
-     *                              AND NOT term's excluded-side id (see {@code FeatureScanOrchestrator})
-     * @param matches               every occurrence found for this expression id within this one area —
-     *                              non-empty
+     * @param expressionId       the raw Hyperscan expression id, as reported on a {@code Match} —
+     *                           may belong to a simple/decomposed term's own reportable id, or to
+     *                           ONE of an AND NOT term's required/excluded ids; the caller
+     *                           (with {@code TermExpressionMetadata}) determines which
+     * @param matchedPatternText the pattern text read directly off the {@code Match}'s own
+     *                           {@code Expression} — reliable for a plain or COMBINATION
+     *                           expression's own text; not meaningful as a display value for an
+     *                           AND NOT term's excluded-side id (see {@code FeatureScanOrchestrator})
+     * @param matches            every occurrence found for this expression id within this one area —
+     *                           non-empty
      */
     public RawExpressionMatch(int expressionId, String matchedPatternText, List<AreaMatch> matches) {
         if (matches == null || matches.isEmpty()) {

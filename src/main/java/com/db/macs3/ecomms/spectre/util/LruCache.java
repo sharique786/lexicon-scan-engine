@@ -49,8 +49,8 @@ public final class LruCache<K, V> {
      * {@code loader} on a miss. If the cache is at capacity, the
      * least-recently-used entry is evicted first (see class Javadoc).
      *
-     * @param loader    called at most once per distinct {@code key} between evictions —
-     *                   NOT re-invoked on a cache hit
+     * @param loader called at most once per distinct {@code key} between evictions —
+     *               NOT re-invoked on a cache hit
      */
     public V computeIfAbsent(K key, Function<K, V> loader) {
         V cachedValue = delegate.get(key);

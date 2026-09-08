@@ -28,14 +28,14 @@ public class ModelConfigDtls implements Serializable {
     private Integer maxOutputToken;
 
     /**
-     * @param modelName        the invoked model's identifier
-     * @param temprature       sic — see class Javadoc
-     * @param topP             nucleus-sampling parameter
-     * @param thinkingBudget   reasoning/thinking token budget, when the model supports one
-     * @param maxOutputToken   max output tokens allowed for the call
+     * @param modelName      the invoked model's identifier
+     * @param temprature     sic — see class Javadoc
+     * @param topP           nucleus-sampling parameter
+     * @param thinkingBudget reasoning/thinking token budget, when the model supports one
+     * @param maxOutputToken max output tokens allowed for the call
      */
     public ModelConfigDtls(String modelName, Float temprature, Float topP,
-                            Integer thinkingBudget, Integer maxOutputToken) {
+                           Integer thinkingBudget, Integer maxOutputToken) {
         this.modelName = modelName;
         this.temprature = temprature;
         this.topP = topP;

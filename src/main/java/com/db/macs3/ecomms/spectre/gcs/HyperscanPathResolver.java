@@ -54,11 +54,14 @@ public final class HyperscanPathResolver {
      */
     @FunctionalInterface
     public interface GcsDirectoryLister {
-        /** @return child directory names directly under {@code prefix} (not recursive, not full paths) */
+        /**
+         * @return child directory names directly under {@code prefix} (not recursive, not full paths)
+         */
         List<String> listImmediateChildDirectories(String bucket, String prefix);
     }
 
-    private HyperscanPathResolver() {}
+    private HyperscanPathResolver() {
+    }
 
     /**
      * Resolves {@code gs://<hdbGcsBucket>/<hdbGcsPrefix>/<resolved-timestamp>_<policyEngineId>/lex-hyperscan/}.
@@ -67,12 +70,12 @@ public final class HyperscanPathResolver {
      * — the {@code YYYY-MM-DD_HH-MM-SS} format sorts lexicographically in
      * chronological order, so this picks the most recent compile.
      *
-     * @param hdbGcsBucket   {@code DataprocConfig.hyperscan().hdbGcsBucket()}
-     * @param hdbGcsPrefix   {@code DataprocConfig.hyperscan().hdbGcsPrefix()} — e.g. {@code "policy_test"}
+     * @param hdbGcsBucket {@code DataprocConfig.hyperscan().hdbGcsBucket()}
+     * @param hdbGcsPrefix {@code DataprocConfig.hyperscan().hdbGcsPrefix()} — e.g. {@code "policy_test"}
      * @throws HyperscanFileNotFoundException if no folder matches {@code *_<policyEngineId>}
      */
     public static String resolveBasePath(String hdbGcsBucket, String hdbGcsPrefix, String policyEngineId,
-                                          GcsDirectoryLister lister) {
+                                         GcsDirectoryLister lister) {
         String prefix = hdbGcsPrefix + "/";
         List<String> children = lister.listImmediateChildDirectories(hdbGcsBucket, prefix);
 
@@ -82,16 +85,16 @@ public final class HyperscanPathResolver {
                 .max(Comparator.naturalOrder())
                 .orElseThrow(() -> new HyperscanFileNotFoundException(
                         "No hyperscan compile folder found under gs://" + hdbGcsBucket + "/" + prefix
-                        + "matching '*" + suffix + "' — cannot resolve any .hdb file paths for policyEngineId="
-                        + policyEngineId + ". Checked " + children.size() + " candidate folder(s)."));
+                                + "matching '*" + suffix + "' — cannot resolve any .hdb file paths for policyEngineId="
+                                + policyEngineId + ". Checked " + children.size() + " candidate folder(s)."));
 
         return "gs://" + hdbGcsBucket + "/" + hdbGcsPrefix + "/" + resolvedFolder
                 + "/" + OUTPUT_SUBFOLDER + "/" + HDB_SUBFOLDER + "/";
     }
 
     /**
-     * @param basePath    from {@link #resolveBasePath} — must end with {@code /}
-     * @param feature      {@code feature_definition.body.lexiconName}, verbatim
+     * @param basePath from {@link #resolveBasePath} — must end with {@code /}
+     * @param feature  {@code feature_definition.body.lexiconName}, verbatim
      * @return the full zip bundle path for {@code feature} — see class Javadoc
      */
     public static String buildZipPath(String basePath, String feature) {
@@ -101,7 +104,9 @@ public final class HyperscanPathResolver {
         return basePath + TermIdBuilder.zipFileName(feature);
     }
 
-    /** Thrown when no hyperscan compile folder can be resolved for a policy engine id. */
+    /**
+     * Thrown when no hyperscan compile folder can be resolved for a policy engine id.
+     */
     public static final class HyperscanFileNotFoundException extends RuntimeException {
         public HyperscanFileNotFoundException(String message) {
             super(message);

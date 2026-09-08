@@ -1,9 +1,12 @@
 package com.db.macs3.ecomms.spectre.spark;
 
-/** Spark runtime/static config keys this job sets explicitly — see {@link ScanEngineJobRunner}. */
+/**
+ * Spark runtime/static config keys this job sets explicitly — see {@link ScanEngineJobRunner}.
+ */
 final class SparkConfigKeys {
 
-    private SparkConfigKeys() {}
+    private SparkConfigKeys() {
+    }
 
     static final String SERIALIZER = "spark.serializer";
     static final String ADAPTIVE_ENABLED = "spark.sql.adaptive.enabled";

@@ -26,26 +26,26 @@ public class GroupEvaluationResult implements Serializable {
     private boolean isHit;
 
     /**
-     * @param group                     the group this result is for
-     * @param memberMatches              every match found for each member row —
-     *                                    BEFORE disclaimer-overlap suppression (that
-     *                                    suppression is applied only to Lexicon-category
-     *                                    groups' matches, downstream in
-     *                                    {@code MessageEvaluationResult}); a member with no
-     *                                    matches is present with an empty list, not absent
-     * @param memberHit                  per-member hit status — true iff that member's
-     *                                    {@code featuresToApply} lexicon had at least one
-     *                                    match anywhere in scope ({@code minimumHits} is
-     *                                    informational only for this engine — any match at
-     *                                    all counts as a hit)
-     * @param isHit                       the group's OVERALL hit status: for a single-member
-     *                                    group, equal to that member's hit; for a multi-member
-     *                                    group, {@link FeatureGroup#getOperator()} applied across
-     *                                    every {@link #getMemberHit} value (OR = any true, AND =
-     *                                    all true)
+     * @param group         the group this result is for
+     * @param memberMatches every match found for each member row —
+     *                      BEFORE disclaimer-overlap suppression (that
+     *                      suppression is applied only to Lexicon-category
+     *                      groups' matches, downstream in
+     *                      {@code MessageEvaluationResult}); a member with no
+     *                      matches is present with an empty list, not absent
+     * @param memberHit     per-member hit status — true iff that member's
+     *                      {@code featuresToApply} lexicon had at least one
+     *                      match anywhere in scope ({@code minimumHits} is
+     *                      informational only for this engine — any match at
+     *                      all counts as a hit)
+     * @param isHit         the group's OVERALL hit status: for a single-member
+     *                      group, equal to that member's hit; for a multi-member
+     *                      group, {@link FeatureGroup#getOperator()} applied across
+     *                      every {@link #getMemberHit} value (OR = any true, AND =
+     *                      all true)
      */
     public GroupEvaluationResult(FeatureGroup group, Map<FeatureDecisionRow, List<TermMatchResult>> memberMatches,
-                                  Map<FeatureDecisionRow, Boolean> memberHit, boolean isHit) {
+                                 Map<FeatureDecisionRow, Boolean> memberHit, boolean isHit) {
         this.group = group;
         this.memberMatches = memberMatches;
         this.memberHit = memberHit;

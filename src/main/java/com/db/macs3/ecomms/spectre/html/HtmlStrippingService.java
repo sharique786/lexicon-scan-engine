@@ -51,10 +51,13 @@ import java.util.regex.Pattern;
  */
 public final class HtmlStrippingService {
 
-    /** Matches one HTML tag: {@code <}, anything but {@code >}, {@code >}. */
+    /**
+     * Matches one HTML tag: {@code <}, anything but {@code >}, {@code >}.
+     */
     private static final Pattern TAG_PATTERN = Pattern.compile("<[^>]*>");
 
-    private HtmlStrippingService() {}
+    private HtmlStrippingService() {
+    }
 
     public static final class StripResult implements Serializable {
         private final String strippedText;
@@ -63,11 +66,11 @@ public final class HtmlStrippingService {
         /**
          * Result of {@link #strip}.
          *
-         * @param strippedText    the text with every HTML-tag-or-whitespace run
-         *                         collapsed to exactly one space — what Hyperscan
-         *                         actually scans
-         * @param offsetMap        translates a stripped-text position back to its
-         *                         original-text position — see {@link OffsetMap}
+         * @param strippedText the text with every HTML-tag-or-whitespace run
+         *                     collapsed to exactly one space — what Hyperscan
+         *                     actually scans
+         * @param offsetMap    translates a stripped-text position back to its
+         *                     original-text position — see {@link OffsetMap}
          */
         public StripResult(String strippedText, OffsetMap offsetMap) {
             this.strippedText = strippedText;
@@ -135,7 +138,9 @@ public final class HtmlStrippingService {
             this.boundaries = boundaries;
         }
 
-        /** @return an offset map where every position maps to itself, built in O(1) — see class Javadoc. */
+        /**
+         * @return an offset map where every position maps to itself, built in O(1) — see class Javadoc.
+         */
         public static OffsetMap identity() {
             return IDENTITY;
         }

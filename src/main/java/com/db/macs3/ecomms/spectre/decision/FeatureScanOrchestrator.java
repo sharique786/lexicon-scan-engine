@@ -1,10 +1,10 @@
 package com.db.macs3.ecomms.spectre.decision;
 
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
+import com.db.macs3.ecomms.spectre.html.HtmlStrippingService;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanScanService;
 import com.db.macs3.ecomms.spectre.hyperscan.TermIdBuilder;
-import com.db.macs3.ecomms.spectre.html.HtmlStrippingService;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.model.match.AreaMatch;
 import com.db.macs3.ecomms.spectre.model.match.MatchArea;
@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  * <h2>Designed for reuse inside one {@code mapPartitions} call</h2>
  * <p>One instance is constructed per Spark partition (sharing that
  * partition's single {@link HyperscanBundleLoader}, and therefore its
- * cache), and its {@link #processMessage} is called once per message within
+ * cache), and its processMessage() is called once per message within
  * that partition. Nothing here performs a Spark action — every call operates
  * on exactly one message and returns plain, serialisable result objects,
  * safe to run entirely on an executor.
@@ -111,11 +111,11 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     private final Scanner scanner = new Scanner();
 
     /**
-     * @param bundleLoader              this partition's shared, cached zip-bundle loader — see
-     *                                   {@link HyperscanBundleLoader} class Javadoc
-     * @param maxAttachmentSizeBytes    null means unlimited — an attachment whose
-     *                                   {@code cleanText} UTF-8 byte length exceeds this is
-     *                                   skipped entirely (not scanned, not an error)
+     * @param bundleLoader           this partition's shared, cached zip-bundle loader — see
+     *                               {@link HyperscanBundleLoader} class Javadoc
+     * @param maxAttachmentSizeBytes null means unlimited — an attachment whose
+     *                               {@code cleanText} UTF-8 byte length exceeds this is
+     *                               skipped entirely (not scanned, not an error)
      */
     public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes) {
         this.bundleLoader = bundleLoader;
@@ -133,9 +133,11 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         return row -> scanRow(row, areaTexts);
     }
 
-    /** One area's text, stripped exactly once per message — see class Javadoc. */
+    /**
+     * One area's text, stripped exactly once per message — see class Javadoc.
+     */
     private record MessageAreaText(MatchArea area, String attachmentId, String originalText,
-                                    HtmlStrippingService.StripResult stripResult) {
+                                   HtmlStrippingService.StripResult stripResult) {
     }
 
     private List<MessageAreaText> precomputeAreaTexts(ScanMessage message) {
@@ -160,7 +162,9 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         return areaTexts;
     }
 
-    /** @return the attachment's area text, or null if it's oversized or has no scannable content. */
+    /**
+     * @return the attachment's area text, or null if it's oversized or has no scannable content.
+     */
     private MessageAreaText toEligibleAttachmentAreaText(MessageAttachment attachment) {
         if (!withinSizeLimit(attachment)) {
             return null;
@@ -174,7 +178,9 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                 HtmlStrippingService.identity(cleanText));
     }
 
-    /** @return the scope constant (see {@code BqColumns.FeatureDefinitionJson}) a given area is gated by. */
+    /**
+     * @return the scope constant (see {@code BqColumns.FeatureDefinitionJson}) a given area is gated by.
+     */
     private static String scopeFor(MatchArea area) {
         return switch (area) {
             case SUBJECT -> BqColumns.FeatureDefinitionJson.SCOPE_SUBJECT;
@@ -223,7 +229,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * than one area.
      */
     private record AreaScanContext(MatchArea area, String attachmentId, String originalText,
-                                    List<RawExpressionMatch> rawMatches) {
+                                   List<RawExpressionMatch> rawMatches) {
     }
 
     /**
@@ -266,8 +272,8 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * silently reintroduce a false-positive class of bug.
      */
     private List<TermMatchResult> resolveAndEvaluate(String feature, TermExpressionMetadata metadata,
-                                                       List<RawExpressionMatch> allRawMatches,
-                                                       List<AreaScanContext> areaScans) {
+                                                     List<RawExpressionMatch> allRawMatches,
+                                                     List<AreaScanContext> areaScans) {
         Map<Integer, List<AreaMatch>> matchesByExpressionId = new LinkedHashMap<>();
         Map<Integer, String> patternTextByExpressionId = new LinkedHashMap<>();
         for (RawExpressionMatch rawMatch : allRawMatches) {
@@ -298,7 +304,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * which is otherwise never discoverable via a matched expression id.
      */
     private Map<Integer, TermEntry> collectTermsToEvaluate(String feature, TermExpressionMetadata metadata,
-                                                             Set<Integer> matchedExpressionIds) {
+                                                           Set<Integer> matchedExpressionIds) {
         Map<Integer, TermEntry> termsToEvaluate = new LinkedHashMap<>();
         Set<Integer> unrecognisedIds = new LinkedHashSet<>();
         for (int expressionId : matchedExpressionIds) {
@@ -319,11 +325,13 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         return termsToEvaluate;
     }
 
-    /** @return this term's resolved match result, or null if the term did not produce any matches. */
+    /**
+     * @return this term's resolved match result, or null if the term did not produce any matches.
+     */
     private TermMatchResult buildTermMatchResult(String feature, TermEntry entry, Set<Integer> matchedExpressionIds,
-                                                  Map<Integer, List<AreaMatch>> matchesByExpressionId,
-                                                  Map<Integer, String> patternTextByExpressionId,
-                                                  List<AreaScanContext> areaScans) {
+                                                 Map<Integer, List<AreaMatch>> matchesByExpressionId,
+                                                 Map<Integer, String> patternTextByExpressionId,
+                                                 List<AreaScanContext> areaScans) {
         List<AreaMatch> combined = entry.requiresPerAreaEvaluation()
                 ? resolveAndEvaluatePerArea(feature, entry, matchedExpressionIds, areaScans)
                 : resolveAndEvaluateCrossArea(feature, entry, matchedExpressionIds, matchesByExpressionId);
@@ -340,16 +348,18 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         String termRegexPattern = entry.getTermRegexPattern() != null
                 ? entry.getTermRegexPattern()
                 : entry.hasCoarseExpressionId()
-                        ? patternTextByExpressionId.get(entry.getRequiredExpressionIds().get(0))
-                        : null;
+                ? patternTextByExpressionId.get(entry.getRequiredExpressionIds().getFirst())
+                : null;
 
         return new TermMatchResult(termId, termRegexPattern, combined);
     }
 
-    /** Today's cross-area, id-presence-only evaluation — unchanged for any term without a resolvedPatternTree. */
+    /**
+     * Today's cross-area, id-presence-only evaluation — unchanged for any term without a resolvedPatternTree.
+     */
     private List<AreaMatch> resolveAndEvaluateCrossArea(String feature, TermEntry entry,
-                                                          Set<Integer> matchedExpressionIds,
-                                                          Map<Integer, List<AreaMatch>> matchesByExpressionId) {
+                                                        Set<Integer> matchedExpressionIds,
+                                                        Map<Integer, List<AreaMatch>> matchesByExpressionId) {
         boolean requiredSatisfied = matchedExpressionIds.containsAll(entry.getRequiredExpressionIds());
         boolean excludedSatisfied = entry.isRequiresExclusionCheck()
                 && entry.getExcludedExpressionIds() != null
@@ -381,8 +391,8 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * pre-filter, both globally and per area — never as the actual condition.
      */
     private List<AreaMatch> resolveAndEvaluatePerArea(String feature, TermEntry entry,
-                                                        Set<Integer> matchedExpressionIds,
-                                                        List<AreaScanContext> areaScans) {
+                                                      Set<Integer> matchedExpressionIds,
+                                                      List<AreaScanContext> areaScans) {
         if (entry.hasCoarseExpressionId() && !matchedExpressionIds.containsAll(entry.getRequiredExpressionIds())) {
             return List.of(); // global pre-filter: at least one required leaf never matched anywhere at all
         }
@@ -401,7 +411,9 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         return combined;
     }
 
-    /** @return false if this area's text is empty, or (pre-filter) is missing a required leaf entirely. */
+    /**
+     * @return false if this area's text is empty, or (pre-filter) is missing a required leaf entirely.
+     */
     private static boolean canSatisfyCondition(TermEntry entry, AreaScanContext areaScan) {
         if (areaScan.originalText() == null || areaScan.originalText().isBlank()) {
             return false;

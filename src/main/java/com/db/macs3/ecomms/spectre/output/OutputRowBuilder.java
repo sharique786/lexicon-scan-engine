@@ -4,7 +4,6 @@ import com.db.macs3.ecomms.spectre.model.decision.GroupEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.model.match.AreaMatch;
-import com.db.macs3.ecomms.spectre.model.match.MatchArea;
 import com.db.macs3.ecomms.spectre.model.match.TermMatchResult;
 import com.db.macs3.ecomms.spectre.model.output.FeatureHitSummaryRow;
 import com.db.macs3.ecomms.spectre.model.output.LexiconHitDetailRow;
@@ -30,7 +29,8 @@ public final class OutputRowBuilder {
 
     private static final ObjectMapper MATCHED_TEXT_MAPPER = new ObjectMapper();
 
-    private OutputRowBuilder() {}
+    private OutputRowBuilder() {
+    }
 
     // ── lexicon-hit-summary ──────────────────────────────────────────────────
 
@@ -49,9 +49,9 @@ public final class OutputRowBuilder {
      * carry (see {@link #buildDetailRow}, which uses the suppressed set).
      */
     public static LexiconHitSummaryRow buildSummaryRow(String messageId, String processId, String pipelineExecId,
-                                                         LocalDate datasetPartitionValue,
-                                                         MessageEvaluationResult evaluation,
-                                                         String createdBy, Instant createdTs) {
+                                                       LocalDate datasetPartitionValue,
+                                                       MessageEvaluationResult evaluation,
+                                                       String createdBy, Instant createdTs) {
         List<LexiconHitSummaryRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
 
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
@@ -95,18 +95,18 @@ public final class OutputRowBuilder {
      * {@link MessageEvaluationResult finalLexiconMatchesByFeatureId()}).
      *
      * @return null when there is nothing to report — the message was
-     *          short-circuited by noise reduction, or every Lexicon-category
-     *          group had zero surviving matches after suppression. This table
-     *          carries genuine hit detail, not a broad per-message summary the
-     *          way {@code lexicon-hit-summary} is, so a message with nothing to
-     *          report simply has no row here — the caller should skip writing
-     *          when this returns null, not write a row with an empty
-     *          {@code evaluated_lexicons} array.
+     * short-circuited by noise reduction, or every Lexicon-category
+     * group had zero surviving matches after suppression. This table
+     * carries genuine hit detail, not a broad per-message summary the
+     * way {@code lexicon-hit-summary} is, so a message with nothing to
+     * report simply has no row here — the caller should skip writing
+     * when this returns null, not write a row with an empty
+     * {@code evaluated_lexicons} array.
      */
     public static LexiconHitDetailRow buildDetailRow(String messageId, String processId, String pipelineExecId,
-                                                       LocalDate datasetPartitionValue,
-                                                       MessageEvaluationResult evaluation,
-                                                       String createdBy, Instant createdTs) {
+                                                     LocalDate datasetPartitionValue,
+                                                     MessageEvaluationResult evaluation,
+                                                     String createdBy, Instant createdTs) {
         if (evaluation.getFinalLexiconMatchesByFeatureId().isEmpty()) {
             return null;
         }
@@ -140,7 +140,8 @@ public final class OutputRowBuilder {
             switch (areaMatch.getArea()) {
                 case MESSAGE_BODY -> msgText.add(hit);
                 case SUBJECT -> subject.add(hit);
-                case ATTACHMENT -> attachmentHits.computeIfAbsent(areaMatch.getAttachmentId(), unusedKey -> new ArrayList<>()).add(hit);
+                case ATTACHMENT ->
+                        attachmentHits.computeIfAbsent(areaMatch.getAttachmentId(), unusedKey -> new ArrayList<>()).add(hit);
             }
         }
 
@@ -171,15 +172,15 @@ public final class OutputRowBuilder {
      * with its own resolved {@code hitStatus} and, for multi-member groups,
      * a {@link FeatureHitSummaryRow.SubFeature} entry per member.
      *
-     * @param featureTaggingType    carried verbatim from the view's {@code feature_tagging_type}
-     *                              column — taken from the first evaluated group's first member,
-     *                              since it is a per-message (not per-group) property in practice
+     * @param featureTaggingType carried verbatim from the view's {@code feature_tagging_type}
+     *                           column — taken from the first evaluated group's first member,
+     *                           since it is a per-message (not per-group) property in practice
      */
     public static FeatureHitSummaryRow buildFeatureHitSummaryRow(String messageId, LocalDate datasetPartitionValue,
-                                                                   String pipelineExecId, String processId,
-                                                                   String featureTaggingType,
-                                                                   MessageEvaluationResult evaluation,
-                                                                   String createdBy, Instant createdTs) {
+                                                                 String pipelineExecId, String processId,
+                                                                 String featureTaggingType,
+                                                                 MessageEvaluationResult evaluation,
+                                                                 String createdBy, Instant createdTs) {
         List<FeatureHitSummaryRow.Feature> features = new ArrayList<>();
 
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
@@ -214,7 +215,7 @@ public final class OutputRowBuilder {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(
                     "featureId '" + featureId + "' is not a valid integer — feature-hit-summary.features.id "
-                    + "requires an INTEGER-typed feature_id from the view.", e);
+                            + "requires an INTEGER-typed feature_id from the view.", e);
         }
     }
 }

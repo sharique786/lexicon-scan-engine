@@ -32,7 +32,7 @@ import java.util.Objects;
  * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
  * schema verbatim (rechecked against the live table): {@code evaluated_lexicons}
  * precedes {@code dataset_partition_value}; {@link EvaluatedLexicon#getTotalTermsCount}/
- * {@link EvaluatedLexicon#getRegexHitCount}/{@link EvaluatedLexicon.TermDtl#getRegexMatchHitCount}
+ * {@link EvaluatedLexicon#getRegexHitCount}/{@link EvaluatedLexicon TermDtl#getRegexMatchHitCount}
  * are NULLABLE (hence boxed {@link Long}, not primitive {@code long}) even
  * though this engine always computes a real value for them today.
  */
@@ -50,18 +50,18 @@ public class LexiconHitSummaryRow implements Serializable {
     private Instant createdTs;
 
     /**
-     * @param messageId              the message this summary is for
-     * @param processId                the process run this row belongs to
-     * @param pipelineExecId           the pipeline execution this row belongs to
-     * @param evaluatedLexicons        one entry per evaluated feature group
-     * @param datasetPartitionValue    {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
-     *                                dataset this message came from — see {@code ScanMessage} class Javadoc
-     * @param createdBy                 the writing job's identity
-     * @param createdTs                  write time, UTC
+     * @param messageId             the message this summary is for
+     * @param processId             the process run this row belongs to
+     * @param pipelineExecId        the pipeline execution this row belongs to
+     * @param evaluatedLexicons     one entry per evaluated feature group
+     * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
+     *                              dataset this message came from — see {@code ScanMessage} class Javadoc
+     * @param createdBy             the writing job's identity
+     * @param createdTs             write time, UTC
      */
     public LexiconHitSummaryRow(String messageId, String processId, String pipelineExecId,
-                                 List<EvaluatedLexicon> evaluatedLexicons, LocalDate datasetPartitionValue,
-                                 String createdBy, Instant createdTs) {
+                                List<EvaluatedLexicon> evaluatedLexicons, LocalDate datasetPartitionValue,
+                                String createdBy, Instant createdTs) {
         this.messageId = messageId;
         this.processId = processId;
         this.pipelineExecId = pipelineExecId;
@@ -171,17 +171,17 @@ public class LexiconHitSummaryRow implements Serializable {
         private List<TermDtl> termDtls;
 
         /**
-         * @param id                 the group's {@code feature_id}
-         * @param name                the group's {@code feature_name}
-         * @param totalTermsCount    sum of every member's {@code feature_definition.body.totalTermsCount} —
-         *                            NULLABLE per the delivered schema
-         * @param regexHitCount       count of DISTINCT {@code term_id}s that matched across every
-         *                             member of this group (the length of {@link #getTermDtls}) —
-         *                             NULLABLE per the delivered schema
-         * @param termDtls             one entry per distinct term that matched, across every member
+         * @param id              the group's {@code feature_id}
+         * @param name            the group's {@code feature_name}
+         * @param totalTermsCount sum of every member's {@code feature_definition.body.totalTermsCount} —
+         *                        NULLABLE per the delivered schema
+         * @param regexHitCount   count of DISTINCT {@code term_id}s that matched across every
+         *                        member of this group (the length of {@link #getTermDtls}) —
+         *                        NULLABLE per the delivered schema
+         * @param termDtls        one entry per distinct term that matched, across every member
          */
         public EvaluatedLexicon(String id, String name, Long totalTermsCount, Long regexHitCount,
-                                 List<TermDtl> termDtls) {
+                                List<TermDtl> termDtls) {
             this.id = id;
             this.name = name;
             this.totalTermsCount = totalTermsCount;
@@ -267,15 +267,15 @@ public class LexiconHitSummaryRow implements Serializable {
         private Long regexMatchHitCount;
 
         /**
-         * @param termId                  {@code <feature>::<index>} — see {@code TermIdBuilder}
-         * @param termRegexPattern       the compiled Hyperscan pattern text, for auditability
-         * @param regexMatchHitCount     how many times this term's compiled Hyperscan pattern
-         *                                actually matched in the message text — every occurrence
-         *                                across every scanned area (subject, message body, each
-         *                                attachment), not just distinct areas. For example, a
-         *                                pattern matching 5 separate times across the message
-         *                                body records {@code 5} here. NULLABLE per the delivered
-         *                                schema.
+         * @param termId             {@code <feature>::<index>} — see {@code TermIdBuilder}
+         * @param termRegexPattern   the compiled Hyperscan pattern text, for auditability
+         * @param regexMatchHitCount how many times this term's compiled Hyperscan pattern
+         *                           actually matched in the message text — every occurrence
+         *                           across every scanned area (subject, message body, each
+         *                           attachment), not just distinct areas. For example, a
+         *                           pattern matching 5 separate times across the message
+         *                           body records {@code 5} here. NULLABLE per the delivered
+         *                           schema.
          */
         public TermDtl(String termId, String termRegexPattern, Long regexMatchHitCount) {
             this.termId = termId;

@@ -73,53 +73,53 @@ public class PipelineRecordAuditRow implements Serializable {
     private String rerunProcessId;
 
     /**
-     * @param processId                  the process run this record belongs to
-     * @param triggerType                 {@code "policy-alert-live"} / {@code "policy-alert-test"}
-     * @param evalTestId                  the evaluation/test run this record belongs to, when triggered
-     *                                     as part of one; null otherwise
-     * @param pipelineExecId               the pipeline execution this record belongs to
-     * @param recordId                      the message's {@code message_id}
-     * @param stageName                     identifies this job/stage
-     * @param msgInputFileNm                 the input AVRO file's name this message was read from
-     * @param msgInputFilePath                the input AVRO file's GCS path
-     * @param msgOutputFilePath                the output file's GCS path, when this record produced one
-     * @param msgOutputFileType                the output file's type/format
-     * @param msgOutputFileNm                   the output file's name
-     * @param status                             {@code SUCCESS} / {@code FAILED} — see {@code BqColumns.RecordStatus}
-     * @param returnCode                         an integer failure code (job-defined)
-     * @param errorMessage                        the specific failure detail for this message
-     * @param evaluatedRulesDtls                  every rule this record was evaluated against
-     * @param evaluatedRulesCnt                   {@code evaluatedRulesDtls}'s size, carried separately
-     * @param detectedRulesDtls                    every rule this record actually matched/triggered
-     * @param detectedRulesCnt                     {@code detectedRulesDtls}'s size, carried separately
-     * @param sysPromptEvalRulesTokens               token count for the system-prompt rule evaluation, when applicable
-     * @param inputTokens                            model input token count, when applicable
-     * @param outputTokens                           model output token count, when applicable
-     * @param thinkingTokens                         model thinking/reasoning token count, when applicable
-     * @param cachedTokens                           model cached-prompt token count, when applicable
-     * @param msgMatchTextTokens                     maps to BQ column {@code msg_attach_text_tokens} — see class Javadoc
-     * @param createdTs                              write time, UTC
-     * @param createdBy                              the writing job's identity
-     * @param additionInfo                           free-form context; maps to BQ column {@code addition_info} — see class Javadoc
-     * @param executionDate                          the logical run date this execution covers
-     * @param sentDate                               when this record was sent downstream, when applicable
-     * @param runDate                                the logical run date as delivered upstream (STRING, matching the delivered schema's column type)
-     * @param sourceName                             the upstream source system's identifier
-     * @param geminiRequestStartTime                 start time of the model request this record triggered, when applicable
-     * @param geminiRequestEndTime                   end time of the model request this record triggered, when applicable
-     * @param rerunProcessId                         the original {@code processId} being rerun, when this record is part of a rerun
+     * @param processId                the process run this record belongs to
+     * @param triggerType              {@code "policy-alert-live"} / {@code "policy-alert-test"}
+     * @param evalTestId               the evaluation/test run this record belongs to, when triggered
+     *                                 as part of one; null otherwise
+     * @param pipelineExecId           the pipeline execution this record belongs to
+     * @param recordId                 the message's {@code message_id}
+     * @param stageName                identifies this job/stage
+     * @param msgInputFileNm           the input AVRO file's name this message was read from
+     * @param msgInputFilePath         the input AVRO file's GCS path
+     * @param msgOutputFilePath        the output file's GCS path, when this record produced one
+     * @param msgOutputFileType        the output file's type/format
+     * @param msgOutputFileNm          the output file's name
+     * @param status                   {@code SUCCESS} / {@code FAILED} — see {@code BqColumns.RecordStatus}
+     * @param returnCode               an integer failure code (job-defined)
+     * @param errorMessage             the specific failure detail for this message
+     * @param evaluatedRulesDtls       every rule this record was evaluated against
+     * @param evaluatedRulesCnt        {@code evaluatedRulesDtls}'s size, carried separately
+     * @param detectedRulesDtls        every rule this record actually matched/triggered
+     * @param detectedRulesCnt         {@code detectedRulesDtls}'s size, carried separately
+     * @param sysPromptEvalRulesTokens token count for the system-prompt rule evaluation, when applicable
+     * @param inputTokens              model input token count, when applicable
+     * @param outputTokens             model output token count, when applicable
+     * @param thinkingTokens           model thinking/reasoning token count, when applicable
+     * @param cachedTokens             model cached-prompt token count, when applicable
+     * @param msgMatchTextTokens       maps to BQ column {@code msg_attach_text_tokens} — see class Javadoc
+     * @param createdTs                write time, UTC
+     * @param createdBy                the writing job's identity
+     * @param additionInfo             free-form context; maps to BQ column {@code addition_info} — see class Javadoc
+     * @param executionDate            the logical run date this execution covers
+     * @param sentDate                 when this record was sent downstream, when applicable
+     * @param runDate                  the logical run date as delivered upstream (STRING, matching the delivered schema's column type)
+     * @param sourceName               the upstream source system's identifier
+     * @param geminiRequestStartTime   start time of the model request this record triggered, when applicable
+     * @param geminiRequestEndTime     end time of the model request this record triggered, when applicable
+     * @param rerunProcessId           the original {@code processId} being rerun, when this record is part of a rerun
      */
     public PipelineRecordAuditRow(String processId, String triggerType, String evalTestId, String pipelineExecId,
-                                   String recordId, String stageName, String msgInputFileNm, String msgInputFilePath,
-                                   String msgOutputFilePath, String msgOutputFileType, String msgOutputFileNm,
-                                   String status, Integer returnCode, String errorMessage,
-                                   List<RuleDtlType> evaluatedRulesDtls, Integer evaluatedRulesCnt,
-                                   List<RuleDtlType> detectedRulesDtls, Integer detectedRulesCnt,
-                                   Integer sysPromptEvalRulesTokens, Integer inputTokens, Integer outputTokens,
-                                   Integer thinkingTokens, Integer cachedTokens, Integer msgMatchTextTokens,
-                                   Instant createdTs, String createdBy, String additionInfo, LocalDate executionDate,
-                                   Instant sentDate, String runDate, String sourceName, Instant geminiRequestStartTime,
-                                   Instant geminiRequestEndTime, String rerunProcessId) {
+                                  String recordId, String stageName, String msgInputFileNm, String msgInputFilePath,
+                                  String msgOutputFilePath, String msgOutputFileType, String msgOutputFileNm,
+                                  String status, Integer returnCode, String errorMessage,
+                                  List<RuleDtlType> evaluatedRulesDtls, Integer evaluatedRulesCnt,
+                                  List<RuleDtlType> detectedRulesDtls, Integer detectedRulesCnt,
+                                  Integer sysPromptEvalRulesTokens, Integer inputTokens, Integer outputTokens,
+                                  Integer thinkingTokens, Integer cachedTokens, Integer msgMatchTextTokens,
+                                  Instant createdTs, String createdBy, String additionInfo, LocalDate executionDate,
+                                  Instant sentDate, String runDate, String sourceName, Instant geminiRequestStartTime,
+                                  Instant geminiRequestEndTime, String rerunProcessId) {
         this.processId = processId;
         this.triggerType = triggerType;
         this.evalTestId = evalTestId;

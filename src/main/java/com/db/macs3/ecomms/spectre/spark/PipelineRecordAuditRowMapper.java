@@ -52,7 +52,7 @@ public final class PipelineRecordAuditRowMapper implements MapPartitionsFunction
     private final LocalDate executionDate;
 
     public PipelineRecordAuditRowMapper(RuntimeArgs runtimeArgs, String stageName, String createdBy,
-                                         LocalDate executionDate) {
+                                        LocalDate executionDate) {
         this.runtimeArgs = runtimeArgs;
         this.stageName = stageName;
         this.createdBy = createdBy;

@@ -19,12 +19,13 @@ public final class TermIdBuilder {
 
     private static final String SEPARATOR = "::";
 
-    private TermIdBuilder() {}
+    private TermIdBuilder() {
+    }
 
     /**
-     * @param feature    {@code feature_definition.body.lexiconName}, verbatim
-     * @param termIndex   the term's position/expression-index within {@code feature}'s
-     *                     compiled Hyperscan database
+     * @param feature   {@code feature_definition.body.lexiconName}, verbatim
+     * @param termIndex the term's position/expression-index within {@code feature}'s
+     *                  compiled Hyperscan database
      * @return {@code <feature>::<termIndex>}
      */
     public static String build(String feature, int termIndex) {
@@ -34,7 +35,9 @@ public final class TermIdBuilder {
         return feature + SEPARATOR + termIndex;
     }
 
-    /** @return the {@code .hdb} entry name expected INSIDE {@code feature}'s zip bundle — {@code <feature>.hdb}. */
+    /**
+     * @return the {@code .hdb} entry name expected INSIDE {@code feature}'s zip bundle — {@code <feature>.hdb}.
+     */
     public static String hdbFileName(String feature) {
         if (feature == null || feature.isBlank()) {
             throw new IllegalArgumentException("feature must not be null/blank when building an .hdb filename");
@@ -44,9 +47,9 @@ public final class TermIdBuilder {
 
     /**
      * @return the term-metadata JSON entry name expected INSIDE {@code feature}'s zip bundle —
-     *          {@code <feature>-compile-results.json}, matching the Lexicon Compile Service's
-     *          own naming convention (see {@code TermExpressionMetadata} class Javadoc for why
-     *          this is now needed, and {@code HyperscanBundleLoader} for how it is loaded).
+     * {@code <feature>-compile-results.json}, matching the Lexicon Compile Service's
+     * own naming convention (see {@code TermExpressionMetadata} class Javadoc for why
+     * this is now needed, and {@code HyperscanBundleLoader} for how it is loaded).
      */
     public static String termMetadataFileName(String feature) {
         if (feature == null || feature.isBlank()) {
@@ -57,9 +60,9 @@ public final class TermIdBuilder {
 
     /**
      * @return the GCS zip bundle filename for {@code feature} — {@code <feature>.zip} — the
-     *          single file the Lexicon Compile Service now writes per feature, containing BOTH
-     *          {@link #hdbFileName} and {@link #termMetadataFileName} as entries. See
-     *          {@code HyperscanPathResolver#buildZipPath}/{@code HyperscanBundleLoader}.
+     * single file the Lexicon Compile Service now writes per feature, containing BOTH
+     * {@link #hdbFileName} and {@link #termMetadataFileName} as entries. See
+     * {@code HyperscanPathResolver#buildZipPath}/{@code HyperscanBundleLoader}.
      */
     public static String zipFileName(String feature) {
         if (feature == null || feature.isBlank()) {

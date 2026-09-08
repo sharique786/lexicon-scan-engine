@@ -1,6 +1,5 @@
 package com.db.macs3.ecomms.spectre.decision;
 
-import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 
@@ -23,26 +22,27 @@ import java.util.Map;
  */
 public final class FeatureGroupingService {
 
-    private FeatureGroupingService() {}
+    private FeatureGroupingService() {
+    }
 
     /**
      * Groups {@code rowsForOneMessage} by {@code featureId} and orders the
      * resulting groups for decision-tree processing.
      *
      * @param rowsForOneMessage every {@link FeatureDecisionRow} for a single
-     *                           {@code messageId} — behaviour is undefined
-     *                           (rows will be silently mixed) if rows for more
-     *                           than one message are passed together
+     *                          {@code messageId} — behaviour is undefined
+     *                          (rows will be silently mixed) if rows for more
+     *                          than one message are passed together
      * @return groups in processing order: every {@code is_noise_reduction=Y}
-     *          group first (in the order their {@code featureId} first
-     *          appeared in {@code rowsForOneMessage}), then every
-     *          {@code disclaimer}-type group, then every remaining group
+     * group first (in the order their {@code featureId} first
+     * appeared in {@code rowsForOneMessage}), then every
+     * {@code disclaimer}-type group, then every remaining group
      * @throws IllegalArgumentException if a {@code featureId}'s member rows
-     *                                   disagree on {@code featureType} or
-     *                                   {@code isNoiseReduction} — this would
-     *                                   indicate a data-quality problem in the
-     *                                   view itself, surfaced loudly rather
-     *                                   than silently resolved by picking one
+     *                                  disagree on {@code featureType} or
+     *                                  {@code isNoiseReduction} — this would
+     *                                  indicate a data-quality problem in the
+     *                                  view itself, surfaced loudly rather
+     *                                  than silently resolved by picking one
      */
     public static List<FeatureGroup> groupAndOrder(List<FeatureDecisionRow> rowsForOneMessage) {
         if (rowsForOneMessage == null || rowsForOneMessage.isEmpty()) {
@@ -76,8 +76,8 @@ public final class FeatureGroupingService {
         if (members.size() > 1 && (operator == null || operator.isBlank())) {
             throw new IllegalArgumentException(
                     "featureId=" + featureId + " has " + members.size()
-                    + " member rows but no operator value — an operator is required to combine "
-                    + "multiple sub-features.");
+                            + " member rows but no operator value — an operator is required to combine "
+                            + "multiple sub-features.");
         }
 
         return new FeatureGroup(
@@ -94,17 +94,17 @@ public final class FeatureGroupingService {
             if (!sameValue(row.getFeatureType(), first.getFeatureType())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent featureType across its member rows: '"
-                        + first.getFeatureType() + "' vs '" + row.getFeatureType() + "'");
+                                + first.getFeatureType() + "' vs '" + row.getFeatureType() + "'");
             }
             if (row.isNoiseReduction() != first.isNoiseReduction()) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent is_noise_reduction across its member rows: '"
-                        + first.isNoiseReduction() + "' vs '" + row.isNoiseReduction() + "'");
+                                + first.isNoiseReduction() + "' vs '" + row.isNoiseReduction() + "'");
             }
             if (members.size() > 1 && !sameValue(row.getOperator(), first.getOperator())) {
                 throw new IllegalArgumentException(
                         "featureId=" + featureId + " has inconsistent operator across its member rows: '"
-                        + first.getOperator() + "' vs '" + row.getOperator() + "'");
+                                + first.getOperator() + "' vs '" + row.getOperator() + "'");
             }
         }
     }
@@ -113,7 +113,9 @@ public final class FeatureGroupingService {
         return left == null ? right == null : left.equals(right);
     }
 
-    /** Lower sorts first: 0 = NoiseReduction, 1 = Disclaimer, 2 = everything else (standard Lexicon/Composite). */
+    /**
+     * Lower sorts first: 0 = NoiseReduction, 1 = Disclaimer, 2 = everything else (standard Lexicon/Composite).
+     */
     private static int processingCategory(FeatureGroup group) {
         if (group.isNoiseReduction()) {
             return 0;

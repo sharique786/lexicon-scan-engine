@@ -17,8 +17,8 @@ public class MessageProcessing implements Serializable {
     private String runHour;
 
     /**
-     * @param runDate    {@code YYYY-MM-DD}-shaped partition date
-     * @param runHour     partition hour
+     * @param runDate {@code YYYY-MM-DD}-shaped partition date
+     * @param runHour partition hour
      */
     public MessageProcessing(String runDate, String runHour) {
         this.runDate = runDate;

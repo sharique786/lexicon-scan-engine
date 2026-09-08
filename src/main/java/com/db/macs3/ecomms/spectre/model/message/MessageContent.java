@@ -4,7 +4,9 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-/** {@code message.content} block of the AVRO message schema. */
+/**
+ * {@code message.content} block of the AVRO message schema.
+ */
 public class MessageContent implements Serializable {
 
     @Serial
@@ -16,13 +18,13 @@ public class MessageContent implements Serializable {
     private String cleanText;
 
     /**
-     * @param header      display header text, not scanned by this engine
-     * @param rawText      the message body, in its ORIGINAL form (may contain HTML) —
-     *                      the field this engine scans; see {@link ScanMessage} class Javadoc
-     * @param subject      the message subject — scanned when a feature's scope includes it
-     *                      (see {@code BqColumns.FeatureDefinitionJson.SCOPE_SUBJECT})
-     * @param cleanText    a pre-cleaned form of the body, carried through for parity with
-     *                      the source schema but not itself scanned — see {@link ScanMessage}
+     * @param header    display header text, not scanned by this engine
+     * @param rawText   the message body, in its ORIGINAL form (may contain HTML) —
+     *                  the field this engine scans; see {@link ScanMessage} class Javadoc
+     * @param subject   the message subject — scanned when a feature's scope includes it
+     *                  (see {@code BqColumns.FeatureDefinitionJson.SCOPE_SUBJECT})
+     * @param cleanText a pre-cleaned form of the body, carried through for parity with
+     *                  the source schema but not itself scanned — see {@link ScanMessage}
      */
     public MessageContent(String header, String rawText, String subject, String cleanText) {
         this.header = header;
