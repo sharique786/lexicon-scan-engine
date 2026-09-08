@@ -349,10 +349,12 @@ public class ScanEngineJobRunner {
                 new FeatureHitSummaryRowMapper(), Encoders.row(OutputTableWriter.FEATURE_HIT_SUMMARY_SCHEMA));
         OutputTableWriter.writeFeatureHitSummary(tableConfig, featureHitRows);
 
-        // Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/errorMessage/
-        // executionDate/createdBy/createdTs are populated here — every other field (rule evaluation
-        // details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to stages this
-        // job doesn't run and has no source data for — see PipelineRecordAuditRowMapper class Javadoc.
+        // Every record — success and failure alike — gets a row here, each with its own SUCCESS/FAILED
+        // status. Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/
+        // errorMessage/executionDate/createdBy/createdTs are populated here — every other field (rule
+        // evaluation details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to
+        // stages this job doesn't run and has no source data for — see PipelineRecordAuditRowMapper
+        // class Javadoc.
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         Dataset<Row> recordAuditRows = results.mapPartitions(
                 new PipelineRecordAuditRowMapper(runtimeArgs, properties.getStageName(), properties.getCreatedBy(), today),
@@ -380,12 +382,13 @@ public class ScanEngineJobRunner {
                 .csv(csvPath);
     }
 
-    /**
-     * @param errorCount INTEGER, per the delivered schema (was STRING in an earlier revision)
-     */
+
     /** Placeholder for the NOT NULL Composer DAG / Dataproc script columns until real values are wired through. */
     private static final String STAGE_AUDIT_UNKNOWN_STRING = "N/A";
 
+    /**
+     * @param errorCount INTEGER, per the delivered schema (was STRING in an earlier revision)
+     */
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                                   Instant startTime, Instant endTime, String status,
                                   Integer errorCount, String errorMessage) {

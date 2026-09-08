@@ -9,9 +9,10 @@ import java.util.Objects;
 
 /**
  * One row of {@code pipeline_record_audit} — a per-RECORD (per-message)
- * outcome, written for messages that failed processing. A per-message
- * processing failure does not fail the whole job — it is recorded here
- * instead.
+ * outcome, written for every message this job processes, whether it
+ * succeeded or failed. A per-message processing failure does not fail the
+ * whole job — it is recorded here, alongside every successful record, with
+ * its own {@code SUCCESS}/{@code FAILED} status instead.
  *
  * <p>Field name note: {@link #getPipelineExecId} maps to the BQ column
  * literally named {@code pipeline_exec_id} — see

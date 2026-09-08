@@ -15,9 +15,11 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Maps each errored {@link MessageProcessingResult} in a partition to a
- * {@code pipeline_record_audit} {@link Row}, skipping successful results —
- * see {@link ScanEngineJobRunner writeOutputs}, which runs this via
+ * Maps every {@link MessageProcessingResult} in a partition — success and
+ * failure alike — to a {@code pipeline_record_audit} {@link Row}, so the
+ * audit table reflects every record this job processed, each with its own
+ * {@code SUCCESS}/{@code FAILED} {@link com.db.macs3.ecomms.spectre.constants.BqColumns.RecordStatus}
+ * — see {@link ScanEngineJobRunner writeOutputs}, which runs this via
  * {@code Dataset.mapPartitions} directly on the cached results
  * {@code Dataset}, rather than via {@code JavaRDD.map}.
  *
@@ -27,6 +29,7 @@ import java.util.List;
  * timing, rerun/eval-test linkage) belongs to stages this job doesn't run
  * and has no source data for. The Integer count/token fields default to 0
  * rather than null since they have no real value to report here.
+ * {@code returnCode}/{@code errorMessage} are null on a successful result.
  *
  * <p>{@code runtimeArgs}/{@code stageName}/{@code createdBy}/{@code executionDate}
  * are held as fields here (all genuinely {@link java.io.Serializable}) rather
@@ -61,14 +64,14 @@ public final class PipelineRecordAuditRowMapper implements MapPartitionsFunction
         List<Row> rows = new ArrayList<>();
         while (input.hasNext()) {
             MessageProcessingResult result = input.next();
-            if (result.isError()) {
-                rows.add(OutputTableWriter.toRow(new PipelineRecordAuditRow(
-                        runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
-                        result.getMessageId(), stageName, null, null, null, null, null,
-                        BqColumns.RecordStatus.FAILED, 1, result.getErrorMessage(), null, 0, null, 0,
-                        0, 0, 0, 0, 0, 0,
-                        Instant.now(), createdBy, null, executionDate, null, null, null, null, null, null)));
-            }
+            boolean isError = result.isError();
+            rows.add(OutputTableWriter.toRow(new PipelineRecordAuditRow(
+                    runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
+                    result.getMessageId(), stageName, null, null, null, null, null,
+                    isError ? BqColumns.RecordStatus.FAILED : BqColumns.RecordStatus.SUCCESS,
+                    isError ? 1 : 0, result.getErrorMessage(), null, 0, null, 0,
+                    0, 0, 0, 0, 0, 0,
+                    Instant.now(), createdBy, null, executionDate, null, null, null, null, null, null)));
         }
         return rows.iterator();
     }
