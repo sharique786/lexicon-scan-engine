@@ -69,7 +69,7 @@ public final class FeatureGroupingService {
     }
 
     private static FeatureGroup buildGroup(String featureId, List<FeatureDecisionRow> members) {
-        FeatureDecisionRow first = members.get(0);
+        FeatureDecisionRow first = members.getFirst();
         validateConsistency(featureId, members, first);
 
         String operator = members.size() > 1 ? first.getOperator() : null;

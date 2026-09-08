@@ -20,7 +20,7 @@ class RuntimeArgsTest {
     void parsesRequirementJsonShape() throws Exception {
         RuntimeArgs ra = new ObjectMapper().readValue(SAMPLE_JSON, RuntimeArgs.class);
         assertThat(ra.datasetDetails()).hasSize(1);
-        assertThat(ra.datasetDetails().get(0).datasetId()).isEqualTo("ds1");
+        assertThat(ra.datasetDetails().getFirst().datasetId()).isEqualTo("ds1");
         assertThat(ra.featurePartitionValue()).isEqualTo("2026-08-16");
         assertThat(ra.pipelineExecId()).isEqualTo("pe-1");
         assertThat(ra.policyEngineId()).isEqualTo("101");
@@ -65,9 +65,9 @@ class RuntimeArgsTest {
         assertThat(runtimeArgs.featurePartitionValue()).isEqualTo("2026-07-16");
         assertThat(runtimeArgs.configFilePath()).isEqualTo("gs://bucket/tmp/dataproc-config.yml");
         assertThat(runtimeArgs.datasetDetails()).hasSize(1);
-        assertThat(runtimeArgs.datasetDetails().get(0).datasetId())
+        assertThat(runtimeArgs.datasetDetails().getFirst().datasetId())
                 .isEqualTo("006e3f06-045d-4f94-a9bd-780e603ef81f");
-        assertThat(runtimeArgs.datasetDetails().get(0).datasetPartitionValue()).isEqualTo("2026-06-18");
+        assertThat(runtimeArgs.datasetDetails().getFirst().datasetPartitionValue()).isEqualTo("2026-06-18");
         assertThat(runtimeArgs.isTest()).isTrue();
     }
 

@@ -145,7 +145,7 @@ public final class HyperscanScanService {
         // The pattern text comes directly from the match's own Expression object. Every match
         // sharing this expressionId carries the identical Expression instance, so reading it
         // from the first one is sufficient.
-        String matchedPatternText = matchesForExpression.get(0).getMatchedExpression().getExpression();
+        String matchedPatternText = matchesForExpression.getFirst().getMatchedExpression().getExpression();
 
         List<AreaMatch> areaMatches = new ArrayList<>(matchesForExpression.size());
         for (Match match : matchesForExpression) {

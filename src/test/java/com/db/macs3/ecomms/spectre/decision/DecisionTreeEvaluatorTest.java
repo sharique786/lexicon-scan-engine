@@ -118,7 +118,7 @@ class DecisionTreeEvaluatorTest {
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-103", groups, scanner);
 
             assertThat(flattenAll(result)).hasSize(1);
-            assertThat(flattenAll(result).get(0).getTermId()).isEqualTo("lex_std::2");
+            assertThat(flattenAll(result).getFirst().getTermId()).isEqualTo("lex_std::2");
             assertThat(result.getSuppressedLexiconMatchCount()).isEqualTo(1);
         }
 
@@ -155,8 +155,8 @@ class DecisionTreeEvaluatorTest {
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-105", groups, scanner);
 
             assertThat(result.getFinalLexiconMatchesByFeatureId()).containsKeys("1", "4");
-            assertThat(result.getFinalLexiconMatchesByFeatureId().get("1").get(0).getTermId()).isEqualTo("lex_a::1");
-            assertThat(result.getFinalLexiconMatchesByFeatureId().get("4").get(0).getTermId()).isEqualTo("lex_b::1");
+            assertThat(result.getFinalLexiconMatchesByFeatureId().get("1").getFirst().getTermId()).isEqualTo("lex_a::1");
+            assertThat(result.getFinalLexiconMatchesByFeatureId().get("4").getFirst().getTermId()).isEqualTo("lex_b::1");
         }
     }
 }

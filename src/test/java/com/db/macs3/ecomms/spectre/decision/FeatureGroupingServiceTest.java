@@ -48,8 +48,8 @@ class FeatureGroupingServiceTest {
         @Test
         @DisplayName("processing order is NoiseReduction first")
         void noiseReductionFirst() {
-            assertThat(groups.get(0).getFeatureId()).isEqualTo("3");
-            assertThat(groups.get(0).isNoiseReduction()).isTrue();
+            assertThat(groups.getFirst().getFeatureId()).isEqualTo("3");
+            assertThat(groups.getFirst().isNoiseReduction()).isTrue();
         }
 
         @Test
@@ -68,7 +68,7 @@ class FeatureGroupingServiceTest {
         @Test
         @DisplayName("the NoiseReduction group has both members and the OR operator")
         void noiseReductionGroupDetails() {
-            FeatureGroup nrGroup = groups.get(0);
+            FeatureGroup nrGroup = groups.getFirst();
             assertThat(nrGroup.getMembers()).hasSize(2);
             assertThat(nrGroup.getOperator()).isEqualTo("OR");
             assertThat(nrGroup.isMultiMember()).isTrue();
@@ -90,7 +90,7 @@ class FeatureGroupingServiceTest {
                 row("5", "NoiseReduction", "NotNewsLetter2", "lexicon", "lexicon_spam_2", true, "AND")
         ));
         assertThat(groups).hasSize(1);
-        assertThat(groups.get(0).getOperator()).isEqualTo("AND");
+        assertThat(groups.getFirst().getOperator()).isEqualTo("AND");
     }
 
     @Nested

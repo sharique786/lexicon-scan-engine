@@ -313,8 +313,16 @@ public class ScanEngineJobRunner {
         Dataset<Row> recordAuditRows = results.mapPartitions(
                 new PipelineRecordAuditRowMapper(runtimeArgs, properties.getStageName(), properties.getCreatedBy(), today),
                 Encoders.row(OutputTableWriter.PIPELINE_RECORD_AUDIT_SCHEMA));
-        if (!recordAuditRows.isEmpty()) {
-            OutputTableWriter.writePipelineRecordAudit(tableConfig, recordAuditRows);
+        // De-duplicated on the table's own natural key — record_id/stage_name/execution_date/
+        // pipeline_exec_id — rather than trusted to be unique by construction: the same message_id
+        // can legitimately appear more than once in `results` (e.g. the upstream view/message join
+        // producing more than one row for it), and PipelineRecordAuditRowMapper would otherwise emit
+        // one pipeline_record_audit row per occurrence instead of one per actual record.
+        Dataset<Row> dedupedRecordAuditRows = recordAuditRows.dropDuplicates(
+                BqColumns.PipelineRecordAudit.RECORD_ID, BqColumns.PipelineRecordAudit.STAGE_NAME,
+                BqColumns.PipelineRecordAudit.EXECUTION_DATE, BqColumns.PipelineRecordAudit.PIPELINE_EXEC_ID);
+        if (!dedupedRecordAuditRows.isEmpty()) {
+            OutputTableWriter.writePipelineRecordAudit(tableConfig, dedupedRecordAuditRows);
         }
     }
 
@@ -337,7 +345,6 @@ public class ScanEngineJobRunner {
                 .mode("overwrite")
                 .csv(csvPath);
     }
-
 
     /**
      * Placeholder for the NOT NULL Composer DAG / Dataproc script columns until real values are wired through.

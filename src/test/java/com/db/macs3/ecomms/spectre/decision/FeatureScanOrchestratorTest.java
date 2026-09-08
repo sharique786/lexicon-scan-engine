@@ -207,8 +207,8 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getMatches()).hasSize(1);
-            assertThat(results.get(0).getMatches().get(0).getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
         }
     }
 
@@ -233,11 +233,11 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(allScopeRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getMatches()).hasSize(3);
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::7");
+            assertThat(results.getFirst().getMatches()).hasSize(3);
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::7");
 
             Set<MatchArea> areas = new HashSet<>();
-            for (var matcher : results.get(0).getMatches()) areas.add(matcher.getArea());
+            for (var matcher : results.getFirst().getMatches()) areas.add(matcher.getArea());
             assertThat(areas).hasSize(3);
         }
     }
@@ -289,8 +289,8 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermRegexPattern()).isEqualTo("bomb");
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::1");
+            assertThat(results.getFirst().getTermRegexPattern()).isEqualTo("bomb");
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::1");
         }
     }
 
@@ -316,7 +316,7 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::47");
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::47");
         }
     }
 
@@ -373,10 +373,10 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermId())
+            assertThat(results.getFirst().getTermId())
                     .as("must be the term's OWN number (3), never a raw auxiliary id like 5 or 6")
                     .isEqualTo(feature + "::3");
-            assertThat(results.get(0).getMatches().get(0).getSpan().getMatchedText()).isEqualTo("insider");
+            assertThat(results.getFirst().getMatches().getFirst().getSpan().getMatchedText()).isEqualTo("insider");
         }
     }
 
@@ -413,8 +413,8 @@ class FeatureScanOrchestratorTest {
                     List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(fullMessage).scan(decisionRow);
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::9");
-            assertThat(results.get(0).getMatches()).hasSize(3); // one highlight per required leaf
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::9");
+            assertThat(results.getFirst().getMatches()).hasSize(3); // one highlight per required leaf
         }
     }
 
@@ -443,10 +443,10 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermRegexPattern())
+            assertThat(results.getFirst().getTermRegexPattern())
                     .as("must NOT be the raw, unreadable combination formula")
                     .doesNotContain("(10&11&12)");
-            assertThat(results.get(0).getTermRegexPattern()).contains("alpha");
+            assertThat(results.getFirst().getTermRegexPattern()).contains("alpha");
         }
     }
 
@@ -511,9 +511,9 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(nearMessage).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::1");
-            assertThat(results.get(0).getMatches()).hasSize(1);
-            assertThat(results.get(0).getMatches().get(0).getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::1");
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
 
             // Both leaves present -> native COMBINATION still fires -> but more than 5 words apart ->
             // the real per-area regex distance check must reject it.
@@ -551,7 +551,7 @@ class FeatureScanOrchestratorTest {
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::6");
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::6");
         }
     }
 
@@ -587,7 +587,7 @@ class FeatureScanOrchestratorTest {
                     List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(onlyRequired).scan(decisionRow);
             assertThat(results).hasSize(1);
-            assertThat(results.get(0).getTermId()).isEqualTo(feature + "::7");
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::7");
 
             ScanMessage both = new ScanMessage("msg-103",
                     new MessageSource("chat", "src", "sys", "conv-1"),

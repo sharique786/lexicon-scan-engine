@@ -148,6 +148,7 @@ public final class OutputRowBuilder {
                 case SUBJECT -> subject.add(hit);
                 case ATTACHMENT ->
                         attachmentHits.computeIfAbsent(areaMatch.getAttachmentId(), unusedKey -> new ArrayList<>()).add(hit);
+                default -> throw new IllegalArgumentException("Unexpected area: " + areaMatch.getArea());
             }
         }
 

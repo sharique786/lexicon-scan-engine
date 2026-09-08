@@ -324,7 +324,7 @@ class TermExpressionMetadataTest {
             assertThat(meta.termByAnyExpressionId(anythingUnused())).isNull();
             assertThat(meta.termCount()).isEqualTo(1);
             assertThat(meta.mandatoryPerAreaTerms()).hasSize(1);
-            TermEntry entry = meta.mandatoryPerAreaTerms().get(0);
+            TermEntry entry = meta.mandatoryPerAreaTerms().getFirst();
             assertThat(entry.getTermNumber()).isEqualTo(8);
             assertThat(entry.hasCoarseExpressionId()).isFalse();
             assertThat(entry.requiresPerAreaEvaluation()).isTrue();

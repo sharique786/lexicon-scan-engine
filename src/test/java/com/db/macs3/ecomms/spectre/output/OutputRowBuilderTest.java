@@ -5,10 +5,11 @@ import com.db.macs3.ecomms.spectre.decision.FeatureGroupingService;
 import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.match.AreaMatch;
-import com.db.macs3.ecomms.spectre.model.match.MatchArea;
 import com.db.macs3.ecomms.spectre.model.match.MatchSpan;
 import com.db.macs3.ecomms.spectre.model.match.TermMatchResult;
-import com.db.macs3.ecomms.spectre.model.output.*;
+import com.db.macs3.ecomms.spectre.model.output.FeatureHitSummaryRow;
+import com.db.macs3.ecomms.spectre.model.output.LexiconHitDetailRow;
+import com.db.macs3.ecomms.spectre.model.output.LexiconHitSummaryRow;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,7 +41,9 @@ class OutputRowBuilderTest {
                 + ",\"minimumHits\":" + minHits + ",\"scope\":[\"Message Body\"]}}";
     }
 
-    /** Builds a realistic disclaimer(suppresses one match) + lexicon(one survives) evaluation. */
+    /**
+     * Builds a realistic disclaimer(suppresses one match) + lexicon(one survives) evaluation.
+     */
     private static MessageEvaluationResult buildRealisticEvaluation() {
         List<FeatureDecisionRow> rows = List.of(
                 row("2", "disclaimer", "std_disclaimer-1", defJson("std_disclaimer-1", 5, 1)),
@@ -75,7 +78,7 @@ class OutputRowBuilderTest {
 
         @Test
         @DisplayName("aggregates totalTermsCount and regexHitCount for the disclaimer group, and populates " +
-                     "regexMatchHitCount as the raw per-term match occurrence count")
+                "regexMatchHitCount as the raw per-term match occurrence count")
         void aggregatesDisclaimerCounts() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
@@ -83,7 +86,7 @@ class OutputRowBuilderTest {
                     .filter(e -> e.getId().equals("2")).findFirst().orElseThrow();
             assertThat(disclaimerEntry.getTotalTermsCount()).isEqualTo(5);
             assertThat(disclaimerEntry.getRegexHitCount()).isEqualTo(1);
-            assertThat(disclaimerEntry.getTermDtls().get(0).getRegexMatchHitCount()).isEqualTo(1L);
+            assertThat(disclaimerEntry.getTermDtls().getFirst().getRegexMatchHitCount()).isEqualTo(1L);
         }
 
         @Test
@@ -94,6 +97,21 @@ class OutputRowBuilderTest {
             var lexiconEntry = row.getEvaluatedLexicons().stream()
                     .filter(e -> e.getId().equals("1")).findFirst().orElseThrow();
             assertThat(lexiconEntry.getRegexHitCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("omits a group that was evaluated but matched nothing — regex_hit_count would be zero")
+        void omitsZeroHitGroups() {
+            List<FeatureDecisionRow> rows = List.of(
+                    row("1", "lexicon", "lexicon_market_cond-3", defJson("lexicon_market_cond-3", 8, 2)));
+            List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(rows);
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> List.of(); // no matches at all
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-999", groups, scanner);
+
+            LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
+                    "msg-999", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons()).isEmpty();
         }
 
         @Test
@@ -119,7 +137,7 @@ class OutputRowBuilderTest {
             LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
 
-            var termDtl = summaryRow.getEvaluatedLexicons().get(0).getTermDtls().get(0);
+            var termDtl = summaryRow.getEvaluatedLexicons().getFirst().getTermDtls().getFirst();
             assertThat(termDtl.getTermId()).isEqualTo("lexicon_market_cond-2::1");
             assertThat(termDtl.getRegexMatchHitCount()).isEqualTo(5L);
         }
@@ -143,8 +161,8 @@ class OutputRowBuilderTest {
         void suppressedTermIsGone() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
-            assertThat(row.getEvaluatedLexicons().get(0).getTermDtls()).hasSize(1);
-            assertThat(row.getEvaluatedLexicons().get(0).getTermDtls().get(0).getTermId())
+            assertThat(row.getEvaluatedLexicons().getFirst().getTermDtls()).hasSize(1);
+            assertThat(row.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getTermId())
                     .isEqualTo("lexicon_market_cond-1::2");
         }
 
@@ -153,7 +171,7 @@ class OutputRowBuilderTest {
         void matchedTextJsonIsCorrect() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
-            String matchedTextJson = row.getEvaluatedLexicons().get(0).getTermDtls().get(0).getMatchedText();
+            String matchedTextJson = row.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getMatchedText();
             assertThat(matchedTextJson).contains("hit_details_hs");
             assertThat(matchedTextJson).contains("\"bomb\"");
             assertThat(matchedTextJson).contains("\"start\":50");
