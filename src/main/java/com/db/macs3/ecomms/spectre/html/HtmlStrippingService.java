@@ -1,0 +1,252 @@
+package com.db.macs3.ecomms.spectre.html;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Strips HTML markup from message text before it is scanned by Hyperscan,
+ * while preserving the ability to report a match's position against the
+ * ORIGINAL (un-stripped) text.
+ *
+ * <h2>Why this exists</h2>
+ * <p>A term like {@code Enjoy(?:\s+\S+){0,2}\s+Happy} requires whitespace
+ * between "Enjoy" and "Happy". A message body such as
+ * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} would never match that
+ * pattern as written, because the two words are separated by HTML markup,
+ * not whitespace. This service replaces every contiguous run of HTML tags
+ * and/or literal whitespace with exactly ONE space, so
+ * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} becomes
+ * {@code " Enjoy Happy Birthday "}, which the pattern matches correctly.
+ *
+ * <h2>Original-text coordinates, not stripped-text coordinates</h2>
+ * <p>Hyperscan reports a match's position in terms of the STRIPPED text
+ * (since that is what it scanned). {@link #strip} also returns an
+ * {@link OffsetMap} that translates any stripped-text character position
+ * back to where it sits in the ORIGINAL text — this is what lets a caller
+ * report {@code startCharIndex}/{@code endCharIndex} against text the
+ * analyst/downstream consumer actually recognises, HTML and all, rather
+ * than an internal, invisible-to-them stripped form.
+ *
+ * <p><b>{@code startCharIndex}/{@code endCharIndex} mark a SPAN of the
+ * original text, not necessarily an exact substring equal to
+ * {@code matchedText}.</b> When HTML tags fall between two matched words,
+ * the original-text span between {@code startCharIndex} and
+ * {@code endCharIndex} contains those tags too — {@code matchedText} itself
+ * is always the clean, stripped-text form of what actually matched. For
+ * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} matched against
+ * {@code Enjoy(?:\s+\S+){0,2}\s+Happy}, the result is
+ * {@code {startCharIndex: 3, endCharIndex: 21, matchedText: "Enjoy Happy"}} —
+ * {@code original.substring(3, 21)} is {@code "Enjoy</p>\n<p>Happy"}, which
+ * spans the same real-world content as {@code matchedText} once its HTML is
+ * mentally stripped back out, not a literal character-for-character match.
+ *
+ * <h2>When stripping applies</h2>
+ * <p>Applied unconditionally to every message body before scanning —
+ * {@link #strip} is cheap and idempotent on HTML-free text (no tags/no
+ * multi-character whitespace runs means the "stripped" text is
+ * character-for-character identical to the original, and the offset map is
+ * simply the identity mapping), so there is no need for a separate
+ * HTML-detection pre-check.
+ */
+public final class HtmlStrippingService {
+
+    /**
+     * Matches one HTML tag: {@code <}, anything but {@code >}, {@code >}.
+     */
+    private static final Pattern TAG_PATTERN = Pattern.compile("<[^>]*>");
+
+    private HtmlStrippingService() {
+    }
+
+    public static final class StripResult implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private final String strippedText;
+        private final OffsetMap offsetMap;
+
+        /**
+         * Result of {@link #strip}.
+         *
+         * @param strippedText the text with every HTML-tag-or-whitespace run
+         *                     collapsed to exactly one space — what Hyperscan
+         *                     actually scans
+         * @param offsetMap    translates a stripped-text position back to its
+         *                     original-text position — see {@link OffsetMap}
+         */
+        public StripResult(String strippedText, OffsetMap offsetMap) {
+            this.strippedText = strippedText;
+            this.offsetMap = offsetMap;
+        }
+
+        public String strippedText() {
+            return strippedText;
+        }
+
+        public OffsetMap offsetMap() {
+            return offsetMap;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || this.getClass() != obj.getClass()) {
+                return false;
+            }
+            StripResult other = (StripResult) obj;
+            return java.util.Objects.equals(strippedText, other.strippedText)
+                    && java.util.Objects.equals(offsetMap, other.offsetMap);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(strippedText, offsetMap);
+        }
+
+        @Override
+        public String toString() {
+            return "StripResult[strippedText=" + strippedText + ", offsetMap=" + offsetMap + "]";
+        }
+    }
+
+    /**
+     * Maps a position in stripped text back to the corresponding position in
+     * the original (pre-stripping) text.
+     *
+     * <p>Built as a {@code strippedLength + 1}-entry array — one entry per
+     * possible stripped-text BOUNDARY (before each character, plus one for
+     * the end of the string) rather than per character, so that both a
+     * match's start (inclusive) and end (exclusive) position can be mapped
+     * with the same lookup and no special-casing at the end of the string.
+     *
+     * <p><b>Except for {@link #identity()}</b> — a null {@code boundaries}
+     * array means "stripped position == original position," computed in O(1)
+     * with no backing array at all. This exists specifically for content
+     * that {@link #strip} would leave byte-for-byte unchanged anyway (e.g.
+     * attachment {@code cleanText}, already HTML-free by the time it reaches
+     * this engine — see {@code MessageAttachment} class Javadoc): running the
+     * full tag/whitespace-scanning algorithm AND allocating an {@code int[]}
+     * sized to the text's length is pure waste on text that can be
+     * megabytes long, for a transform guaranteed to be a no-op.
+     */
+    public static final class OffsetMap implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private static final OffsetMap IDENTITY = new OffsetMap(null);
+
+        private final int[] boundaries;
+
+        private OffsetMap(int[] boundaries) {
+            this.boundaries = boundaries;
+        }
+
+        /**
+         * @return an offset map where every position maps to itself, built in O(1) — see class Javadoc.
+         */
+        public static OffsetMap identity() {
+            return IDENTITY;
+        }
+
+        /**
+         * @param strippedPosition a boundary position in the stripped text, {@code 0..strippedLength} inclusive
+         * @return the corresponding boundary position in the original text
+         */
+        public int toOriginal(int strippedPosition) {
+            if (boundaries == null) {
+                if (strippedPosition < 0) {
+                    throw new IndexOutOfBoundsException("strippedPosition " + strippedPosition + " must be >= 0");
+                }
+                return strippedPosition;
+            }
+            if (strippedPosition < 0 || strippedPosition >= boundaries.length) {
+                throw new IndexOutOfBoundsException(
+                        "strippedPosition " + strippedPosition + " out of range [0, " + (boundaries.length - 1) + "]");
+            }
+            return boundaries[strippedPosition];
+        }
+    }
+
+    /**
+     * A {@link StripResult} for text KNOWN to need no stripping at all — see
+     * {@link OffsetMap#identity()}. Skips the whole tag/whitespace-scanning
+     * pass and its {@code int[]} allocation entirely, unlike calling
+     * {@link #strip} on already-clean text (which would produce an
+     * equivalent result, just via O(n) work and O(n) memory it doesn't need
+     * to spend). {@code null} input yields an empty result, matching
+     * {@link #strip}'s own null handling.
+     */
+    public static StripResult identity(String text) {
+        return new StripResult(text == null ? "" : text, OffsetMap.identity());
+    }
+
+    /**
+     * Strips HTML from {@code originalText} and builds the offset map back
+     * to it. Never returns null; an empty/null input yields an empty result.
+     */
+    public static StripResult strip(String originalText) {
+        if (originalText == null || originalText.isEmpty()) {
+            return new StripResult("", new OffsetMap(new int[]{0}));
+        }
+
+        StringBuilder stripped = new StringBuilder(originalText.length());
+        // One boundary entry per emitted stripped character, plus a final entry
+        // for the end-of-string boundary — appended after the loop.
+        int[] boundariesBuf = new int[originalText.length() + 1];
+        int strippedLen = 0;
+
+        int originalIndex = 0;
+        int textLength = originalText.length();
+        Matcher tagMatcher = TAG_PATTERN.matcher(originalText);
+
+        while (originalIndex < textLength) {
+            char currentChar = originalText.charAt(originalIndex);
+            boolean isTagStart = currentChar == '<' && tagMatcher.region(originalIndex, textLength).lookingAt();
+
+            if (isTagStart || Character.isWhitespace(currentChar)) {
+                // Consume this whole contiguous run of tags and/or whitespace as ONE unit.
+                int runStart = originalIndex;
+                int scanIndex = consumeTagOrWhitespaceRun(originalText, originalIndex, textLength, tagMatcher);
+                stripped.append(' ');
+                boundariesBuf[strippedLen] = runStart;
+                strippedLen++;
+                originalIndex = scanIndex;
+            } else {
+                stripped.append(currentChar);
+                boundariesBuf[strippedLen] = originalIndex;
+                strippedLen++;
+                originalIndex++;
+            }
+        }
+        // Final boundary: the end of the original text (one past its last character).
+        boundariesBuf[strippedLen] = textLength;
+
+        int[] boundaries = new int[strippedLen + 1];
+        System.arraycopy(boundariesBuf, 0, boundaries, 0, strippedLen + 1);
+
+        return new StripResult(stripped.toString(), new OffsetMap(boundaries));
+    }
+
+    /**
+     * @return the index one past the end of the contiguous run of HTML tags and/or whitespace
+     *         starting at {@code start}.
+     */
+    private static int consumeTagOrWhitespaceRun(String originalText, int start, int textLength, Matcher tagMatcher) {
+        int scanIndex = start;
+        while (scanIndex < textLength) {
+            char scanChar = originalText.charAt(scanIndex);
+            if (scanChar == '<' && tagMatcher.region(scanIndex, textLength).lookingAt()) {
+                scanIndex = tagMatcher.end();
+            } else if (Character.isWhitespace(scanChar)) {
+                scanIndex++;
+            } else {
+                break;
+            }
+        }
+        return scanIndex;
+    }
+}

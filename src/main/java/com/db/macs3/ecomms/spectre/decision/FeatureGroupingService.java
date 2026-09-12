@@ -1,0 +1,128 @@
+package com.db.macs3.ecomms.spectre.decision;
+
+import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
+import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Groups one message's {@link FeatureDecisionRow}s (all sharing one
+ * {@code messageId}) by {@code featureId} into {@link FeatureGroup}s, in the
+ * order {@code DecisionTreeEvaluator} must process them: NoiseReduction
+ * groups first, then Disclaimer, then everything else.
+ *
+ * <p>This class is pure/Spark-agnostic — it operates on plain Java lists, so
+ * it can be unit tested directly and called identically whether the caller
+ * obtained the per-message row list via a Spark {@code groupByKey}/
+ * {@code cogroup} or by any other means.
+ */
+public final class FeatureGroupingService {
+
+    private FeatureGroupingService() {
+    }
+
+    /**
+     * Groups {@code rowsForOneMessage} by {@code featureId} and orders the
+     * resulting groups for decision-tree processing.
+     *
+     * @param rowsForOneMessage every {@link FeatureDecisionRow} for a single
+     *                          {@code messageId} — behaviour is undefined
+     *                          (rows will be silently mixed) if rows for more
+     *                          than one message are passed together
+     * @return groups in processing order: every {@code is_noise_reduction=Y}
+     * group first (in the order their {@code featureId} first
+     * appeared in {@code rowsForOneMessage}), then every
+     * {@code disclaimer}-type group, then every remaining group
+     * @throws IllegalArgumentException if a {@code featureId}'s member rows
+     *                                  disagree on {@code featureType} or
+     *                                  {@code isNoiseReduction} — this would
+     *                                  indicate a data-quality problem in the
+     *                                  view itself, surfaced loudly rather
+     *                                  than silently resolved by picking one
+     */
+    public static List<FeatureGroup> groupAndOrder(List<FeatureDecisionRow> rowsForOneMessage) {
+        if (rowsForOneMessage == null || rowsForOneMessage.isEmpty()) {
+            return List.of();
+        }
+
+        // LinkedHashMap preserves first-seen featureId order, which is what determines
+        // relative ordering WITHIN a processing category below. The view's own feature_id
+        // column is LONG (see FeatureDecisionRow class Javadoc); converted to String here,
+        // the one place it's needed — FeatureGroup#getFeatureId() matches the delivered
+        // lexicon-hit-summary/-detail schema's evaluated_lexicons.id, which is STRING.
+        Map<String, List<FeatureDecisionRow>> byFeatureId = new LinkedHashMap<>();
+        for (FeatureDecisionRow row : rowsForOneMessage) {
+            byFeatureId.computeIfAbsent(String.valueOf(row.getFeatureId()), k -> new ArrayList<>()).add(row);
+        }
+
+        List<FeatureGroup> groups = new ArrayList<>(byFeatureId.size());
+        for (Map.Entry<String, List<FeatureDecisionRow>> entry : byFeatureId.entrySet()) {
+            groups.add(buildGroup(entry.getKey(), entry.getValue()));
+        }
+
+        groups.sort(Comparator.comparingInt(FeatureGroupingService::processingCategory));
+        return groups;
+    }
+
+    private static FeatureGroup buildGroup(String featureId, List<FeatureDecisionRow> members) {
+        FeatureDecisionRow first = members.getFirst();
+        validateConsistency(featureId, members, first);
+
+        String operator = members.size() > 1 ? first.getOperator() : null;
+        if (members.size() > 1 && (operator == null || operator.isBlank())) {
+            throw new IllegalArgumentException(
+                    "featureId=" + featureId + " has " + members.size()
+                            + " member rows but no operator value — an operator is required to combine "
+                            + "multiple sub-features.");
+        }
+
+        return new FeatureGroup(
+                featureId,
+                first.getFeatureName(),
+                first.getFeatureType(),
+                first.isNoiseReduction(),
+                operator,
+                members);
+    }
+
+    private static void validateConsistency(String featureId, List<FeatureDecisionRow> members, FeatureDecisionRow first) {
+        for (FeatureDecisionRow row : members) {
+            if (!sameValue(row.getFeatureType(), first.getFeatureType())) {
+                throw new IllegalArgumentException(
+                        "featureId=" + featureId + " has inconsistent featureType across its member rows: '"
+                                + first.getFeatureType() + "' vs '" + row.getFeatureType() + "'");
+            }
+            if (row.isNoiseReduction() != first.isNoiseReduction()) {
+                throw new IllegalArgumentException(
+                        "featureId=" + featureId + " has inconsistent is_noise_reduction across its member rows: '"
+                                + first.isNoiseReduction() + "' vs '" + row.isNoiseReduction() + "'");
+            }
+            if (members.size() > 1 && !sameValue(row.getOperator(), first.getOperator())) {
+                throw new IllegalArgumentException(
+                        "featureId=" + featureId + " has inconsistent operator across its member rows: '"
+                                + first.getOperator() + "' vs '" + row.getOperator() + "'");
+            }
+        }
+    }
+
+    private static boolean sameValue(String left, String right) {
+        return left == null ? right == null : left.equals(right);
+    }
+
+    /**
+     * Lower sorts first: 0 = NoiseReduction, 1 = Disclaimer, 2 = everything else (standard Lexicon/Composite).
+     */
+    private static int processingCategory(FeatureGroup group) {
+        if (group.isNoiseReduction()) {
+            return 0;
+        }
+        if (group.isDisclaimer()) {
+            return 1;
+        }
+        return 2;
+    }
+}

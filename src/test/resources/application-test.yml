@@ -1,29 +1,14 @@
 # Lexicon Scan Engine — test configuration (requirement 4.e: Spark
-# configuration and input/output BQ/view tables available in an application
-# "test" properties file for JUnit/integration test use, without needing a
-# real GCS file or live Dataproc submit arguments).
+# configuration available in an application "test" properties file for
+# JUnit/integration test use, without needing live Dataproc submit
+# arguments). GCS buckets and BQ table/view identifiers are no longer
+# Spring-bound config — they come from a DataprocConfig YAML file per run
+# (see RuntimeArgsTest/BqTableConfigTest for equivalent test fixtures built
+# directly in Java instead of via this properties file).
 scan-engine:
-  live-message-bucket: test-live-bucket
-  test-message-bucket: test-test-bucket
-  environment-bucket: test-environment-bucket
   max-cached-databases-per-partition: 5
   created-by: lexicon-scan-engine-test
   stage-name: lexicon-scan-engine-test
-
-# Test-only BigQuery table/view identifiers, mirroring the shape of the
-# production BqTableConfig JSON (see requirement 4.b) so integration tests
-# can exercise the same table-name resolution logic without a real GCS file.
-test-bq-table-config:
-  project-id: spectre-audit-test
-  view-dataset: spectre_audit_test
-  view-name: vw_src_msg_lexicon_decision_mapping_test
-  output-dataset: spectre_audit_test
-  lexicon-hit-summary-table: lexicon-hit-summary-test
-  lexicon-hit-restricted-table: lexicon-hit-restricted-test
-  lexicon-hit-unrestricted-table: lexicon-hit-unrestricted-test
-  feature-hit-summary-table: feature-hit-summary-test
-  pipeline-stage-audit-table: pipeline_stage_audit_test
-  pipeline-record-audit-table: pipeline_record_audit_test
 
 spring:
   main:
