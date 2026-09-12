@@ -48,7 +48,7 @@ public final class MessageAvroReader {
         String datasetPrefix = datasetPathPrefix + "/" + datasetId + "/";
         String restrictedPrefix = datasetPrefix + AvroConstants.RESTRICTED_SUBFOLDER;
         String unrestrictedPrefix = datasetPrefix + AvroConstants.UNRESTRICTED_SUBFOLDER;
-        String restrictedPath = "gs://" + baseBucket + "/" + restrictedPrefix;
+        String restrictedPath = restrictedPath(baseBucket, datasetPathPrefix, datasetId);
         String unrestrictedPath = "gs://" + baseBucket + "/" + unrestrictedPrefix;
 
         boolean hasRestrictedFiles = !gcsClient.listAllObjects(baseBucket, restrictedPrefix).isEmpty();
@@ -74,6 +74,20 @@ public final class MessageAvroReader {
         return combinedMessages.join(
                 functions.broadcast(relevantMessageIds.dropDuplicates(BqColumns.View.MESSAGE_ID)),
                 BqColumns.View.MESSAGE_ID);
+    }
+
+    /**
+     * The {@code restricted/} AVRO subfolder path for one dataset — the same path {@link #readDataset}
+     * reads from. Exposed so other callers needing a path colocated with the restricted messages
+     * (e.g. {@code ScanEngineJobRunner}'s restricted CSV mirror) derive it from this one place
+     * rather than re-deriving the folder convention themselves.
+     *
+     * @param baseBucket        {@code DataprocConfig.messages().msgGcsBucket()}
+     * @param datasetPathPrefix {@code DataprocConfig.messages().msgGcsPrefix()}
+     * @param datasetId         which {@code <datasetPathPrefix>/<dataset_id>/} folder
+     */
+    public static String restrictedPath(String baseBucket, String datasetPathPrefix, String datasetId) {
+        return "gs://" + baseBucket + "/" + datasetPathPrefix + "/" + datasetId + "/" + AvroConstants.RESTRICTED_SUBFOLDER;
     }
 
     private static Dataset<Row> readAndTag(SparkSession spark, String path, String datasetPartitionValue, boolean restricted) {

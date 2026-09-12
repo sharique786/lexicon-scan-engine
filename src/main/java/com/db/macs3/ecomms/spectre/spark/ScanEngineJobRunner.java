@@ -208,9 +208,9 @@ public class ScanEngineJobRunner {
         // aggregate the view by message_id, join, and attach output-facing columns. Both steps stay
         // lazy transformations here — no Spark action runs until mapPartitions/writeOutputs below —
         // so this stage's logged duration reflects DAG construction, not actual read/join execution.
+        DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
         Dataset<Row> joined = runStage("read AVRO messages + join with view", () -> {
             Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
-            DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
             List<Dataset<Row>> perDatasetMessages = new ArrayList<>();
             for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
                 perDatasetMessages.add(MessageAvroReader.readDataset(
@@ -241,7 +241,7 @@ public class ScanEngineJobRunner {
         // 7. Split and write — this is where steps 4-6's lazy DAG actually executes, as each write
         // below triggers its own Spark action.
         runStageVoid("scan messages + write outputs",
-                () -> writeOutputs(tableConfig, runtimeArgs, hyperscanConfig.hdbGcsBucket(), results));
+                () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, results));
     }
 
     /**
@@ -285,7 +285,7 @@ public class ScanEngineJobRunner {
     // PipelineRecordAuditRowMapper — all in this package) avoids that failure mode structurally,
     // not just by careful lambda-capture discipline.
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                              String csvMirrorBucket, Dataset<MessageProcessingResult> results) {
+                              DataprocConfig.MessagesGcsConfig messagesConfig, Dataset<MessageProcessingResult> results) {
         Dataset<Row> summaryRows = results.mapPartitions(
                 new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA));
         OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
@@ -293,7 +293,7 @@ public class ScanEngineJobRunner {
         Dataset<Row> restrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(true), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
         OutputTableWriter.writeLexiconHitDetail(tableConfig, restrictedDetailRows, true);
-        writeRestrictedCsvMirror(runtimeArgs, csvMirrorBucket, restrictedDetailRows);
+        writeRestrictedCsvMirror(runtimeArgs, messagesConfig, restrictedDetailRows);
 
         Dataset<Row> unrestrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(false), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
@@ -327,12 +327,16 @@ public class ScanEngineJobRunner {
     }
 
     /**
-     * Mirrors the restricted detail rows to a single CSV file on GCS.
+     * Mirrors the restricted detail rows to a single CSV file on GCS, at the same {@code restricted/}
+     * location {@link MessageAvroReader} reads the restricted AVRO messages from for this run's
+     * (first) dataset, with a {@code csv} subfolder appended — see
+     * {@link MessageAvroReader#restrictedPath}.
      */
-    private void writeRestrictedCsvMirror(RuntimeArgs runtimeArgs, String csvMirrorBucket,
+    private void writeRestrictedCsvMirror(RuntimeArgs runtimeArgs, DataprocConfig.MessagesGcsConfig messagesConfig,
                                           Dataset<Row> restrictedDetailRows) {
-        String csvPath = "gs://" + csvMirrorBucket + "/" + runtimeArgs.policyEngineId()
-                + "/" + runtimeArgs.processId() + "/restricted/" + runtimeArgs.pipelineExecId() + ".csv";
+        String datasetId = runtimeArgs.datasetDetails().getFirst().datasetId();
+        String csvPath = MessageAvroReader.restrictedPath(
+                messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(), datasetId) + "csv";
         // Spark's own CSV writer cannot represent nested array/struct columns directly — the
         // evaluated_lexicons column is flattened to its JSON string form specifically for this
         // CSV mirror, since CSV has no native nested-value representation.
