@@ -2,6 +2,8 @@ package com.db.macs3.ecomms.spectre.spark;
 
 import com.db.macs3.ecomms.spectre.config.RuntimeArgs;
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.spark.sql.Row;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,8 +28,17 @@ class PipelineRecordAuditRowMapperTest {
 
     private static final LocalDate EXECUTION_DATE = LocalDate.parse("2026-09-08");
 
+    private static final String SAMPLE_JSON = "{\"dataset_details\":[{\"dataset_id\":\"ds1\","
+            + "\"dataset_partition_value\":\"p1\"}],\"feature_partition_value\":\"2026-08-16\","
+            + "\"pipeline_exec_id\":\"pipe-1\",\"policy_engine_id\":\"policy-1\",\"process_id\":\"proc-1\","
+            + "\"trigger_type\":\"policy-alert-test\",\"config_file_path\":\"gs://bucket/config.yml\"}";
+
     private static RuntimeArgs runtimeArgs() {
-        return new RuntimeArgs(List.of(), null, "pipe-1", "policy-1", "proc-1", "policy-alert-test", null);
+        try {
+            return new ObjectMapper().readValue(SAMPLE_JSON, RuntimeArgs.class);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static List<Row> mapAll(List<MessageProcessingResult> input) {
