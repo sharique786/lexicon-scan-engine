@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,9 @@ import java.util.Objects;
  * pre-existing model classes.
  */
 public final class RuntimeArgs implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -174,7 +178,7 @@ public final class RuntimeArgs implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof RuntimeArgs)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         RuntimeArgs other = (RuntimeArgs) obj;
@@ -203,6 +207,9 @@ public final class RuntimeArgs implements Serializable {
 
     public static final class DatasetDetail implements Serializable {
 
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final String datasetId;
         private final String datasetPartitionValue;
 
@@ -226,7 +233,7 @@ public final class RuntimeArgs implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof DatasetDetail)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             DatasetDetail other = (DatasetDetail) obj;

@@ -1,5 +1,6 @@
 package com.db.macs3.ecomms.spectre.html;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -60,6 +61,9 @@ public final class HtmlStrippingService {
     }
 
     public static final class StripResult implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final String strippedText;
         private final OffsetMap offsetMap;
 
@@ -90,7 +94,7 @@ public final class HtmlStrippingService {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof StripResult)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             StripResult other = (StripResult) obj;
@@ -130,6 +134,9 @@ public final class HtmlStrippingService {
      * megabytes long, for a transform guaranteed to be a no-op.
      */
     public static final class OffsetMap implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private static final OffsetMap IDENTITY = new OffsetMap(null);
 
         private final int[] boundaries;
@@ -203,17 +210,7 @@ public final class HtmlStrippingService {
             if (isTagStart || Character.isWhitespace(currentChar)) {
                 // Consume this whole contiguous run of tags and/or whitespace as ONE unit.
                 int runStart = originalIndex;
-                int scanIndex = originalIndex;
-                while (scanIndex < textLength) {
-                    char scanChar = originalText.charAt(scanIndex);
-                    if (scanChar == '<' && tagMatcher.region(scanIndex, textLength).lookingAt()) {
-                        scanIndex = tagMatcher.end();
-                    } else if (Character.isWhitespace(scanChar)) {
-                        scanIndex++;
-                    } else {
-                        break;
-                    }
-                }
+                int scanIndex = consumeTagOrWhitespaceRun(originalText, originalIndex, textLength, tagMatcher);
                 stripped.append(' ');
                 boundariesBuf[strippedLen] = runStart;
                 strippedLen++;
@@ -232,5 +229,24 @@ public final class HtmlStrippingService {
         System.arraycopy(boundariesBuf, 0, boundaries, 0, strippedLen + 1);
 
         return new StripResult(stripped.toString(), new OffsetMap(boundaries));
+    }
+
+    /**
+     * @return the index one past the end of the contiguous run of HTML tags and/or whitespace
+     *         starting at {@code start}.
+     */
+    private static int consumeTagOrWhitespaceRun(String originalText, int start, int textLength, Matcher tagMatcher) {
+        int scanIndex = start;
+        while (scanIndex < textLength) {
+            char scanChar = originalText.charAt(scanIndex);
+            if (scanChar == '<' && tagMatcher.region(scanIndex, textLength).lookingAt()) {
+                scanIndex = tagMatcher.end();
+            } else if (Character.isWhitespace(scanChar)) {
+                scanIndex++;
+            } else {
+                break;
+            }
+        }
+        return scanIndex;
     }
 }

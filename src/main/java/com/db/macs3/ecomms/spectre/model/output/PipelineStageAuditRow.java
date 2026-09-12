@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.model.output;
 
+import com.db.macs3.ecomms.spectre.util.EqualsSupport;
+
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
@@ -332,32 +334,26 @@ public class PipelineStageAuditRow implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof PipelineStageAuditRow)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         PipelineStageAuditRow other = (PipelineStageAuditRow) obj;
-        return Objects.equals(processId, other.processId) && Objects.equals(triggerType, other.triggerType)
-                && Objects.equals(evalTestId, other.evalTestId) && Objects.equals(pipelineExecId, other.pipelineExecId)
-                && Objects.equals(stageName, other.stageName)
-                && Objects.equals(composerDagName, other.composerDagName)
-                && Objects.equals(composerDagPath, other.composerDagPath)
-                && Objects.equals(dprocScriptName, other.dprocScriptName)
-                && Objects.equals(dprocScriptPath, other.dprocScriptPath)
-                && Objects.equals(modelConfigDtls, other.modelConfigDtls)
-                && Objects.equals(startTime, other.startTime) && Objects.equals(endTime, other.endTime)
-                && Objects.equals(jobStatus, other.jobStatus)
-                && Objects.equals(inputFileCount, other.inputFileCount)
-                && Objects.equals(outputFileCount, other.outputFileCount)
-                && Objects.equals(inputRecordCount, other.inputRecordCount)
-                && Objects.equals(outputRecordCount, other.outputRecordCount)
-                && Objects.equals(errorCount, other.errorCount)
-                && Objects.equals(errorMessage, other.errorMessage)
-                && Objects.equals(additionalInfo, other.additionalInfo)
-                && Objects.equals(logPath, other.logPath)
-                && Objects.equals(executionDate, other.executionDate)
-                && Objects.equals(rerunFlg, other.rerunFlg)
-                && Objects.equals(rerunType, other.rerunType)
-                && Objects.equals(rerunProcessId, other.rerunProcessId);
+        return EqualsSupport.fieldsEqual(
+                processId, other.processId, triggerType, other.triggerType,
+                evalTestId, other.evalTestId, pipelineExecId, other.pipelineExecId,
+                stageName, other.stageName,
+                composerDagName, other.composerDagName, composerDagPath, other.composerDagPath,
+                dprocScriptName, other.dprocScriptName, dprocScriptPath, other.dprocScriptPath,
+                modelConfigDtls, other.modelConfigDtls,
+                startTime, other.startTime, endTime, other.endTime,
+                jobStatus, other.jobStatus,
+                inputFileCount, other.inputFileCount, outputFileCount, other.outputFileCount,
+                inputRecordCount, other.inputRecordCount, outputRecordCount, other.outputRecordCount,
+                errorCount, other.errorCount, errorMessage, other.errorMessage,
+                additionalInfo, other.additionalInfo, logPath, other.logPath,
+                executionDate, other.executionDate,
+                rerunFlg, other.rerunFlg, rerunType, other.rerunType,
+                rerunProcessId, other.rerunProcessId);
     }
 
     @Override

@@ -10,6 +10,7 @@ import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.InputStream;
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Map;
 import java.util.Objects;
@@ -72,6 +73,9 @@ import java.util.Objects;
  * pre-existing model classes.
  */
 public final class DataprocConfig implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private final String projectId;
     private final String region;
@@ -154,7 +158,7 @@ public final class DataprocConfig implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof DataprocConfig)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         DataprocConfig other = (DataprocConfig) obj;
@@ -180,6 +184,9 @@ public final class DataprocConfig implements Serializable {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class SpectreConfig implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final EngineConfig engine;
 
         @JsonCreator
@@ -212,6 +219,9 @@ public final class DataprocConfig implements Serializable {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class EngineConfig implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final HyperscanGcsConfig hyperscan;
         private final MessagesGcsConfig messages;
         private final BqTableConfig bigquery;
@@ -263,6 +273,9 @@ public final class DataprocConfig implements Serializable {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class HyperscanGcsConfig implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final String hdbGcsBucket;
         private final String hdbGcsPrefix;
 
@@ -308,6 +321,9 @@ public final class DataprocConfig implements Serializable {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class MessagesGcsConfig implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
         private final String msgGcsBucket;
         private final String msgGcsPrefix;
 

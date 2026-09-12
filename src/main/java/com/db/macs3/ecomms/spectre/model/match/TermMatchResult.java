@@ -67,7 +67,7 @@ public class TermMatchResult implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof TermMatchResult)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         TermMatchResult other = (TermMatchResult) obj;

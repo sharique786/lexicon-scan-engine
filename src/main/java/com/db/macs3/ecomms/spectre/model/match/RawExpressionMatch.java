@@ -72,7 +72,7 @@ public class RawExpressionMatch implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof RawExpressionMatch)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         RawExpressionMatch other = (RawExpressionMatch) obj;

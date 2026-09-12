@@ -81,7 +81,7 @@ public class MatchSpan implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MatchSpan)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         MatchSpan other = (MatchSpan) obj;

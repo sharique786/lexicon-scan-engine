@@ -177,69 +177,7 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         ScanMessage message = MessageRowConverter.fromRow(row, datasetPartitionValue, restricted);
 
         try {
-            // dataset_partition_value is REQUIRED (NOT NULL, DATE) on all 4 output tables — a null/
-            // malformed value here must fail THIS message only (caught below), not the whole partition
-            // task the way an uncaught LocalDate.parse failure outside this try block would. Same for
-            // message_id: the BigQuery schema requires it, and a null here would otherwise slip all the
-            // way to the BQ write stage before failing, taking the ENTIRE batch of rows down with a
-            // cryptic Catalyst EXPRESSION_ENCODING_FAILED error instead of being isolated to one message.
-            if (message.getMessageId() == null || message.getMessageId().isBlank()) {
-                throw new IllegalStateException("AVRO record has a null/blank message_id — cannot process");
-            }
-            if (datasetPartitionValue == null || datasetPartitionValue.isBlank()) {
-                throw new IllegalStateException(
-                        "dataset_partition_value_for_output is null/blank for message_id=" + message.getMessageId());
-            }
-            LocalDate datasetPartitionValueDate;
-            try {
-                datasetPartitionValueDate = LocalDate.parse(datasetPartitionValue);
-            } catch (java.time.format.DateTimeParseException e) {
-                throw new IllegalStateException("dataset_partition_value_for_output='" + datasetPartitionValue
-                        + "' is not a valid ISO date for message_id=" + message.getMessageId(), e);
-            }
-
-            List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
-            List<FeatureDecisionRow> viewRows = new ArrayList<>(featureRows.size());
-            for (Row featureRow : featureRows) {
-                viewRows.add(ViewRowConverter.fromRow(featureRow));
-            }
-
-            String processId = viewRows.getFirst().getProcessId();
-            // pipelineExecId/createdBy are not view columns — carried through as extra columns
-            // attached during the join stage (see ScanEngineJobRunner), not read from the view itself.
-            String pipelineExecId = row.getAs(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT);
-            String createdBy = row.getAs(JoinedRowColumns.CREATED_BY_FOR_OUTPUT);
-            // process_id/pipeline_exec_id/created_by are REQUIRED on every output table — same
-            // fail-this-message-only reasoning as the message_id/dataset_partition_value checks above.
-            if (processId == null || processId.isBlank()) {
-                throw new IllegalStateException(
-                        "view row has a null/blank process_id for message_id=" + message.getMessageId());
-            }
-            if (pipelineExecId == null || pipelineExecId.isBlank()) {
-                throw new IllegalStateException(
-                        "pipeline_exec_id_for_output is null/blank for message_id=" + message.getMessageId());
-            }
-            if (createdBy == null || createdBy.isBlank()) {
-                throw new IllegalStateException(
-                        "created_by_for_output is null/blank for message_id=" + message.getMessageId());
-            }
-            Instant now = Instant.now();
-            List<FeatureGroup> orderedGroups = FeatureGroupingService.groupAndOrder(viewRows);
-            DecisionTreeEvaluator.FeatureRowScanner scanner = orchestrator.scannerFor(message);
-            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate(message.getMessageId(), orderedGroups, scanner);
-            String featureTaggingType = viewRows.getFirst().getFeatureTaggingType();
-
-            LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
-                    message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
-            LexiconHitDetailRow detailRow = OutputRowBuilder.buildDetailRow(
-                    message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
-            FeatureHitSummaryRow featureHitSummaryRow = OutputRowBuilder.buildFeatureHitSummaryRow(
-                    message.getMessageId(), datasetPartitionValueDate, pipelineExecId, processId, featureTaggingType,
-                    evaluation, createdBy, now);
-
-            return MessageProcessingResult.success(
-                    message.getMessageId(), restricted, datasetPartitionValue, summaryRow, detailRow, featureHitSummaryRow);
-
+            return buildSuccessResult(row, orchestrator, message, restricted, datasetPartitionValue);
         } catch (Exception e) {
             // A single message's processing failure must NOT fail the whole job — recorded
             // here for pipeline_record_audit instead (see ScanEngineJobRunner.writeOutputs,
@@ -247,5 +185,87 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             log.warn("Processing failed for message_id={}: {}", message.getMessageId(), e.getMessage(), e);
             return MessageProcessingResult.failure(message.getMessageId(), restricted, datasetPartitionValue, e.toString());
         }
+    }
+
+    private MessageProcessingResult buildSuccessResult(Row row, FeatureScanOrchestrator orchestrator,
+                                                        ScanMessage message, boolean restricted,
+                                                        String datasetPartitionValue) {
+        // dataset_partition_value is REQUIRED (NOT NULL, DATE) on all 4 output tables — a null/
+        // malformed value here must fail THIS message only (caught by the caller), not the whole
+        // partition task the way an uncaught LocalDate.parse failure outside that try block would.
+        // Same for message_id: the BigQuery schema requires it, and a null here would otherwise slip
+        // all the way to the BQ write stage before failing, taking the ENTIRE batch of rows down with
+        // a cryptic Catalyst EXPRESSION_ENCODING_FAILED error instead of being isolated to one message.
+        requireNonBlank(message.getMessageId(), "AVRO record has a null/blank message_id — cannot process");
+        requireNonBlank(datasetPartitionValue, "dataset_partition_value_for_output is null/blank for message_id="
+                + message.getMessageId());
+        LocalDate datasetPartitionValueDate = parseDatasetPartitionValueDate(datasetPartitionValue, message.getMessageId());
+
+        List<FeatureDecisionRow> viewRows = readViewRows(row);
+
+        String processId = viewRows.getFirst().getProcessId();
+        // pipelineExecId/createdBy are not view columns — carried through as extra columns
+        // attached during the join stage (see ScanEngineJobRunner), not read from the view itself.
+        String pipelineExecId = row.getAs(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT);
+        String createdBy = row.getAs(JoinedRowColumns.CREATED_BY_FOR_OUTPUT);
+        // process_id/pipeline_exec_id/created_by are REQUIRED on every output table — same
+        // fail-this-message-only reasoning as the message_id/dataset_partition_value checks above.
+        requireNonBlank(processId, "view row has a null/blank process_id for message_id=" + message.getMessageId());
+        requireNonBlank(pipelineExecId,
+                "pipeline_exec_id_for_output is null/blank for message_id=" + message.getMessageId());
+        requireNonBlank(createdBy, "created_by_for_output is null/blank for message_id=" + message.getMessageId());
+
+        MessageEvaluationResult evaluation = evaluateMessage(message, orchestrator, viewRows);
+
+        return buildOutputResult(message, restricted, datasetPartitionValue, datasetPartitionValueDate,
+                processId, pipelineExecId, createdBy, viewRows.getFirst().getFeatureTaggingType(), evaluation);
+    }
+
+    private static void requireNonBlank(String value, String errorMessage) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(errorMessage);
+        }
+    }
+
+    private static LocalDate parseDatasetPartitionValueDate(String datasetPartitionValue, String messageId) {
+        try {
+            return LocalDate.parse(datasetPartitionValue);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new IllegalStateException("dataset_partition_value_for_output='" + datasetPartitionValue
+                    + "' is not a valid ISO date for message_id=" + messageId, e);
+        }
+    }
+
+    private static List<FeatureDecisionRow> readViewRows(Row row) {
+        List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
+        List<FeatureDecisionRow> viewRows = new ArrayList<>(featureRows.size());
+        for (Row featureRow : featureRows) {
+            viewRows.add(ViewRowConverter.fromRow(featureRow));
+        }
+        return viewRows;
+    }
+
+    private static MessageEvaluationResult evaluateMessage(ScanMessage message, FeatureScanOrchestrator orchestrator,
+                                                            List<FeatureDecisionRow> viewRows) {
+        List<FeatureGroup> orderedGroups = FeatureGroupingService.groupAndOrder(viewRows);
+        DecisionTreeEvaluator.FeatureRowScanner scanner = orchestrator.scannerFor(message);
+        return DecisionTreeEvaluator.evaluate(message.getMessageId(), orderedGroups, scanner);
+    }
+
+    private static MessageProcessingResult buildOutputResult(ScanMessage message, boolean restricted,
+                                                              String datasetPartitionValue, LocalDate datasetPartitionValueDate,
+                                                              String processId, String pipelineExecId, String createdBy,
+                                                              String featureTaggingType, MessageEvaluationResult evaluation) {
+        Instant now = Instant.now();
+        LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
+                message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
+        LexiconHitDetailRow detailRow = OutputRowBuilder.buildDetailRow(
+                message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
+        FeatureHitSummaryRow featureHitSummaryRow = OutputRowBuilder.buildFeatureHitSummaryRow(
+                message.getMessageId(), datasetPartitionValueDate, pipelineExecId, processId, featureTaggingType,
+                evaluation, createdBy, now);
+
+        return MessageProcessingResult.success(
+                message.getMessageId(), restricted, datasetPartitionValue, summaryRow, detailRow, featureHitSummaryRow);
     }
 }

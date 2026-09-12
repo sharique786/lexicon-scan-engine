@@ -75,7 +75,7 @@ public class MessageAttachment implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MessageAttachment)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         MessageAttachment other = (MessageAttachment) obj;

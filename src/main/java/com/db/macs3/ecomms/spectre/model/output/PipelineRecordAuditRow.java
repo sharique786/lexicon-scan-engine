@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.model.output;
 
+import com.db.macs3.ecomms.spectre.util.EqualsSupport;
+
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
@@ -433,36 +435,31 @@ public class PipelineRecordAuditRow implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof PipelineRecordAuditRow)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         PipelineRecordAuditRow other = (PipelineRecordAuditRow) obj;
-        return Objects.equals(processId, other.processId) && Objects.equals(triggerType, other.triggerType)
-                && Objects.equals(evalTestId, other.evalTestId) && Objects.equals(pipelineExecId, other.pipelineExecId)
-                && Objects.equals(recordId, other.recordId) && Objects.equals(stageName, other.stageName)
-                && Objects.equals(msgInputFileNm, other.msgInputFileNm)
-                && Objects.equals(msgInputFilePath, other.msgInputFilePath)
-                && Objects.equals(msgOutputFilePath, other.msgOutputFilePath)
-                && Objects.equals(msgOutputFileType, other.msgOutputFileType)
-                && Objects.equals(msgOutputFileNm, other.msgOutputFileNm)
-                && Objects.equals(status, other.status) && Objects.equals(returnCode, other.returnCode)
-                && Objects.equals(errorMessage, other.errorMessage)
-                && Objects.equals(evaluatedRulesDtls, other.evaluatedRulesDtls)
-                && Objects.equals(evaluatedRulesCnt, other.evaluatedRulesCnt)
-                && Objects.equals(detectedRulesDtls, other.detectedRulesDtls)
-                && Objects.equals(detectedRulesCnt, other.detectedRulesCnt)
-                && Objects.equals(sysPromptEvalRulesTokens, other.sysPromptEvalRulesTokens)
-                && Objects.equals(inputTokens, other.inputTokens) && Objects.equals(outputTokens, other.outputTokens)
-                && Objects.equals(thinkingTokens, other.thinkingTokens)
-                && Objects.equals(cachedTokens, other.cachedTokens)
-                && Objects.equals(msgMatchTextTokens, other.msgMatchTextTokens)
-                && Objects.equals(createdTs, other.createdTs) && Objects.equals(createdBy, other.createdBy)
-                && Objects.equals(additionInfo, other.additionInfo)
-                && Objects.equals(executionDate, other.executionDate) && Objects.equals(sentDate, other.sentDate)
-                && Objects.equals(runDate, other.runDate) && Objects.equals(sourceName, other.sourceName)
-                && Objects.equals(geminiRequestStartTime, other.geminiRequestStartTime)
-                && Objects.equals(geminiRequestEndTime, other.geminiRequestEndTime)
-                && Objects.equals(rerunProcessId, other.rerunProcessId);
+        return EqualsSupport.fieldsEqual(
+                processId, other.processId, triggerType, other.triggerType,
+                evalTestId, other.evalTestId, pipelineExecId, other.pipelineExecId,
+                recordId, other.recordId, stageName, other.stageName,
+                msgInputFileNm, other.msgInputFileNm, msgInputFilePath, other.msgInputFilePath,
+                msgOutputFilePath, other.msgOutputFilePath, msgOutputFileType, other.msgOutputFileType,
+                msgOutputFileNm, other.msgOutputFileNm, status, other.status,
+                returnCode, other.returnCode, errorMessage, other.errorMessage,
+                evaluatedRulesDtls, other.evaluatedRulesDtls, evaluatedRulesCnt, other.evaluatedRulesCnt,
+                detectedRulesDtls, other.detectedRulesDtls, detectedRulesCnt, other.detectedRulesCnt,
+                sysPromptEvalRulesTokens, other.sysPromptEvalRulesTokens,
+                inputTokens, other.inputTokens, outputTokens, other.outputTokens,
+                thinkingTokens, other.thinkingTokens, cachedTokens, other.cachedTokens,
+                msgMatchTextTokens, other.msgMatchTextTokens,
+                createdTs, other.createdTs, createdBy, other.createdBy,
+                additionInfo, other.additionInfo,
+                executionDate, other.executionDate, sentDate, other.sentDate,
+                runDate, other.runDate, sourceName, other.sourceName,
+                geminiRequestStartTime, other.geminiRequestStartTime,
+                geminiRequestEndTime, other.geminiRequestEndTime,
+                rerunProcessId, other.rerunProcessId);
     }
 
     @Override

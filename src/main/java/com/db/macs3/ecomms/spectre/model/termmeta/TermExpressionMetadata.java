@@ -298,7 +298,7 @@ public class TermExpressionMetadata implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof TermEntry)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             TermEntry other = (TermEntry) obj;
@@ -386,7 +386,7 @@ public class TermExpressionMetadata implements Serializable {
                 ? termResult.getResolvedPatterns()
                 : (leaves == null ? null : String.join(" & ", leaves));
 
-        RequiredExcludedIds ids = resolveIds(feature, termResult, termNumber, tree);
+        RequiredExcludedIds ids = resolveIds(feature, termResult, tree);
 
         return new TermEntry(
                 termNumber, termRegexPattern, requiresExclusion, ids.getRequired(), ids.getExcluded(), tree);
@@ -430,12 +430,12 @@ public class TermExpressionMetadata implements Serializable {
      * via {@link #resolveRequiredIds}; only a legacy (non-resolvedPatterns) term also carries an
      * excluded id list.
      */
-    private static RequiredExcludedIds resolveIds(String feature, TermResultJson termResult, int termNumber,
+    private static RequiredExcludedIds resolveIds(String feature, TermResultJson termResult,
                                                   ResolvedPatternTree tree) {
         if (tree instanceof ResolvedPatternTree.AndNot) {
             return new RequiredExcludedIds(termResult.getRequiredExpressionIds(), termResult.getExcludedExpressionIds());
         }
-        List<Integer> requiredIds = resolveRequiredIds(feature, termResult, termNumber);
+        List<Integer> requiredIds = resolveRequiredIds(feature, termResult);
         List<Integer> excludedIds = tree instanceof ResolvedPatternTree.Chain ? null : termResult.getExcludedExpressionIds();
         return new RequiredExcludedIds(requiredIds, excludedIds);
     }
@@ -604,7 +604,7 @@ public class TermExpressionMetadata implements Serializable {
      * an AND NOT term reports {@code requiredExpressionIds} directly. Either
      * way this returns the required-side id list {@link TermEntry} needs.
      */
-    private static List<Integer> resolveRequiredIds(String feature, TermResultJson termResult, int termNumber) {
+    private static List<Integer> resolveRequiredIds(String feature, TermResultJson termResult) {
         if (termResult.getRequiredExpressionIds() != null && !termResult.getRequiredExpressionIds().isEmpty()) {
             return termResult.getRequiredExpressionIds();
         }

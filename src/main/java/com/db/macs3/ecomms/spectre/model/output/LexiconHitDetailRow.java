@@ -127,7 +127,7 @@ public class LexiconHitDetailRow implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof LexiconHitDetailRow)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         LexiconHitDetailRow other = (LexiconHitDetailRow) obj;
@@ -192,7 +192,7 @@ public class LexiconHitDetailRow implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof EvaluatedLexicon)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             EvaluatedLexicon other = (EvaluatedLexicon) obj;
@@ -248,7 +248,7 @@ public class LexiconHitDetailRow implements Serializable {
                 if (this == obj) {
                     return true;
                 }
-                if (!(obj instanceof TermDtl)) {
+                if (obj == null || this.getClass() != obj.getClass()) {
                     return false;
                 }
                 TermDtl other = (TermDtl) obj;

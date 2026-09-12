@@ -7,6 +7,7 @@ import com.db.macs3.ecomms.spectre.model.message.MessageSource;
 import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
 import org.apache.spark.sql.Row;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,9 @@ import java.util.List;
  * from {@code row}.
  */
 public final class MessageRowConverter implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private MessageRowConverter() {
     }

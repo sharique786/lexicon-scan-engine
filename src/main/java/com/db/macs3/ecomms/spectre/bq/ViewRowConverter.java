@@ -4,6 +4,7 @@ import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 import org.apache.spark.sql.Row;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.sql.Date;
 import java.time.LocalDate;
@@ -28,6 +29,9 @@ import java.time.LocalDate;
  * every other column is genuinely STRING and stays on {@link #getStringOrNull}.
  */
 public final class ViewRowConverter implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private ViewRowConverter() {
     }

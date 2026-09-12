@@ -67,7 +67,7 @@ public class MessageSource implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MessageSource)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         MessageSource other = (MessageSource) obj;

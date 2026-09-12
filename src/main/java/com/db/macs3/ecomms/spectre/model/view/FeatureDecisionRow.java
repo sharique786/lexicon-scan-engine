@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.model.view;
 
+import com.db.macs3.ecomms.spectre.util.EqualsSupport;
+
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -218,24 +220,20 @@ public class FeatureDecisionRow implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof FeatureDecisionRow)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         FeatureDecisionRow other = (FeatureDecisionRow) obj;
         return isNoiseReduction == other.isNoiseReduction
-                && Objects.equals(processId, other.processId)
-                && Objects.equals(messageId, other.messageId)
-                && Objects.equals(datasetPartition, other.datasetPartition)
-                && Objects.equals(featureTaggingType, other.featureTaggingType)
-                && Objects.equals(featureType, other.featureType)
-                && Objects.equals(featureId, other.featureId)
-                && Objects.equals(featureName, other.featureName)
-                && Objects.equals(subFeatureType, other.subFeatureType)
-                && Objects.equals(featuresToApply, other.featuresToApply)
-                && Objects.equals(operator, other.operator)
-                && Objects.equals(featureDefinitionJson, other.featureDefinitionJson)
-                && Objects.equals(featurePartitionValue, other.featurePartitionValue)
-                && Objects.equals(policyEngineId, other.policyEngineId);
+                && EqualsSupport.fieldsEqual(
+                        processId, other.processId, messageId, other.messageId,
+                        datasetPartition, other.datasetPartition, featureTaggingType, other.featureTaggingType,
+                        featureType, other.featureType, featureId, other.featureId,
+                        featureName, other.featureName, subFeatureType, other.subFeatureType,
+                        featuresToApply, other.featuresToApply, operator, other.operator,
+                        featureDefinitionJson, other.featureDefinitionJson,
+                        featurePartitionValue, other.featurePartitionValue,
+                        policyEngineId, other.policyEngineId);
     }
 
     @Override

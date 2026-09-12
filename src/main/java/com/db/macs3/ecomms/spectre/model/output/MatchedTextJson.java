@@ -58,7 +58,7 @@ public class MatchedTextJson implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MatchedTextJson)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         return Objects.equals(hitDetailsHs, ((MatchedTextJson) obj).hitDetailsHs);
@@ -136,7 +136,7 @@ public class MatchedTextJson implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof HitDetail)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             HitDetail other = (HitDetail) obj;
@@ -213,7 +213,7 @@ public class MatchedTextJson implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof TextHit)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             TextHit other = (TextHit) obj;
@@ -269,7 +269,7 @@ public class MatchedTextJson implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof AttachmentTextHit)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             AttachmentTextHit other = (AttachmentTextHit) obj;

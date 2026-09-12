@@ -77,7 +77,7 @@ public class AreaMatch implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof AreaMatch)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         AreaMatch other = (AreaMatch) obj;

@@ -70,7 +70,7 @@ public class MessageContent implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MessageContent)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         MessageContent other = (MessageContent) obj;

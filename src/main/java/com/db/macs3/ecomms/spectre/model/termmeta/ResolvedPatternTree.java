@@ -106,7 +106,7 @@ public sealed interface ResolvedPatternTree {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof Chain)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             Chain other = (Chain) obj;
@@ -162,7 +162,7 @@ public sealed interface ResolvedPatternTree {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof AndNot)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             AndNot other = (AndNot) obj;

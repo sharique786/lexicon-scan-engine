@@ -333,7 +333,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                                                  Map<Integer, String> patternTextByExpressionId,
                                                  List<AreaScanContext> areaScans) {
         List<AreaMatch> combined = entry.requiresPerAreaEvaluation()
-                ? resolveAndEvaluatePerArea(feature, entry, matchedExpressionIds, areaScans)
+                ? resolveAndEvaluatePerArea(entry, matchedExpressionIds, areaScans)
                 : resolveAndEvaluateCrossArea(feature, entry, matchedExpressionIds, matchesByExpressionId);
         if (combined.isEmpty()) {
             return null;
@@ -390,7 +390,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * {@code hyperscanExpressionId} (when available) is used only as a cheap
      * pre-filter, both globally and per area — never as the actual condition.
      */
-    private List<AreaMatch> resolveAndEvaluatePerArea(String feature, TermEntry entry,
+    private List<AreaMatch> resolveAndEvaluatePerArea(TermEntry entry,
                                                       Set<Integer> matchedExpressionIds,
                                                       List<AreaScanContext> areaScans) {
         if (entry.hasCoarseExpressionId() && !matchedExpressionIds.containsAll(entry.getRequiredExpressionIds())) {

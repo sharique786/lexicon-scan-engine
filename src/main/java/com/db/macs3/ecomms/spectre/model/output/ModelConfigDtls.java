@@ -88,7 +88,7 @@ public class ModelConfigDtls implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof ModelConfigDtls)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         ModelConfigDtls other = (ModelConfigDtls) obj;

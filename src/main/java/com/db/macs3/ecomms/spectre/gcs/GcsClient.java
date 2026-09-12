@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Serial;
 import java.io.Serializable;
 import java.nio.channels.Channels;
 import java.time.Duration;
@@ -50,6 +51,9 @@ import java.util.regex.Pattern;
  */
 @Component
 public final class GcsClient implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(GcsClient.class);
 

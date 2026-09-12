@@ -135,32 +135,38 @@ final class ResolvedPatternAreaEvaluator {
             return;
         }
         if (leafIndex == occurrencesPerLeaf.size()) {
-            int start = chosen[0].startChar();
-            int end = chosen[0].endChar();
-            for (LeafOccurrence obj : chosen) {
-                start = Math.min(start, obj.startChar());
-                end = Math.max(end, obj.endChar());
-            }
-            collected.add(new MatchSpan(start, end, areaOriginalText.substring(start, end)));
+            recordMatch(chosen, areaOriginalText, collected);
             return;
         }
         for (LeafOccurrence candidate : occurrencesPerLeaf.get(leafIndex)) {
             chosen[leafIndex] = candidate;
-            if (leafIndex == 0) {
-                backtrack(occurrencesPerLeaf, operators, distances, leafIndex + 1, candidate, chosen,
-                        areaOriginalText, collected, visits);
-                continue;
-            }
-            String operator = operators.get(leafIndex - 1);
-            int maxGap = distances.get(leafIndex - 1);
-            boolean directionOk = ResolvedPatternTree.OPERATOR_NEAR.equals(operator)
-                    || candidate.endWordIndex() > previous.endWordIndex();
-            int gap = Math.abs(candidate.endWordIndex() - previous.endWordIndex()) - 1;
-            if (directionOk && gap >= 0 && gap <= maxGap) {
+            if (leafIndex == 0 || canExtend(operators.get(leafIndex - 1), distances.get(leafIndex - 1), previous, candidate)) {
                 backtrack(occurrencesPerLeaf, operators, distances, leafIndex + 1, candidate, chosen,
                         areaOriginalText, collected, visits);
             }
         }
+    }
+
+    private static void recordMatch(LeafOccurrence[] chosen, String areaOriginalText, Set<MatchSpan> collected) {
+        int start = chosen[0].startChar();
+        int end = chosen[0].endChar();
+        for (LeafOccurrence obj : chosen) {
+            start = Math.min(start, obj.startChar());
+            end = Math.max(end, obj.endChar());
+        }
+        collected.add(new MatchSpan(start, end, areaOriginalText.substring(start, end)));
+    }
+
+    /**
+     * @return true iff {@code candidate} legally continues the chain after {@code previous} under
+     *         {@code operator}'s direction rule and {@code maxGap} — see class Javadoc "NEAR
+     *         bidirectionality" for why {@code NEAR} never checks direction.
+     */
+    private static boolean canExtend(String operator, int maxGap, LeafOccurrence previous, LeafOccurrence candidate) {
+        boolean directionOk = ResolvedPatternTree.OPERATOR_NEAR.equals(operator)
+                || candidate.endWordIndex() > previous.endWordIndex();
+        int gap = Math.abs(candidate.endWordIndex() - previous.endWordIndex()) - 1;
+        return directionOk && gap >= 0 && gap <= maxGap;
     }
 
     /**
@@ -204,15 +210,9 @@ final class ResolvedPatternAreaEvaluator {
             int codePoint = text.codePointAt(index);
             int codePointWidth = Character.charCount(codePoint);
             if (Character.isWhitespace(codePoint)) {
-                if (tokenStart >= 0) {
-                    spans.add(new int[]{tokenStart, index});
-                    tokenStart = -1;
-                }
+                tokenStart = closeOpenToken(spans, tokenStart, index);
             } else if (isCjkCodePoint(codePoint)) {
-                if (tokenStart >= 0) {
-                    spans.add(new int[]{tokenStart, index});
-                    tokenStart = -1;
-                }
+                tokenStart = closeOpenToken(spans, tokenStart, index);
                 spans.add(new int[]{index, index + codePointWidth});
             } else if (tokenStart < 0) {
                 tokenStart = index;
@@ -223,6 +223,17 @@ final class ResolvedPatternAreaEvaluator {
             spans.add(new int[]{tokenStart, length});
         }
         return spans;
+    }
+
+    /**
+     * If a word run is currently open ({@code tokenStart >= 0}), closes it as a span ending at
+     * {@code endExclusive}. @return the new {@code tokenStart} value (always {@code -1}).
+     */
+    private static int closeOpenToken(List<int[]> spans, int tokenStart, int endExclusive) {
+        if (tokenStart >= 0) {
+            spans.add(new int[]{tokenStart, endExclusive});
+        }
+        return -1;
     }
 
     /**

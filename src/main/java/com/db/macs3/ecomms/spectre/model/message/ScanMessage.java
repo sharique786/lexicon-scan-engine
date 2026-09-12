@@ -134,7 +134,7 @@ public class ScanMessage implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof ScanMessage)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         ScanMessage other = (ScanMessage) obj;

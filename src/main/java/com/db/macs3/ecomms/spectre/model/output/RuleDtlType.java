@@ -60,7 +60,7 @@ public class RuleDtlType implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof RuleDtlType)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         RuleDtlType other = (RuleDtlType) obj;

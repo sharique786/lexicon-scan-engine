@@ -3,6 +3,9 @@ package com.db.macs3.ecomms.spectre.config;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import com.db.macs3.ecomms.spectre.util.EqualsSupport;
+
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -35,6 +38,9 @@ import java.util.Objects;
  * pre-existing model classes.
  */
 public final class BqTableConfig implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private final String bqProject;
     private final String bqDataset;
@@ -142,20 +148,20 @@ public final class BqTableConfig implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof BqTableConfig)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         BqTableConfig other = (BqTableConfig) obj;
-        return Objects.equals(bqProject, other.bqProject) && Objects.equals(bqDataset, other.bqDataset)
-                && Objects.equals(bqViewName, other.bqViewName)
-                && Objects.equals(bqFeatureMaster, other.bqFeatureMaster)
-                && Objects.equals(bqLanguageFeatureDec, other.bqLanguageFeatureDec)
-                && Objects.equals(bqOutputFeatureHitSummary, other.bqOutputFeatureHitSummary)
-                && Objects.equals(bqOutputHitSummary, other.bqOutputHitSummary)
-                && Objects.equals(bqOutputHitRestricted, other.bqOutputHitRestricted)
-                && Objects.equals(bqOutputHitUnrestricted, other.bqOutputHitUnrestricted)
-                && Objects.equals(bqOutputStageAudit, other.bqOutputStageAudit)
-                && Objects.equals(bqOutputRecordAudit, other.bqOutputRecordAudit);
+        return EqualsSupport.fieldsEqual(
+                bqProject, other.bqProject, bqDataset, other.bqDataset,
+                bqViewName, other.bqViewName, bqFeatureMaster, other.bqFeatureMaster,
+                bqLanguageFeatureDec, other.bqLanguageFeatureDec,
+                bqOutputFeatureHitSummary, other.bqOutputFeatureHitSummary,
+                bqOutputHitSummary, other.bqOutputHitSummary,
+                bqOutputHitRestricted, other.bqOutputHitRestricted,
+                bqOutputHitUnrestricted, other.bqOutputHitUnrestricted,
+                bqOutputStageAudit, other.bqOutputStageAudit,
+                bqOutputRecordAudit, other.bqOutputRecordAudit);
     }
 
     @Override

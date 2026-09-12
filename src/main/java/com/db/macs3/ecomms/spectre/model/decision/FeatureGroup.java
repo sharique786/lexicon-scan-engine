@@ -125,7 +125,7 @@ public class FeatureGroup implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof FeatureGroup)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         FeatureGroup other = (FeatureGroup) obj;

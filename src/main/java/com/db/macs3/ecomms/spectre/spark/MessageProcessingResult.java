@@ -139,7 +139,7 @@ public class MessageProcessingResult implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MessageProcessingResult)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         MessageProcessingResult other = (MessageProcessingResult) obj;

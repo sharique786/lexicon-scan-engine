@@ -114,7 +114,7 @@ public class FeatureDefinition implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof FeatureDefinition)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         FeatureDefinition other = (FeatureDefinition) obj;
@@ -231,7 +231,7 @@ public class FeatureDefinition implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof Body)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             Body other = (Body) obj;

@@ -123,7 +123,7 @@ public class MessageEvaluationResult implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof MessageEvaluationResult)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         MessageEvaluationResult other = (MessageEvaluationResult) obj;

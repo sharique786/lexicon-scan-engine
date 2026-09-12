@@ -89,7 +89,7 @@ public class GroupEvaluationResult implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof GroupEvaluationResult)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         GroupEvaluationResult other = (GroupEvaluationResult) obj;

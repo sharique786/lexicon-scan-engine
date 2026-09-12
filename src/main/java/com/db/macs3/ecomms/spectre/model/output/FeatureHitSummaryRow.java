@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.model.output;
 
+import com.db.macs3.ecomms.spectre.util.EqualsSupport;
+
 import java.io.Serial;
 import java.io.Serializable;
 import java.time.Instant;
@@ -140,18 +142,15 @@ public class FeatureHitSummaryRow implements Serializable {
         if (this == obj) {
             return true;
         }
-        if (!(obj instanceof FeatureHitSummaryRow)) {
+        if (obj == null || this.getClass() != obj.getClass()) {
             return false;
         }
         FeatureHitSummaryRow other = (FeatureHitSummaryRow) obj;
-        return Objects.equals(messageId, other.messageId)
-                && Objects.equals(features, other.features)
-                && Objects.equals(datasetPartitionValue, other.datasetPartitionValue)
-                && Objects.equals(featureHitType, other.featureHitType)
-                && Objects.equals(createdBy, other.createdBy)
-                && Objects.equals(createdTs, other.createdTs)
-                && Objects.equals(processId, other.processId)
-                && Objects.equals(pipelineExecId, other.pipelineExecId);
+        return EqualsSupport.fieldsEqual(
+                messageId, other.messageId, features, other.features,
+                datasetPartitionValue, other.datasetPartitionValue, featureHitType, other.featureHitType,
+                createdBy, other.createdBy, createdTs, other.createdTs,
+                processId, other.processId, pipelineExecId, other.pipelineExecId);
     }
 
     @Override
@@ -254,7 +253,7 @@ public class FeatureHitSummaryRow implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof Feature)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             Feature other = (Feature) obj;
@@ -330,7 +329,7 @@ public class FeatureHitSummaryRow implements Serializable {
             if (this == obj) {
                 return true;
             }
-            if (!(obj instanceof SubFeature)) {
+            if (obj == null || this.getClass() != obj.getClass()) {
                 return false;
             }
             SubFeature other = (SubFeature) obj;
