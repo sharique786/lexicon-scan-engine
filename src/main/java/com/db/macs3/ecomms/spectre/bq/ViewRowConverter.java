@@ -2,12 +2,11 @@ package com.db.macs3.ecomms.spectre.bq;
 
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
+import com.db.macs3.ecomms.spectre.util.RowReaders;
 import org.apache.spark.sql.Row;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.sql.Date;
-import java.time.LocalDate;
 
 /**
  * Converts one Spark {@link Row} of {@code vw_src_msg_lexicon_decision_mapping}
@@ -24,9 +23,10 @@ import java.time.LocalDate;
  * {@code dataset_partition}/{@code feature_partition_value} are DATE,
  * {@code feature_id} is LONG (INTEGER), and {@code is_noise_reduction} is
  * BOOLEAN — reading any of these four via {@code Row.getString} throws
- * {@code ClassCastException} at real-query time. {@link #getDateOrNull},
- * {@link #getLongOrNull}, and {@link #getBooleanOrDefault} read those four;
- * every other column is genuinely STRING and stays on {@link #getStringOrNull}.
+ * {@code ClassCastException} at real-query time. {@link RowReaders#getDateOrNull},
+ * {@link RowReaders#getLongOrNull}, and {@link RowReaders#getBooleanOrDefault}
+ * read those four; every other column is genuinely STRING and stays on
+ * {@link RowReaders#getStringOrNull}.
  */
 public final class ViewRowConverter implements Serializable {
 
@@ -38,64 +38,20 @@ public final class ViewRowConverter implements Serializable {
 
     public static FeatureDecisionRow fromRow(Row row) {
         return new FeatureDecisionRow(
-                getStringOrNull(row, BqColumns.View.PROCESS_ID),
-                getStringOrNull(row, BqColumns.View.MESSAGE_ID),
-                getDateOrNull(row, BqColumns.View.DATASET_PARTITION),
-                getStringOrNull(row, BqColumns.View.FEATURE_TAGGING_TYPE),
-                getStringOrNull(row, BqColumns.View.FEATURE_TYPE),
-                getLongOrNull(row, BqColumns.View.FEATURE_ID),
-                getStringOrNull(row, BqColumns.View.FEATURE_NAME),
-                getStringOrNull(row, BqColumns.View.SUB_FEATURE_TYPE),
-                getStringOrNull(row, BqColumns.View.FEATURES_TO_APPLY),
-                getBooleanOrDefault(row, BqColumns.View.IS_NOISE_REDUCTION),
-                getStringOrNull(row, BqColumns.View.OPERATOR),
-                getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION),
-                getDateOrNull(row, BqColumns.View.FEATURE_PARTITION_VALUE),
-                getLongAsStringOrNull(row, BqColumns.View.POLICY_ENGINE_ID)
+                RowReaders.getStringOrNull(row, BqColumns.View.PROCESS_ID),
+                RowReaders.getStringOrNull(row, BqColumns.View.MESSAGE_ID),
+                RowReaders.getDateOrNull(row, BqColumns.View.DATASET_PARTITION),
+                RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_TAGGING_TYPE),
+                RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_TYPE),
+                RowReaders.getLongOrNull(row, BqColumns.View.FEATURE_ID),
+                RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_NAME),
+                RowReaders.getStringOrNull(row, BqColumns.View.SUB_FEATURE_TYPE),
+                RowReaders.getStringOrNull(row, BqColumns.View.FEATURES_TO_APPLY),
+                RowReaders.getBooleanOrDefault(row, BqColumns.View.IS_NOISE_REDUCTION),
+                RowReaders.getStringOrNull(row, BqColumns.View.OPERATOR),
+                RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION),
+                RowReaders.getDateOrNull(row, BqColumns.View.FEATURE_PARTITION_VALUE),
+                RowReaders.getLongAsStringOrNull(row, BqColumns.View.POLICY_ENGINE_ID)
         );
-    }
-
-    private static String getStringOrNull(Row row, String columnName) {
-        int idx = row.fieldIndex(columnName);
-        return row.isNullAt(idx) ? null : row.getString(idx);
-    }
-
-    private static String getLongAsStringOrNull(Row row, String columnName) {
-        int idx = row.fieldIndex(columnName);
-        Long longVal = row.isNullAt(idx) ? null : row.getLong(idx);
-        return longVal == null ? null : longVal.toString();
-    }
-
-    private static Long getLongOrNull(Row row, String columnName) {
-        int idx = row.fieldIndex(columnName);
-        return row.isNullAt(idx) ? null : row.getLong(idx);
-    }
-
-    /**
-     * {@code is_noise_reduction} is NOT modelled as nullable — a null value reads as {@code false}.
-     */
-    private static boolean getBooleanOrDefault(Row row, String columnName) {
-        int idx = row.fieldIndex(columnName);
-        return !row.isNullAt(idx) && row.getBoolean(idx);
-    }
-
-    /**
-     * Reads a DATE column as a {@link LocalDate}, tolerating either external
-     * representation Spark may hand back depending on
-     * {@code spark.sql.datetime.java8API.enabled} (this job does not set
-     * that config, so the default {@code false} — {@link java.sql.Date} —
-     * path is the one actually exercised, but a {@link LocalDate} value is
-     * accepted too rather than assuming one specific setting forever).
-     */
-    private static LocalDate getDateOrNull(Row row, String columnName) {
-        int idx = row.fieldIndex(columnName);
-        if (row.isNullAt(idx)) {
-            return null;
-        }
-        Object value = row.get(idx);
-        if (value instanceof LocalDate localDate) {
-            return localDate;
-        }
-        return ((Date) value).toLocalDate();
     }
 }

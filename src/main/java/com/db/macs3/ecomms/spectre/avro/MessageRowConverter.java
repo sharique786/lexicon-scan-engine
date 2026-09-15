@@ -5,12 +5,11 @@ import com.db.macs3.ecomms.spectre.model.message.MessageContent;
 import com.db.macs3.ecomms.spectre.model.message.MessageProcessing;
 import com.db.macs3.ecomms.spectre.model.message.MessageSource;
 import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
+import com.db.macs3.ecomms.spectre.util.RowReaders;
 import org.apache.spark.sql.Row;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.sql.Date;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,7 +35,7 @@ public final class MessageRowConverter implements Serializable {
     }
 
     public static ScanMessage fromRow(Row row, String datasetPartitionValue, boolean restricted) {
-        String messageId = getStringOrNull(row, AvroConstants.FIELD_MESSAGE_ID);
+        String messageId = RowReaders.getStringOrNull(row, AvroConstants.FIELD_MESSAGE_ID);
         MessageSource source = readSource(row);
         MessageContent content = readContent(row);
         List<MessageAttachment> attachments = readAttachments(row);
@@ -46,36 +45,36 @@ public final class MessageRowConverter implements Serializable {
     }
 
     private static MessageSource readSource(Row row) {
-        if (!hasNonNullField(row, AvroConstants.FIELD_SOURCE)) {
+        if (!RowReaders.hasNonNullField(row, AvroConstants.FIELD_SOURCE)) {
             return null;
         }
         Row sourceRow = row.getAs(AvroConstants.FIELD_SOURCE);
         return new MessageSource(
-                getStringOrNull(sourceRow, AvroConstants.FIELD_CHANNEL_NAME),
-                getStringOrNull(sourceRow, AvroConstants.FIELD_SOURCE_NAME),
-                getStringOrNull(sourceRow, AvroConstants.FIELD_SRC_SYS_NAME),
-                getStringOrNull(sourceRow, AvroConstants.FIELD_SRC_SYS_CONV_ID));
+                RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_CHANNEL_NAME),
+                RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_SOURCE_NAME),
+                RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_SRC_SYS_NAME),
+                RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_SRC_SYS_CONV_ID));
     }
 
     private static MessageContent readContent(Row row) {
-        if (!hasNonNullField(row, AvroConstants.FIELD_MESSAGE)) {
+        if (!RowReaders.hasNonNullField(row, AvroConstants.FIELD_MESSAGE)) {
             return null;
         }
         Row messageRow = row.getAs(AvroConstants.FIELD_MESSAGE);
-        if (!hasNonNullField(messageRow, AvroConstants.FIELD_CONTENT)) {
+        if (!RowReaders.hasNonNullField(messageRow, AvroConstants.FIELD_CONTENT)) {
             return null;
         }
         Row contentRow = messageRow.getAs(AvroConstants.FIELD_CONTENT);
         return new MessageContent(
-                getStringOrNull(contentRow, AvroConstants.FIELD_HEADER),
-                getStringOrNull(contentRow, AvroConstants.FIELD_RAW_TEXT),
-                getStringOrNull(contentRow, AvroConstants.FIELD_SUBJECT),
-                getStringOrNull(contentRow, AvroConstants.FIELD_CLEAN_TEXT));
+                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_HEADER),
+                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_RAW_TEXT),
+                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_SUBJECT),
+                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_CLEAN_TEXT));
     }
 
     private static List<MessageAttachment> readAttachments(Row row) {
         List<MessageAttachment> attachments = new ArrayList<>();
-        if (!hasNonNullField(row, AvroConstants.FIELD_ATTACHMENTS)) {
+        if (!RowReaders.hasNonNullField(row, AvroConstants.FIELD_ATTACHMENTS)) {
             return attachments;
         }
         List<Row> attachmentRows = row.getList(row.fieldIndex(AvroConstants.FIELD_ATTACHMENTS));
@@ -89,65 +88,27 @@ public final class MessageRowConverter implements Serializable {
         String attachmentId = null;
         String parentAttachmentId = null;
         String fileName = null;
-        if (hasNonNullField(attachmentRow, AvroConstants.FIELD_METADATA)) {
+        if (RowReaders.hasNonNullField(attachmentRow, AvroConstants.FIELD_METADATA)) {
             Row metadataRow = attachmentRow.getAs(AvroConstants.FIELD_METADATA);
-            attachmentId = getStringOrNull(metadataRow, AvroConstants.FIELD_ATTACHMENT_ID);
-            parentAttachmentId = getStringOrNull(metadataRow, AvroConstants.FIELD_PARENT_ATTACHMENT_ID);
-            fileName = getStringOrNull(metadataRow, AvroConstants.FIELD_FILE_NAME);
+            attachmentId = RowReaders.getStringOrNull(metadataRow, AvroConstants.FIELD_ATTACHMENT_ID);
+            parentAttachmentId = RowReaders.getStringOrNull(metadataRow, AvroConstants.FIELD_PARENT_ATTACHMENT_ID);
+            fileName = RowReaders.getStringOrNull(metadataRow, AvroConstants.FIELD_FILE_NAME);
         }
         String cleanText = null;
-        if (hasNonNullField(attachmentRow, AvroConstants.FIELD_CONTENT)) {
+        if (RowReaders.hasNonNullField(attachmentRow, AvroConstants.FIELD_CONTENT)) {
             Row attachmentContentRow = attachmentRow.getAs(AvroConstants.FIELD_CONTENT);
-            cleanText = getStringOrNull(attachmentContentRow, AvroConstants.FIELD_CLEAN_TEXT);
+            cleanText = RowReaders.getStringOrNull(attachmentContentRow, AvroConstants.FIELD_CLEAN_TEXT);
         }
         return new MessageAttachment(attachmentId, parentAttachmentId, fileName, cleanText);
     }
 
     private static MessageProcessing readProcessing(Row row) {
-        if (!hasNonNullField(row, AvroConstants.FIELD_PROCESSING)) {
+        if (!RowReaders.hasNonNullField(row, AvroConstants.FIELD_PROCESSING)) {
             return null;
         }
         Row processingRow = row.getAs(AvroConstants.FIELD_PROCESSING);
         return new MessageProcessing(
-                getDateOrNull(processingRow, AvroConstants.FIELD_RUN_DATE),
-                getStringOrNull(processingRow, AvroConstants.FIELD_RUN_HOUR));
-    }
-
-    private static boolean hasNonNullField(Row row, String fieldName) {
-        int fieldIndex;
-        try {
-            fieldIndex = row.fieldIndex(fieldName);
-        } catch (IllegalArgumentException e) {
-            return false; // field not present in this row's schema at all
-        }
-        return !row.isNullAt(fieldIndex);
-    }
-
-    private static String getStringOrNull(Row row, String fieldName) {
-        if (!hasNonNullField(row, fieldName)) {
-            return null;
-        }
-        return row.getAs(fieldName);
-    }
-
-    /**
-     * Reads an AVRO {@code date}-logical-type field as a {@link LocalDate}.
-     * Spark represents such a field as {@link Date} by default, or as a
-     * {@link LocalDate} directly when {@code spark.sql.datetime.java8API.enabled}
-     * is turned on — both are handled here rather than assuming one.
-     */
-    private static LocalDate getDateOrNull(Row row, String fieldName) {
-        if (!hasNonNullField(row, fieldName)) {
-            return null;
-        }
-        Object value = row.getAs(fieldName);
-        if (value instanceof LocalDate localDate) {
-            return localDate;
-        }
-        if (value instanceof Date sqlDate) {
-            return sqlDate.toLocalDate();
-        }
-        throw new IllegalStateException(
-                "Unsupported type for AVRO field '" + fieldName + "': " + value.getClass().getName());
+                RowReaders.getDateOrNull(processingRow, AvroConstants.FIELD_RUN_DATE),
+                RowReaders.getStringOrNull(processingRow, AvroConstants.FIELD_RUN_HOUR));
     }
 }
