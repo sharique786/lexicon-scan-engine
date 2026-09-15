@@ -9,6 +9,8 @@ import org.apache.spark.sql.Row;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.sql.Date;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -107,7 +109,7 @@ public final class MessageRowConverter implements Serializable {
         }
         Row processingRow = row.getAs(AvroConstants.FIELD_PROCESSING);
         return new MessageProcessing(
-                getStringOrNull(processingRow, AvroConstants.FIELD_RUN_DATE),
+                getDateOrNull(processingRow, AvroConstants.FIELD_RUN_DATE),
                 getStringOrNull(processingRow, AvroConstants.FIELD_RUN_HOUR));
     }
 
@@ -126,5 +128,26 @@ public final class MessageRowConverter implements Serializable {
             return null;
         }
         return row.getAs(fieldName);
+    }
+
+    /**
+     * Reads an AVRO {@code date}-logical-type field as a {@link LocalDate}.
+     * Spark represents such a field as {@link Date} by default, or as a
+     * {@link LocalDate} directly when {@code spark.sql.datetime.java8API.enabled}
+     * is turned on — both are handled here rather than assuming one.
+     */
+    private static LocalDate getDateOrNull(Row row, String fieldName) {
+        if (!hasNonNullField(row, fieldName)) {
+            return null;
+        }
+        Object value = row.getAs(fieldName);
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        throw new IllegalStateException(
+                "Unsupported type for AVRO field '" + fieldName + "': " + value.getClass().getName());
     }
 }

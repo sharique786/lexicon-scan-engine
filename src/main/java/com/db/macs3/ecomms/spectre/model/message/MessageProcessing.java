@@ -2,6 +2,7 @@ package com.db.macs3.ecomms.spectre.model.message;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.util.Objects;
 
 /**
@@ -13,23 +14,23 @@ public class MessageProcessing implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private String runDate;
+    private LocalDate runDate;
     private String runHour;
 
     /**
-     * @param runDate {@code YYYY-MM-DD}-shaped partition date
+     * @param runDate partition date — AVRO {@code date}-logical-type field
      * @param runHour partition hour
      */
-    public MessageProcessing(String runDate, String runHour) {
+    public MessageProcessing(LocalDate runDate, String runHour) {
         this.runDate = runDate;
         this.runHour = runHour;
     }
 
-    public String getRunDate() {
+    public LocalDate getRunDate() {
         return runDate;
     }
 
-    public void setRunDate(String runDate) {
+    public void setRunDate(LocalDate runDate) {
         this.runDate = runDate;
     }
 

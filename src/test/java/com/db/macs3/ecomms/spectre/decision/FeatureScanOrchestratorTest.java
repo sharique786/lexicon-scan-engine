@@ -201,7 +201,7 @@ class FeatureScanOrchestratorTest {
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
-                    new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow bodyOnlyRow = row("1", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
@@ -227,7 +227,7 @@ class FeatureScanOrchestratorTest {
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
-                    new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow allScopeRow = row("2", feature, defJson(feature, "subject", "Message Body", "Attachment"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(allScopeRow);
@@ -256,7 +256,7 @@ class FeatureScanOrchestratorTest {
                 new MessageSource("chat", "src", "sys", "conv-1"),
                 new MessageContent(null, null, null, null),
                 List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in a long attachment")),
-                new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
         FeatureDecisionRow attachOnlyRow = row("3", feature, defJson(feature, "Attachment"));
 
         try (FeatureScanOrchestrator limited = new FeatureScanOrchestrator(loader, 5L)) { // 5-byte limit
@@ -283,7 +283,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "there is a bomb in the body", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow bodyOnlyRow = row("4", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(bodyOnlyRow);
@@ -310,7 +310,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "insider trading", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("5", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -340,7 +340,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "insider trading occurred and was later disclosed to the board", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("6", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -367,7 +367,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "insider trading occurred yesterday", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("7", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -403,14 +403,14 @@ class FeatureScanOrchestratorTest {
             ScanMessage partialMessage = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "alpha and beta but not the third", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(partialMessage).scan(decisionRow)).isEmpty();
 
             // All 3 required leaves present, excluded absent -> matches, correct term_id.
             ScanMessage fullMessage = new ScanMessage("msg-102",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "alpha beta gamma all present here", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(fullMessage).scan(decisionRow);
             assertThat(results).hasSize(1);
             assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::9");
@@ -437,7 +437,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "alpha beta gamma present", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("9", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -470,7 +470,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "here is a simple term and also required", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("10", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -507,7 +507,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage nearMessage = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "we manipulate the closing price today", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(nearMessage).scan(decisionRow);
 
             assertThat(results).hasSize(1);
@@ -521,7 +521,7 @@ class FeatureScanOrchestratorTest {
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null,
                             "manipulate one two three four five six seven eight nine ten price", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(farMessage).scan(decisionRow)).isEmpty();
         }
     }
@@ -546,7 +546,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "please avoidnow any frontrun of the danger zone", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             FeatureDecisionRow decisionRow = row("12", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
@@ -578,13 +578,13 @@ class FeatureScanOrchestratorTest {
             ScanMessage onlyExcluded = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "this message has exclleaf only", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(onlyExcluded).scan(decisionRow)).isEmpty();
 
             ScanMessage onlyRequired = new ScanMessage("msg-102",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "this message has reqleaf only", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(onlyRequired).scan(decisionRow);
             assertThat(results).hasSize(1);
             assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::7");
@@ -592,7 +592,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage both = new ScanMessage("msg-103",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "this message has reqleaf and exclleaf both", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(both).scan(decisionRow))
                     .as("required present AND excluded ALSO present -> term must NOT appear in results")
                     .isEmpty();
@@ -621,7 +621,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null, "legacyword here, and manipulate the price too", null, null),
-                    List.of(), new MessageProcessing("2026-08-16", "10"), "ds1", true);
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             FeatureDecisionRow decisionRow = row("14", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
 
