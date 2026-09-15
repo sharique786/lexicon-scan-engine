@@ -3,6 +3,8 @@ package com.db.macs3.ecomms.spectre.spark;
 import com.db.macs3.ecomms.spectre.bq.OutputTableWriter;
 import com.db.macs3.ecomms.spectre.config.RuntimeArgs;
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
@@ -39,6 +41,11 @@ class PipelineRecordAuditIntegrationTest {
 
     private static SparkSession spark;
 
+    private static final String SAMPLE_JSON = "{\"dataset_details\":[{\"dataset_id\":\"ds1\","
+            + "\"dataset_partition_value\":\"p1\"}],\"feature_partition_value\":\"2026-08-16\","
+            + "\"pipeline_exec_id\":\"pipe-1\",\"policy_engine_id\":\"policy-1\",\"process_id\":\"proc-1\","
+            + "\"trigger_type\":\"policy-alert-test\",\"config_file_path\":\"gs://bucket/config.yml\"}";
+
     @BeforeAll
     static void startSpark() {
         System.setProperty("spark.master", "local[2]");
@@ -58,7 +65,11 @@ class PipelineRecordAuditIntegrationTest {
     }
 
     private static RuntimeArgs runtimeArgs() {
-        return new RuntimeArgs(List.of(), null, "pipe-1", "policy-1", "proc-1", "policy-alert-test", null);
+        try {
+            return new ObjectMapper().readValue(SAMPLE_JSON, RuntimeArgs.class);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private Dataset<Row> buildRecordAuditRows(List<MessageProcessingResult> results) {

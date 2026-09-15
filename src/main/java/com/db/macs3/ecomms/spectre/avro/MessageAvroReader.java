@@ -71,6 +71,10 @@ public final class MessageAvroReader {
                     : combinedMessages.unionByName(unrestrictedMessages);
         }
 
+        if (combinedMessages == null) {
+            throw new IllegalArgumentException("MessageAvroReader: combinedMessages in null after reading AVRO files");
+        }
+
         return combinedMessages.join(
                 functions.broadcast(relevantMessageIds.dropDuplicates(BqColumns.View.MESSAGE_ID)),
                 BqColumns.View.MESSAGE_ID);

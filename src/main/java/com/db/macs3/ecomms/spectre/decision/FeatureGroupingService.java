@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Groups one message's {@link FeatureDecisionRow}s (all sharing one
@@ -110,7 +111,7 @@ public final class FeatureGroupingService {
     }
 
     private static boolean sameValue(String left, String right) {
-        return left == null ? right == null : left.equals(right);
+        return Objects.equals(left, right);
     }
 
     /**

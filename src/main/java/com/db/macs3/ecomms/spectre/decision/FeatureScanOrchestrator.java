@@ -347,11 +347,15 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         // text, not representative of the whole term.
         String termRegexPattern = entry.getTermRegexPattern() != null
                 ? entry.getTermRegexPattern()
-                : entry.hasCoarseExpressionId()
-                ? patternTextByExpressionId.get(entry.getRequiredExpressionIds().getFirst())
-                : null;
+                : getTermRegexPattern(entry, patternTextByExpressionId);
 
         return new TermMatchResult(termId, termRegexPattern, combined);
+    }
+
+    private String getTermRegexPattern(TermEntry entry, Map<Integer, String> patternTextByExpressionId) {
+        return entry.hasCoarseExpressionId()
+                ? patternTextByExpressionId.get(entry.getRequiredExpressionIds().getFirst())
+                : null;
     }
 
     /**

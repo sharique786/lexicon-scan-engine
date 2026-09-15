@@ -206,23 +206,31 @@ final class ResolvedPatternAreaEvaluator {
         int length = text.length();
         int tokenStart = -1;
         int index = 0;
+
         while (index < length) {
             int codePoint = text.codePointAt(index);
             int codePointWidth = Character.charCount(codePoint);
-            if (Character.isWhitespace(codePoint)) {
-                tokenStart = closeOpenToken(spans, tokenStart, index);
-            } else if (isCjkCodePoint(codePoint)) {
-                tokenStart = closeOpenToken(spans, tokenStart, index);
-                spans.add(new int[]{index, index + codePointWidth});
-            } else if (tokenStart < 0) {
-                tokenStart = index;
-            }
+            tokenStart = addSpans(spans, codePoint, tokenStart, index, codePointWidth);
             index += codePointWidth;
         }
+
         if (tokenStart >= 0) {
             spans.add(new int[]{tokenStart, length});
         }
         return spans;
+    }
+
+    private static int addSpans(List<int[]> spans, int codePoint, int tokenStart, int index, int codePointWidth) {
+        if (Character.isWhitespace(codePoint)) {
+            tokenStart = closeOpenToken(spans, tokenStart, index);
+        } else if (isCjkCodePoint(codePoint)) {
+            tokenStart = closeOpenToken(spans, tokenStart, index);
+            spans.add(new int[]{index, index + codePointWidth});
+        } else if (tokenStart < 0) {
+            tokenStart = index;
+        }
+
+        return tokenStart;
     }
 
     /**

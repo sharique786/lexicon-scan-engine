@@ -50,7 +50,7 @@ import java.util.regex.Pattern;
  * serializable — each executor JVM builds its own on first use.
  */
 @Component
-public final class GcsClient implements Serializable {
+public class GcsClient implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;

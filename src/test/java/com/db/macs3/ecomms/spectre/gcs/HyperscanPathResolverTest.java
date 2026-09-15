@@ -18,7 +18,7 @@ class HyperscanPathResolverTest {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) ->
                 List.of("2026-08-16_10-00-00_101", "2026-08-15_09-00-00_202");
         String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "policy_test", "101", lister);
-        assertThat(basePath).isEqualTo("gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/");
+        assertThat(basePath).isEqualTo("gs://my-bucket/policy_test/2026-08-16_10-00-00_101/output/lex-hyperscan/");
     }
 
     @Test
@@ -27,7 +27,7 @@ class HyperscanPathResolverTest {
         HyperscanPathResolver.GcsDirectoryLister lister = (bucket, prefix) ->
                 List.of("2026-08-16_10-00-00_101");
         String basePath = HyperscanPathResolver.resolveBasePath("my-bucket", "custom_prefix", "101", lister);
-        assertThat(basePath).isEqualTo("gs://my-bucket/custom_prefix/2026-08-16_10-00-00_101/lex-hyperscan/");
+        assertThat(basePath).isEqualTo("gs://my-bucket/custom_prefix/2026-08-16_10-00-00_101/output/lex-hyperscan/");
     }
 
     @Test

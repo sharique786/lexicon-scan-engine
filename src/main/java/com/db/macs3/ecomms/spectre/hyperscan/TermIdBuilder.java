@@ -47,7 +47,7 @@ public final class TermIdBuilder {
 
     /**
      * @return the term-metadata JSON entry name expected INSIDE {@code feature}'s zip bundle —
-     * {@code <feature>-compile-results.json}, matching the Lexicon Compile Service's
+     * {@code <feature>.json}, matching the Lexicon Compile Service's
      * own naming convention (see {@code TermExpressionMetadata} class Javadoc for why
      * this is now needed, and {@code HyperscanBundleLoader} for how it is loaded).
      */
