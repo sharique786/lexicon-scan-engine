@@ -49,6 +49,23 @@ class MessageAvroReaderTest {
     }
 
     @Test
+    @DisplayName("treats restricted/ as empty when it only holds leftover CSV-mirror objects, not .avro files")
+    void ignoresNonAvroLeftoversUnderRestricted() {
+        // Simulates a rerun of this same dataset after writeRestrictedCsvMirror already wrote its
+        // output under restricted/csv/ — those objects must not make hasRestrictedFiles true.
+        when(gcsClient.listAllObjects(eq("my-msg-bucket"), eq("coreapp-trans/ds1/restricted/")))
+                .thenReturn(List.of(
+                        "gs://my-msg-bucket/coreapp-trans/ds1/restricted/csv/part-00000.csv",
+                        "gs://my-msg-bucket/coreapp-trans/ds1/restricted/csv/_SUCCESS"));
+        when(gcsClient.listAllObjects(eq("my-msg-bucket"), eq("coreapp-trans/ds1/unrestricted/")))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> MessageAvroReader.readDataset(
+                null, gcsClient, "my-msg-bucket", "coreapp-trans", "ds1", "2026-06-18", null))
+                .isInstanceOf(MessageAvroReader.NoAvroFilesFoundException.class);
+    }
+
+    @Test
     @DisplayName("checks both subfolders under <msgGcsPrefix>/<datasetId>/, not a hardcoded path segment")
     void checksBothSubfoldersUnderConfiguredPrefix() {
         when(gcsClient.listAllObjects(eq("my-msg-bucket"), eq("custom-prefix/ds-xyz/restricted/")))

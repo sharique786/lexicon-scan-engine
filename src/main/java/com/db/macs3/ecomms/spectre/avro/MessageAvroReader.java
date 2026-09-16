@@ -7,6 +7,8 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 
+import java.util.List;
+
 /**
  * Reads AVRO message files for one dataset from its {@code restricted/} and
  * {@code unrestricted/} GCS subfolders, filters to only the {@code message_id}s
@@ -51,8 +53,8 @@ public final class MessageAvroReader {
         String restrictedPath = restrictedPath(baseBucket, datasetPathPrefix, datasetId);
         String unrestrictedPath = "gs://" + baseBucket + "/" + unrestrictedPrefix;
 
-        boolean hasRestrictedFiles = !gcsClient.listAllObjects(baseBucket, restrictedPrefix).isEmpty();
-        boolean hasUnrestrictedFiles = !gcsClient.listAllObjects(baseBucket, unrestrictedPrefix).isEmpty();
+        boolean hasRestrictedFiles = hasAvroFile(gcsClient.listAllObjects(baseBucket, restrictedPrefix));
+        boolean hasUnrestrictedFiles = hasAvroFile(gcsClient.listAllObjects(baseBucket, unrestrictedPrefix));
 
         if (!hasRestrictedFiles && !hasUnrestrictedFiles) {
             throw new NoAvroFilesFoundException(
@@ -92,6 +94,21 @@ public final class MessageAvroReader {
      */
     public static String restrictedPath(String baseBucket, String datasetPathPrefix, String datasetId) {
         return "gs://" + baseBucket + "/" + datasetPathPrefix + "/" + datasetId + "/" + AvroConstants.RESTRICTED_SUBFOLDER;
+    }
+
+    /**
+     * {@code gcsClient.listAllObjects} returns every object under the prefix, not just
+     * {@code .avro} files — the {@code restricted/} prefix in particular also holds this job's
+     * own CSV mirror output ({@code ScanEngineJobRunner#writeRestrictedCsvMirror} writes to
+     * {@code restrictedPath + "csv"}, i.e. {@code restricted/csv/part-*.csv} + {@code _SUCCESS}
+     * left behind by a prior run of this same dataset). Without this filter, a rerun with only
+     * {@code unrestricted/} AVRO files present would still see {@code restricted/}'s leftover CSV
+     * objects and wrongly conclude AVRO files exist there, leading {@link #readAndTag} to load a
+     * path with zero files actually matching {@code pathGlobFilter=*.avro} — which Spark's own
+     * AVRO datasource reports as {@code FileNotFoundException: No Avro files found}.
+     */
+    private static boolean hasAvroFile(List<String> objectNames) {
+        return objectNames.stream().anyMatch(name -> name.endsWith(".avro"));
     }
 
     private static Dataset<Row> readAndTag(SparkSession spark, String path, String datasetPartitionValue, boolean restricted) {
