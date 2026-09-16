@@ -12,6 +12,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -192,14 +194,19 @@ public final class HyperscanBundleLoader implements AutoCloseable {
             LexiconBundle bundle = entry.getValue();
             cache.computeIfAbsent(entry.getKey(), unusedFeature -> bundle);
         }
-        log.debug("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
+        log.info("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
                 loaded.size(), distinct.size());
     }
 
     private LexiconBundle loadFresh(String feature) {
         String path = resolveZipPath(feature);
+        log.info("Loading Hyperscan zip bundle for feature '{}' from {}", feature, path);
+        Instant loadStart = Instant.now();
         ZipEntryBytes zipEntryBytes = extractZipEntries(feature, path);
-        return buildBundle(feature, path, zipEntryBytes);
+        LexiconBundle bundle = buildBundle(feature, path, zipEntryBytes);
+        log.info("Loaded Hyperscan zip bundle for feature '{}' from {} in {}ms",
+                feature, path, Duration.between(loadStart, Instant.now()).toMillis());
+        return bundle;
     }
 
     private String resolveZipPath(String feature) {

@@ -1,6 +1,8 @@
 package com.db.macs3.ecomms.spectre.gcs;
 
 import com.db.macs3.ecomms.spectre.hyperscan.TermIdBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Comparator;
 import java.util.List;
@@ -41,6 +43,8 @@ import java.util.List;
  */
 public final class HyperscanPathResolver {
 
+    private static final Logger log = LoggerFactory.getLogger(HyperscanPathResolver.class);
+
     private static final String HDB_SUBFOLDER = "lex-hyperscan";
     private static final String OUTPUT_SUBFOLDER = "output";
 
@@ -77,6 +81,8 @@ public final class HyperscanPathResolver {
     public static String resolveBasePath(String hdbGcsBucket, String hdbGcsPrefix, String policyEngineId,
                                          GcsDirectoryLister lister) {
         String prefix = hdbGcsPrefix + "/";
+        log.info("Resolving Hyperscan base path under gs://{}/{} for policyEngineId={}",
+                hdbGcsBucket, prefix, policyEngineId);
         List<String> children = lister.listImmediateChildDirectories(hdbGcsBucket, prefix);
 
         String suffix = "_" + policyEngineId;
@@ -88,8 +94,11 @@ public final class HyperscanPathResolver {
                                 + "matching '*" + suffix + "' — cannot resolve any .hdb file paths for policyEngineId="
                                 + policyEngineId + ". Checked " + children.size() + " candidate folder(s)."));
 
-        return "gs://" + hdbGcsBucket + "/" + hdbGcsPrefix + "/" + resolvedFolder
+        String basePath = "gs://" + hdbGcsBucket + "/" + hdbGcsPrefix + "/" + resolvedFolder
                 + "/" + OUTPUT_SUBFOLDER + "/" + HDB_SUBFOLDER + "/";
+        log.info("Resolved Hyperscan base path for policyEngineId={}: {} (chose '{}' among {} candidate folder(s))",
+                policyEngineId, basePath, resolvedFolder, children.size());
+        return basePath;
     }
 
     /**

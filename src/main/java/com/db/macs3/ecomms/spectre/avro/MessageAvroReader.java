@@ -6,6 +6,8 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -27,6 +29,8 @@ import java.util.List;
  * set of relevant ids.
  */
 public final class MessageAvroReader {
+
+    private static final Logger log = LoggerFactory.getLogger(MessageAvroReader.class);
 
     private MessageAvroReader() {
     }
@@ -52,9 +56,14 @@ public final class MessageAvroReader {
         String unrestrictedPrefix = datasetPrefix + AvroConstants.UNRESTRICTED_SUBFOLDER;
         String restrictedPath = restrictedPath(baseBucket, datasetPathPrefix, datasetId);
         String unrestrictedPath = "gs://" + baseBucket + "/" + unrestrictedPrefix;
+        log.info("Reading AVRO messages for dataset_id='{}': restrictedPath={}, unrestrictedPath={}, "
+                        + "datasetPartitionValue={}",
+                datasetId, restrictedPath, unrestrictedPath, datasetPartitionValue);
 
         boolean hasRestrictedFiles = hasAvroFile(gcsClient.listAllObjects(baseBucket, restrictedPrefix));
         boolean hasUnrestrictedFiles = hasAvroFile(gcsClient.listAllObjects(baseBucket, unrestrictedPrefix));
+        log.info("dataset_id='{}': hasRestrictedAvroFiles={}, hasUnrestrictedAvroFiles={}",
+                datasetId, hasRestrictedFiles, hasUnrestrictedFiles);
 
         if (!hasRestrictedFiles && !hasUnrestrictedFiles) {
             throw new NoAvroFilesFoundException(
@@ -64,9 +73,11 @@ public final class MessageAvroReader {
 
         Dataset<Row> combinedMessages = null;
         if (hasRestrictedFiles) {
+            log.info("Loading restricted AVRO messages for dataset_id='{}' from {}", datasetId, restrictedPath);
             combinedMessages = readAndTag(spark, restrictedPath, datasetPartitionValue, true);
         }
         if (hasUnrestrictedFiles) {
+            log.info("Loading unrestricted AVRO messages for dataset_id='{}' from {}", datasetId, unrestrictedPath);
             Dataset<Row> unrestrictedMessages = readAndTag(spark, unrestrictedPath, datasetPartitionValue, false);
             combinedMessages = (combinedMessages == null)
                     ? unrestrictedMessages

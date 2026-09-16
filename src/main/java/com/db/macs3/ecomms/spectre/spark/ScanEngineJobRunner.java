@@ -145,6 +145,8 @@ public class ScanEngineJobRunner {
         }
         log.info("Stage [parse arguments/config]: completed in {}ms",
                 Duration.between(stageStart, Instant.now()).toMillis());
+        log.info("Parsed input runtime arguments: {}", runtimeArgs);
+        log.info("Loaded Dataproc config from {}: {}", runtimeArgs.configFilePath(), dataprocConfig);
         BqTableConfig tableConfig = dataprocConfig.bigquery();
 
         Instant jobStart = Instant.now();
@@ -173,6 +175,7 @@ public class ScanEngineJobRunner {
         String hyperscanBasePath = runStage("resolve Hyperscan base path", () -> HyperscanPathResolver.resolveBasePath(
                 hyperscanConfig.hdbGcsBucket(), hyperscanConfig.hdbGcsPrefix(), runtimeArgs.policyEngineId(),
                 gcsClient::listImmediateChildDirectories));
+        log.info("Hyperscan base path for this run: {}", hyperscanBasePath);
 
         // 2 + 3. Read the view (one query covering every dataset_details entry), then resolve every
         // DISTINCT feature referenced to its .zip bundle path and broadcast the resulting small
@@ -194,6 +197,7 @@ public class ScanEngineJobRunner {
             for (String feature : distinctFeatures) {
                 zipPaths.put(feature, HyperscanPathResolver.buildZipPath(hyperscanBasePath, feature));
             }
+            log.info("Resolved Hyperscan zip bundle path(s) for this run: {}", zipPaths);
             return zipPaths;
         });
         // Broadcast via the injected JavaSparkContext (see SparkSessionConfig; not the raw Scala
