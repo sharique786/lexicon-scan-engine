@@ -44,9 +44,11 @@ import java.util.regex.Pattern;
  * AND NOT boolean condition at all, requires this metadata — the
  * {@code .hdb} file alone is not self-sufficient for AND NOT terms.
  *
- * <h2>{@code resolvedPatterns}: decomposed NEAR/FOLLOWEDBY/AND-NOT terms</h2>
+ * <h2>{@code resolvedPatterns}: decomposed NEAR/FOLLOWEDBY/AND/AND-NOT terms</h2>
  * <p>A term using {@code NEAR{n}}/{@code FOLLOWEDBY{n}} proximity operators
- * (or, potentially, AND NOT) may be split ("Pattern Too Large") into
+ * (optionally combined with a further plain AND conjunction — see
+ * {@link ResolvedPatternTree.And} — and/or, potentially, AND NOT) may be
+ * split ("Pattern Too Large") into
  * multiple decomposed {@code regexPattern} leaves (renamed from
  * {@code translatedPattern}), each compiled with the {@code QUIET} Hyperscan
  * flag — meaning Hyperscan's own match callback never reports an individual
@@ -428,7 +430,8 @@ public class TermExpressionMetadata implements Serializable {
      * since such a term may legitimately have none at all (see {@link #mandatoryPerAreaTerms()}).
      * Every other term (with or without a {@code resolvedPatternTree}) resolves its required id
      * via {@link #resolveRequiredIds}; only a legacy (non-resolvedPatterns) term also carries an
-     * excluded id list.
+     * excluded id list — a {@link ResolvedPatternTree.Chain} or plain-AND
+     * {@link ResolvedPatternTree.And} tree never has an excluded side, so both get {@code null} here.
      */
     private static RequiredExcludedIds resolveIds(String feature, TermResultJson termResult,
                                                   ResolvedPatternTree tree) {
@@ -436,7 +439,8 @@ public class TermExpressionMetadata implements Serializable {
             return new RequiredExcludedIds(termResult.getRequiredExpressionIds(), termResult.getExcludedExpressionIds());
         }
         List<Integer> requiredIds = resolveRequiredIds(feature, termResult);
-        List<Integer> excludedIds = tree instanceof ResolvedPatternTree.Chain ? null : termResult.getExcludedExpressionIds();
+        boolean hasNoExcludedSide = tree instanceof ResolvedPatternTree.Chain || tree instanceof ResolvedPatternTree.And;
+        List<Integer> excludedIds = hasNoExcludedSide ? null : termResult.getExcludedExpressionIds();
         return new RequiredExcludedIds(requiredIds, excludedIds);
     }
 
@@ -504,7 +508,7 @@ public class TermExpressionMetadata implements Serializable {
         if (isAndNotShape) {
             validateAndNotShapeHasNoNativeCombination(feature, termResult);
         } else {
-            validatePatternMappingCount(feature, termResult, (ResolvedPatternTree.Chain) tree);
+            validatePatternMappingCount(feature, termResult, tree);
         }
     }
 
@@ -575,13 +579,17 @@ public class TermExpressionMetadata implements Serializable {
     }
 
     /**
-     * When {@code patternMapping} is present on a plain (non-AND-NOT) chain
-     * term, its id count must match the chain's own leaf count — e.g.
-     * {@code "(7&8)"} for a 2-leaf chain. Optional field: a chain term with no
+     * When {@code patternMapping} is present on a plain (non-AND-NOT) term —
+     * a {@link ResolvedPatternTree.Chain} or a {@link ResolvedPatternTree.And}
+     * of chains — its id count must match the tree's TOTAL leaf count, summed
+     * across every {@link ResolvedPatternTree.Chain} the tree contains (see
+     * {@link ResolvedPatternTree#countLeaves}) — e.g. {@code "(7&8)"} for a
+     * single 2-leaf chain, or {@code "(20&21&22)"} for a 2-leaf chain plainly
+     * ANDed with a 1-leaf chain. Optional field: a term with no
      * {@code patternMapping} at all (e.g. a single-leaf term with no
      * decomposition) is not checked.
      */
-    private static void validatePatternMappingCount(String feature, TermResultJson termResult, ResolvedPatternTree.Chain chain) {
+    private static void validatePatternMappingCount(String feature, TermResultJson termResult, ResolvedPatternTree tree) {
         String mapping = termResult.getPatternMapping();
         if (mapping == null || mapping.isBlank()) {
             return;
@@ -591,11 +599,12 @@ public class TermExpressionMetadata implements Serializable {
             stripped = stripped.substring(1, stripped.length() - 1);
         }
         int idCount = stripped.isBlank() ? 0 : stripped.split("&").length;
-        if (idCount != chain.getLeaves().size()) {
+        int leafCount = ResolvedPatternTree.countLeaves(tree);
+        if (idCount != leafCount) {
             throw new TermMetadataParseException(
                     "Term '" + termResult.getTermId() + "' in feature '" + feature + "': patternMapping '" + mapping
                             + "' implies " + idCount + " expression id(s) but regexPattern/translatedPattern has "
-                            + chain.getLeaves().size() + " leaf/leaves — malformed compile-results JSON.");
+                            + leafCount + " leaf/leaves — malformed compile-results JSON.");
         }
     }
 

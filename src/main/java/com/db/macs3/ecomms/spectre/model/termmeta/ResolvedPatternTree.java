@@ -9,15 +9,26 @@ import java.util.regex.Pattern;
 
 /**
  * The evaluable form of one term's {@code resolvedPatterns} string — a
- * decomposed representation of a NEAR/FOLLOWEDBY proximity chain and/or an
- * AND NOT condition, kept as a left-to-right sequence of {@code regexPattern}
- * leaves joined by the operator text {@code resolvedPatterns} carries. See
- * {@code ResolvedPatternAreaEvaluator} for how a tree is evaluated against
- * real message text, and {@code TermExpressionMetadata} class Javadoc for
- * why this exists (decomposed leaves are compiled QUIET in the {@code .hdb}
- * — Hyperscan itself can never report their individual positions, so the
- * real proximity/AND-NOT condition must be re-verified in Java against the
+ * decomposed representation of a NEAR/FOLLOWEDBY proximity chain, a plain AND
+ * conjunction, and/or an AND NOT condition, kept as a left-to-right sequence
+ * of {@code regexPattern} leaves joined by the operator text
+ * {@code resolvedPatterns} carries. See {@code ResolvedPatternAreaEvaluator}
+ * for how a tree is evaluated against real message text, and
+ * {@code TermExpressionMetadata} class Javadoc for why this exists
+ * (decomposed leaves are compiled QUIET in the {@code .hdb} — Hyperscan
+ * itself can never report their individual positions, so the real
+ * proximity/AND/AND-NOT condition must be re-verified in Java against the
  * leaves' own regex text).
+ *
+ * <h2>Plain AND vs. AND NOT — a genuinely separate operator</h2>
+ * <p>A real term has been observed combining a {@code NEAR{n}}/
+ * {@code FOLLOWEDBY{n}} chain with a further, independently-required
+ * condition via a plain {@code " AND ("} — e.g.
+ * {@code "leaf1 NEAR{5} leaf2 AND leaf3"} — distinct from
+ * {@code requiresExclusionCheck}'s {@code " AND NOT ("} shape: BOTH sides
+ * must be present (see {@link And}), never an exclusion. {@link #parseShape}
+ * checks {@link #AND_NOT_MARKER} first — a term is never both shapes at once
+ * in the data observed so far.
  *
  * <h2>Shape parsing, not text slicing</h2>
  * <p>{@link #build} never slices leaf regex text directly out of the
@@ -25,22 +36,22 @@ import java.util.regex.Pattern;
  * regex text happened to contain a literal operator marker like
  * {@code " NEAR{5} "}. Instead, paren-depth-aware scanning discovers only the
  * tree's SHAPE (leaf count per chain segment, operator+distance sequence,
- * the AND NOT split point), which is then zipped against the {@code regexPattern}
+ * the AND/AND-NOT split point), which is then zipped against the {@code regexPattern}
  * list positionally, in the same left-to-right order {@code resolvedPatterns}
  * renders them in. A leaf-count disagreement between the two fields becomes a
  * structural parse error (the zip cursor running out, or having leftovers)
  * rather than a silent mismatch.
  *
- * <h2>{@link Chain}/{@link AndNot} are mutable POJOs, marked {@code non-sealed}</h2>
+ * <h2>{@link Chain}/{@link And}/{@link AndNot} are mutable POJOs, marked {@code non-sealed}</h2>
  * <p>Java requires every direct permitted subtype of a {@code sealed}
  * interface to be {@code final}, {@code sealed}, or {@code non-sealed}. This
  * project's model-package convention (mutable POJOs, no {@code final}) rules
- * out {@code final}, so {@link Chain}/{@link AndNot} (and {@link ShapeNode}'s
- * {@code ChainShape}/{@code AndNotShape}) are {@code non-sealed} instead —
- * the sealed CONTRACT on {@link ResolvedPatternTree}/{@link ShapeNode}
- * themselves (exhaustive {@code instanceof}/{@code switch} over a closed set)
- * is unaffected, since this file is still the only place new implementations
- * can be declared.
+ * out {@code final}, so {@link Chain}/{@link And}/{@link AndNot} (and
+ * {@link ShapeNode}'s {@code ChainShape}/{@code AndShape}/{@code AndNotShape})
+ * are {@code non-sealed} instead — the sealed CONTRACT on
+ * {@link ResolvedPatternTree}/{@link ShapeNode} themselves (exhaustive
+ * {@code instanceof}/{@code switch} over a closed set) is unaffected, since
+ * this file is still the only place new implementations can be declared.
  *
  * <h2>Not {@code Serializable} — deliberately</h2>
  * <p>{@link Pattern} does not implement {@link java.io.Serializable}, so
@@ -123,6 +134,66 @@ public sealed interface ResolvedPatternTree {
         @Override
         public String toString() {
             return "Chain[leaves=" + leaves + ", operators=" + operators + ", distances=" + distances + "]";
+        }
+    }
+
+    /**
+     * left/right — a plain CONJUNCTION: both sides must independently be satisfied within the SAME
+     * area for this node to match. Unlike {@link AndNot}, neither side is an exclusion — this is
+     * {@code "(chain A) AND (chain B)"}, not {@code "(chain A) AND NOT (chain B)"}. Confirmed real
+     * shape: a {@code NEAR{n}}/{@code FOLLOWEDBY{n}} chain plainly ANDed with a further single-leaf
+     * (or, unconfirmed, chain) condition, e.g. {@code "leaf1 NEAR{5} leaf2 AND leaf3"} — both
+     * {@code left} and {@code right} are always a plain {@link Chain} today (mirroring
+     * {@link AndNot}'s "never nested" contract); a term combining a plain AND with an AND NOT in the
+     * same {@code resolvedPatterns} string has not been observed and is not handled — see
+     * {@link #parseShape}.
+     */
+    non-sealed class And implements ResolvedPatternTree {
+
+        private ResolvedPatternTree left;
+        private ResolvedPatternTree right;
+
+        public And(ResolvedPatternTree left, ResolvedPatternTree right) {
+            this.left = left;
+            this.right = right;
+        }
+
+        public ResolvedPatternTree getLeft() {
+            return left;
+        }
+
+        public void setLeft(ResolvedPatternTree left) {
+            this.left = left;
+        }
+
+        public ResolvedPatternTree getRight() {
+            return right;
+        }
+
+        public void setRight(ResolvedPatternTree right) {
+            this.right = right;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || this.getClass() != obj.getClass()) {
+                return false;
+            }
+            And other = (And) obj;
+            return Objects.equals(left, other.left) && Objects.equals(right, other.right);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(left, right);
+        }
+
+        @Override
+        public String toString() {
+            return "And[left=" + left + ", right=" + right + "]";
         }
     }
 
@@ -285,21 +356,71 @@ public sealed interface ResolvedPatternTree {
                 this.excluded = excluded;
             }
         }
+
+        non-sealed class AndShape implements ShapeNode {
+
+            private ShapeNode left;
+            private ShapeNode right;
+
+            AndShape(ShapeNode left, ShapeNode right) {
+                this.left = left;
+                this.right = right;
+            }
+
+            ShapeNode getLeft() {
+                return left;
+            }
+
+            void setLeft(ShapeNode left) {
+                this.left = left;
+            }
+
+            ShapeNode getRight() {
+                return right;
+            }
+
+            void setRight(ShapeNode right) {
+                this.right = right;
+            }
+        }
     }
 
     String AND_NOT_MARKER = " AND NOT (";
+    /**
+     * A plain (non-negating) conjunction marker — deliberately distinct text from
+     * {@link #AND_NOT_MARKER} ({@code " NOT "} sits between "AND" and the paren there), so checking
+     * {@link #AND_NOT_MARKER} first, as {@link #parseShape} does, can never misfire on this one, and
+     * vice versa: this marker's own {@code findTopLevel} scan never matches inside an occurrence of
+     * {@link #AND_NOT_MARKER}.
+     */
+    String AND_MARKER = " AND (";
     Pattern PROXIMITY_KEYWORD = Pattern.compile(" (" + OPERATOR_NEAR + "|" + OPERATOR_FOLLOWEDBY + ")\\{(\\d+)\\} ");
 
+    /**
+     * Checks {@link #AND_NOT_MARKER} first, then {@link #AND_MARKER} — a term combining both in one
+     * {@code resolvedPatterns} string (e.g. a plain AND together with an AND NOT) has not been
+     * observed against real data and is not handled here; the whole string falls through to
+     * {@link #AND_NOT_MARKER}'s branch in that case, same as before this method learned about
+     * {@link #AND_MARKER} at all.
+     */
     static ShapeNode parseShape(String feature, String termId, String text) {
-        int markerAt = findTopLevel(text, AND_NOT_MARKER);
-        if (markerAt < 0) {
-            return parseChainShape(text);
+        int andNotAt = findTopLevel(text, AND_NOT_MARKER);
+        if (andNotAt >= 0) {
+            String requiredText = text.substring(0, andNotAt);
+            int openParenAt = andNotAt + AND_NOT_MARKER.length() - 1;
+            int closeParenAt = matchingCloseParen(feature, termId, text, openParenAt);
+            String excludedText = text.substring(openParenAt + 1, closeParenAt);
+            return new ShapeNode.AndNotShape(parseChainShape(requiredText), parseChainShape(excludedText));
         }
-        String requiredText = text.substring(0, markerAt);
-        int openParenAt = markerAt + AND_NOT_MARKER.length() - 1;
-        int closeParenAt = matchingCloseParen(feature, termId, text, openParenAt);
-        String excludedText = text.substring(openParenAt + 1, closeParenAt);
-        return new ShapeNode.AndNotShape(parseChainShape(requiredText), parseChainShape(excludedText));
+        int andAt = findTopLevel(text, AND_MARKER);
+        if (andAt >= 0) {
+            String leftText = text.substring(0, andAt);
+            int openParenAt = andAt + AND_MARKER.length() - 1;
+            int closeParenAt = matchingCloseParen(feature, termId, text, openParenAt);
+            String rightText = text.substring(openParenAt + 1, closeParenAt);
+            return new ShapeNode.AndShape(parseChainShape(leftText), parseChainShape(rightText));
+        }
+        return parseChainShape(text);
     }
 
     static ShapeNode.ChainShape parseChainShape(String text) {
@@ -377,6 +498,11 @@ public sealed interface ResolvedPatternTree {
                     zip(feature, termId, andNot.getRequired(), cursor),
                     zip(feature, termId, andNot.getExcluded(), cursor));
         }
+        if (shape instanceof ShapeNode.AndShape and) {
+            return new And(
+                    zip(feature, termId, and.getLeft(), cursor),
+                    zip(feature, termId, and.getRight(), cursor));
+        }
         ShapeNode.ChainShape chainShape = (ShapeNode.ChainShape) shape;
         List<Pattern> leaves = new ArrayList<>(chainShape.getLeafCount());
         for (int leafPosition = 0; leafPosition < chainShape.getLeafCount(); leafPosition++) {
@@ -388,5 +514,23 @@ public sealed interface ResolvedPatternTree {
             leaves.add(Pattern.compile(cursor.next(), JAVA_LEAF_FLAGS));
         }
         return new Chain(leaves, chainShape.getOperators(), chainShape.getDistances());
+    }
+
+    /**
+     * Total leaf count across a whole tree, recursively — used to validate {@code patternMapping}'s
+     * id count against a tree that may be a plain {@link Chain}, an {@link AndNot}, or (now) an
+     * {@link And}, without the caller needing to know which.
+     */
+    static int countLeaves(ResolvedPatternTree tree) {
+        if (tree instanceof Chain chain) {
+            return chain.getLeaves().size();
+        }
+        if (tree instanceof AndNot andNot) {
+            return countLeaves(andNot.getRequired()) + countLeaves(andNot.getExcluded());
+        }
+        if (tree instanceof And and) {
+            return countLeaves(and.getLeft()) + countLeaves(and.getRight());
+        }
+        throw new IllegalStateException("Unknown ResolvedPatternTree implementation: " + tree.getClass());
     }
 }

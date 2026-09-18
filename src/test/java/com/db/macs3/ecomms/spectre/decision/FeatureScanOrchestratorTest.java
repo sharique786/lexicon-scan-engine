@@ -556,6 +556,57 @@ class FeatureScanOrchestratorTest {
     }
 
     @Test
+    @DisplayName("REGRESSION: NEAR chain plainly ANDed with a third leaf (lexicon_research_3::2 production "
+                 + "shape) loads without HyperscanBundleLoader throwing, and requires BOTH the NEAR-chain "
+                 + "AND the third leaf present in the same area")
+    void nearChainPlainlyAndedWithThirdLeaf_bothConditionsRequired() {
+        String feature = "lex_near_and-1";
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("(20&21&22)", EnumSet.of(ExpressionFlag.COMBINATION), 2),
+                new Expression("(?:any hint|early look)", EnumSet.of(ExpressionFlag.QUIET, ExpressionFlag.CASELESS), 20),
+                new Expression("(?:analyst|research)", EnumSet.of(ExpressionFlag.QUIET, ExpressionFlag.CASELESS), 21),
+                new Expression("(?:about to publish|pre-publication)",
+                        EnumSet.of(ExpressionFlag.QUIET, ExpressionFlag.CASELESS), 22));
+
+        String termJson = """
+            {"termId": "%s::2", "compilationStatus": "PASS",
+             "regexPattern": ["(?:any hint|early look)", "(?:analyst|research)", "(?:about to publish|pre-publication)"],
+             "requiresExclusionCheck": false,
+             "resolvedPatterns": "(?:any hint|early look) NEAR{5} (?:analyst|research) AND (?:about to publish|pre-publication)",
+             "hyperscanExpressionId": 2, "patternMapping": "(20&21&22)"}
+            """.formatted(feature);
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_near_and-1.zip", dbBytes,
+                wrapResults(termJson));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            FeatureDecisionRow decisionRow = row("16", feature, defJson(feature, "Message Body"));
+
+            // NEAR-chain satisfied (within 5 words) AND the third leaf also present -> matches.
+            ScanMessage bothPresent = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "any hint from the analyst about to publish soon", null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            List<TermMatchResult> results = orchestrator.scannerFor(bothPresent).scan(decisionRow);
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::2");
+
+            // NEAR-chain satisfied, but the third leaf is ABSENT -> plain AND (not OR) means no match.
+            ScanMessage onlyNearChain = new ScanMessage("msg-102",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "any hint from the analyst today", null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(onlyNearChain).scan(decisionRow)).isEmpty();
+
+            // Third leaf present, but the NEAR-chain is not (leaves too far apart) -> no match.
+            ScanMessage onlyThirdLeaf = new ScanMessage("msg-103",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "pre-publication of something unrelated", null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(onlyThirdLeaf).scan(decisionRow)).isEmpty();
+        }
+    }
+
+    @Test
     @DisplayName("AND NOT resolvedPatterns term: required alone matches, excluded alone does not, and " +
                  "both together are correctly suppressed by the per-area regex AND NOT evaluation")
     void andNotResolvedPatterns_requiredExcludedInteraction() {

@@ -486,6 +486,115 @@ class TermExpressionMetadataTest {
     }
 
     @Nested
+    @DisplayName("Plain AND terms — a NEAR/FOLLOWEDBY chain plainly ANDed with a further leaf, not AND NOT")
+    class PlainAndTerms {
+
+        /**
+         * REGRESSION — reproduces the real production failure: {@code HyperscanBundleLoader.buildBundle}
+         * threw {@code HyperscanFileLoadException} wrapping "regexPattern has more leaves than
+         * resolvedPatterns' shape implies (3 provided)" for {@code lexicon_research_3::2}, whose
+         * {@code resolvedPatterns} is a 2-leaf {@code NEAR{5}} chain plainly ANDed (not AND NOT) with a
+         * third leaf — {@link ResolvedPatternTree#parseShape} only recognised
+         * {@code NEAR}/{@code FOLLOWEDBY}/{@code AND NOT}, so the plain {@code " AND ("} text was silently
+         * absorbed into the chain's final segment instead of ending it, undercounting the shape's leaves
+         * by one against the 3 real {@code regexPattern} entries.
+         */
+        @Test
+        @DisplayName("REGRESSION lexicon_research_3::2 shape: 2-leaf NEAR chain AND a third leaf parses "
+                     + "without throwing, into an And(Chain[2], Chain[1])")
+        void nearChainPlainlyAndedWithThirdLeaf_parsesCorrectly() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::2", "compilationStatus": "PASS",
+                   "regexPattern": [
+                     "(?:any color|any steer|any read|any preview|any hint|heads up|early look|what are you hearing|what's the view|where are you coming out|any whispers)",
+                     "(?:analyst|research|Information|report|note|rating|view|call|model|target|conclusion|publication)",
+                     "(?:going to publish|about to publish|before it goes out|pre-publication|ahead of the print|upcoming)"
+                   ],
+                   "requiresExclusionCheck": false,
+                   "resolvedPatterns": "(?:any color|any steer|any read|any preview|any hint|heads up|early look|what are you hearing|what's the view|where are you coming out|any whispers) NEAR{5} (?:analyst|research|Information|report|note|rating|view|call|model|target|conclusion|publication) AND (?:going to publish|about to publish|before it goes out|pre-publication|ahead of the print|upcoming)",
+                   "hyperscanExpressionId": 2, "patternMapping": "(20&21&22)"}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(2);
+
+            assertThat(entry).isNotNull();
+            assertThat(entry.getTermNumber()).isEqualTo(2);
+            assertThat(entry.isRequiresExclusionCheck()).isFalse();
+            assertThat(entry.requiresPerAreaEvaluation()).isTrue();
+            assertThat(entry.hasCoarseExpressionId()).isTrue();
+            assertThat(entry.getRequiredExpressionIds()).containsExactly(2);
+
+            ResolvedPatternTree.And and = (ResolvedPatternTree.And) entry.getResolvedPatternTree();
+            ResolvedPatternTree.Chain nearChain = (ResolvedPatternTree.Chain) and.getLeft();
+            ResolvedPatternTree.Chain thirdLeafChain = (ResolvedPatternTree.Chain) and.getRight();
+            assertThat(nearChain.getLeaves()).hasSize(2);
+            assertThat(nearChain.getOperators()).containsExactly("NEAR");
+            assertThat(nearChain.getDistances()).containsExactly(5);
+            assertThat(thirdLeafChain.getLeaves()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("A simpler 2-leaf-chain AND 1-leaf shape also parses, into And(Chain[2], Chain[1])")
+        void simpleChainAndSingleLeaf_parsesCorrectly() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::1", "compilationStatus": "PASS",
+                   "regexPattern": ["manipulate", "(?:price|spread)", "(?:disclosure|filing)"],
+                   "requiresExclusionCheck": false,
+                   "resolvedPatterns": "manipulate NEAR{5} (?:price|spread) AND (?:disclosure|filing)",
+                   "hyperscanExpressionId": 1, "patternMapping": "(7&8&9)"}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(1);
+
+            ResolvedPatternTree.And and = (ResolvedPatternTree.And) entry.getResolvedPatternTree();
+            assertThat(((ResolvedPatternTree.Chain) and.getLeft()).getLeaves()).hasSize(2);
+            assertThat(((ResolvedPatternTree.Chain) and.getRight()).getLeaves()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("patternMapping id-count is validated against the And tree's TOTAL leaf count, "
+                     + "across both sides, not just one chain")
+        void patternMappingCountValidatedAcrossBothSidesOfAnd() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::1", "compilationStatus": "PASS",
+                   "regexPattern": ["manipulate", "(?:price|spread)", "(?:disclosure|filing)"],
+                   "requiresExclusionCheck": false,
+                   "resolvedPatterns": "manipulate NEAR{5} (?:price|spread) AND (?:disclosure|filing)",
+                   "hyperscanExpressionId": 1, "patternMapping": "(7&8)"}
+                ]}
+                """.formatted(FEATURE);
+
+            assertThatThrownBy(() -> TermExpressionMetadata.parse(FEATURE, json))
+                    .isInstanceOf(TermExpressionMetadata.TermMetadataParseException.class)
+                    .hasMessageContaining("patternMapping");
+        }
+
+        @Test
+        @DisplayName("Leaf-count mismatch between an And shape and regexPattern still throws, same as a plain chain")
+        void leafCountMismatchOnAndShapeThrows() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::1", "compilationStatus": "PASS",
+                   "regexPattern": ["manipulate", "(?:price|spread)"],
+                   "requiresExclusionCheck": false,
+                   "resolvedPatterns": "manipulate NEAR{5} (?:price|spread) AND (?:disclosure|filing)",
+                   "hyperscanExpressionId": 1}
+                ]}
+                """.formatted(FEATURE);
+
+            assertThatThrownBy(() -> TermExpressionMetadata.parse(FEATURE, json))
+                    .isInstanceOf(TermExpressionMetadata.TermMetadataParseException.class);
+        }
+    }
+
+    @Nested
     @DisplayName("Malformed / inconsistent input is rejected clearly, not silently mishandled")
     class ErrorHandling {
 

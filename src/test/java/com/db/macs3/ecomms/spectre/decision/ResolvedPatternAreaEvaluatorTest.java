@@ -362,4 +362,64 @@ class ResolvedPatternAreaEvaluatorTest {
                     .isEmpty();
         }
     }
+
+    @Nested
+    @DisplayName("Plain AND — a genuine conjunction, unlike AND NOT (regression: lexicon_research_3::2 shape)")
+    class PlainAnd {
+
+        @Test
+        @DisplayName("both sides present in the area: matches, reporting spans from BOTH sides")
+        void bothSidesPresent_matches() {
+            ResolvedPatternTree and = new ResolvedPatternTree.And(
+                    twoLeafChain("manipulate", ResolvedPatternTree.OPERATOR_NEAR, 5, "price"),
+                    singleLeafChain("disclosure"));
+
+            List<MatchSpan> spans = evaluate(and, "we manipulate the closing price after the disclosure");
+            assertThat(spans).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("only the left (NEAR-chain) side present: does NOT match — unlike AND NOT, the right "
+                     + "side must be PRESENT, not absent")
+        void onlyLeftSidePresent_doesNotMatch() {
+            ResolvedPatternTree and = new ResolvedPatternTree.And(
+                    twoLeafChain("manipulate", ResolvedPatternTree.OPERATOR_NEAR, 5, "price"),
+                    singleLeafChain("disclosure"));
+
+            assertThat(evaluate(and, "we manipulate the closing price today")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("only the right (single-leaf) side present: does NOT match")
+        void onlyRightSidePresent_doesNotMatch() {
+            ResolvedPatternTree and = new ResolvedPatternTree.And(
+                    twoLeafChain("manipulate", ResolvedPatternTree.OPERATOR_NEAR, 5, "price"),
+                    singleLeafChain("disclosure"));
+
+            assertThat(evaluate(and, "nothing but the disclosure here")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("left side's own condition (the NEAR gap) still applies inside an And — too far apart "
+                     + "on the left fails the whole And even when the right leaf is present")
+        void leftSideNearGapStillEnforcedInsideAnd() {
+            ResolvedPatternTree and = new ResolvedPatternTree.And(
+                    twoLeafChain("manipulate", ResolvedPatternTree.OPERATOR_NEAR, 1, "price"),
+                    singleLeafChain("disclosure"));
+
+            // "manipulate" and "price" are 4 words apart here — fails NEAR{1} — even though
+            // "disclosure" (the right side) is present.
+            assertThat(evaluate(and, "manipulate one two three price and also disclosure")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("neither side present: does not match")
+        void neitherSidePresent_doesNotMatch() {
+            ResolvedPatternTree and = new ResolvedPatternTree.And(
+                    twoLeafChain("manipulate", ResolvedPatternTree.OPERATOR_NEAR, 5, "price"),
+                    singleLeafChain("disclosure"));
+
+            assertThat(evaluate(and, "completely unrelated text")).isEmpty();
+        }
+    }
 }

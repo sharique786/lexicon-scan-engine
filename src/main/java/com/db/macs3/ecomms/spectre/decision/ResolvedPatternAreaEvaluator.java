@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 /**
  * Evaluates one {@link ResolvedPatternTree} against ONE scanned area's real
  * original message text, using plain {@code java.util.regex} — the only way
- * to genuinely verify a NEAR/FOLLOWEDBY/AND-NOT condition for a decomposed
+ * to genuinely verify a NEAR/FOLLOWEDBY/AND/AND-NOT condition for a decomposed
  * term, since the {@code .hdb}'s decomposed leaves are compiled QUIET (see
  * {@code TermExpressionMetadata} class Javadoc): Hyperscan's own native
  * {@code COMBINATION} match only proves "every leaf matched somewhere in
@@ -102,7 +102,32 @@ final class ResolvedPatternAreaEvaluator {
             }
             return findMatchingSpans(andNot.getRequired(), areaOriginalText);
         }
+        if (tree instanceof ResolvedPatternTree.And and) {
+            return matchesAnd(and, areaOriginalText);
+        }
         return matchesChain((ResolvedPatternTree.Chain) tree, areaOriginalText);
+    }
+
+    /**
+     * A plain conjunction: BOTH sides must independently be satisfied somewhere in this SAME
+     * area — neither side is an exclusion (contrast {@link ResolvedPatternTree.AndNot} above). When
+     * both hold, every occurrence from both sides is reported (deduplicated, capped like every other
+     * path here), not just one synthetic "matched" span — same
+     * {@code regex_match_hit_count}-completeness reasoning as {@link #matchesChain}.
+     */
+    private static List<MatchSpan> matchesAnd(ResolvedPatternTree.And and, String areaOriginalText) {
+        List<MatchSpan> leftSpans = findMatchingSpans(and.getLeft(), areaOriginalText);
+        if (leftSpans.isEmpty()) {
+            return List.of();
+        }
+        List<MatchSpan> rightSpans = findMatchingSpans(and.getRight(), areaOriginalText);
+        if (rightSpans.isEmpty()) {
+            return List.of();
+        }
+        Set<MatchSpan> combined = new LinkedHashSet<>(leftSpans);
+        combined.addAll(rightSpans);
+        List<MatchSpan> result = new ArrayList<>(combined);
+        return result.size() > MAX_HITS_PER_AREA ? result.subList(0, MAX_HITS_PER_AREA) : result;
     }
 
     private static List<MatchSpan> matchesChain(ResolvedPatternTree.Chain chain, String areaOriginalText) {
