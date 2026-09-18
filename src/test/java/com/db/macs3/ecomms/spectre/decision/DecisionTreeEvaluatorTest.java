@@ -154,9 +154,9 @@ class DecisionTreeEvaluatorTest {
             DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
             MessageEvaluationResult result = DecisionTreeEvaluator.evaluate("msg-105", groups, scanner);
 
-            assertThat(result.getFinalLexiconMatchesByFeatureId()).containsKeys("1", "4");
-            assertThat(result.getFinalLexiconMatchesByFeatureId().get("1").getFirst().getTermId()).isEqualTo("lex_a::1");
-            assertThat(result.getFinalLexiconMatchesByFeatureId().get("4").getFirst().getTermId()).isEqualTo("lex_b::1");
+            assertThat(result.getFinalLexiconMatchesByFeatureId()).containsKeys(1L, 4L);
+            assertThat(result.getFinalLexiconMatchesByFeatureId().get(1L).getFirst().getTermId()).isEqualTo("lex_a::1");
+            assertThat(result.getFinalLexiconMatchesByFeatureId().get(4L).getFirst().getTermId()).isEqualTo("lex_b::1");
         }
     }
 }

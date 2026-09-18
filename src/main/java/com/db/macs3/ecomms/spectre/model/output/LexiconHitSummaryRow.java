@@ -16,7 +16,9 @@ import java.util.Objects;
  * <p>{@link EvaluatedLexicon#getId}/{@link EvaluatedLexicon#getName} are the
  * view's {@code feature_id}/{@code feature_name} (confirmed) — which are
  * shared across every sub-feature member of a composite/NoiseReduction
- * group. One {@link EvaluatedLexicon} entry is therefore built per
+ * group. {@link EvaluatedLexicon#getId} is a {@code Long} (INTEGER in the
+ * delivered schema — was STRING in an earlier revision). One
+ * {@link EvaluatedLexicon} entry is therefore built per
  * EVALUATED GROUP (see {@code DecisionTreeEvaluator}'s
  * {@code GroupEvaluationResult}), aggregating every member's own matched
  * terms into its {@link EvaluatedLexicon#getTermDtls} — each {@code term_id}
@@ -168,14 +170,15 @@ public class LexiconHitSummaryRow implements Serializable {
         @Serial
         private static final long serialVersionUID = 1L;
 
-        private String id;
+        private Long id;
         private String name;
         private Long totalTermsCount;
         private Long regexHitCount;
         private List<TermDtl> termDtls;
 
         /**
-         * @param id              the group's {@code feature_id}
+         * @param id              the group's {@code feature_id} — INTEGER per the delivered schema
+         *                        (was STRING in an earlier revision)
          * @param name            the group's {@code feature_name}
          * @param totalTermsCount sum of every member's {@code feature_definition.body.totalTermsCount} —
          *                        NULLABLE per the delivered schema
@@ -184,7 +187,7 @@ public class LexiconHitSummaryRow implements Serializable {
          *                        NULLABLE per the delivered schema
          * @param termDtls        one entry per distinct term that matched, across every member
          */
-        public EvaluatedLexicon(String id, String name, Long totalTermsCount, Long regexHitCount,
+        public EvaluatedLexicon(Long id, String name, Long totalTermsCount, Long regexHitCount,
                                 List<TermDtl> termDtls) {
             this.id = id;
             this.name = name;
@@ -193,11 +196,11 @@ public class LexiconHitSummaryRow implements Serializable {
             this.termDtls = termDtls;
         }
 
-        public String getId() {
+        public Long getId() {
             return id;
         }
 
-        public void setId(String id) {
+        public void setId(Long id) {
             this.id = id;
         }
 

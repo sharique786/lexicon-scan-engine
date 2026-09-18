@@ -83,7 +83,7 @@ class OutputRowBuilderTest {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             var disclaimerEntry = row.getEvaluatedLexicons().stream()
-                    .filter(e -> e.getId().equals("2")).findFirst().orElseThrow();
+                    .filter(e -> e.getId().equals(2L)).findFirst().orElseThrow();
             assertThat(disclaimerEntry.getTotalTermsCount()).isEqualTo(5);
             assertThat(disclaimerEntry.getRegexHitCount()).isEqualTo(1);
             assertThat(disclaimerEntry.getTermDtls().getFirst().getRegexMatchHitCount()).isEqualTo(1L);
@@ -95,7 +95,7 @@ class OutputRowBuilderTest {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             var lexiconEntry = row.getEvaluatedLexicons().stream()
-                    .filter(e -> e.getId().equals("1")).findFirst().orElseThrow();
+                    .filter(e -> e.getId().equals(1L)).findFirst().orElseThrow();
             assertThat(lexiconEntry.getRegexHitCount()).isEqualTo(2);
         }
 

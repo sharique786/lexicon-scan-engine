@@ -102,12 +102,12 @@ public final class DecisionTreeEvaluator {
     /**
      * One record per {@link #suppressDisclaimerOverlapsAcrossGroups} call: the surviving Lexicon matches and how many were suppressed.
      */
-    private record SuppressionOutcome(Map<String, List<TermMatchResult>> finalByFeatureId, int totalSuppressed) {
+    private record SuppressionOutcome(Map<Long, List<TermMatchResult>> finalByFeatureId, int totalSuppressed) {
     }
 
     private static SuppressionOutcome suppressDisclaimerOverlapsAcrossGroups(List<GroupEvaluationResult> evaluatedGroups,
                                                                              List<AreaMatch> disclaimerSpans) {
-        Map<String, List<TermMatchResult>> finalByFeatureId = new LinkedHashMap<>();
+        Map<Long, List<TermMatchResult>> finalByFeatureId = new LinkedHashMap<>();
         int totalSuppressed = 0;
         for (GroupEvaluationResult groupResult : evaluatedGroups) {
             if (groupResult.getGroup().isNoiseReduction() || groupResult.getGroup().isDisclaimer()) {

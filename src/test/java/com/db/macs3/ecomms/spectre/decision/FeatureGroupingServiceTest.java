@@ -48,21 +48,21 @@ class FeatureGroupingServiceTest {
         @Test
         @DisplayName("processing order is NoiseReduction first")
         void noiseReductionFirst() {
-            assertThat(groups.getFirst().getFeatureId()).isEqualTo("3");
+            assertThat(groups.getFirst().getFeatureId()).isEqualTo(3L);
             assertThat(groups.getFirst().isNoiseReduction()).isTrue();
         }
 
         @Test
         @DisplayName("processing order is Disclaimer second")
         void disclaimerSecond() {
-            assertThat(groups.get(1).getFeatureId()).isEqualTo("2");
+            assertThat(groups.get(1).getFeatureId()).isEqualTo(2L);
             assertThat(groups.get(1).isDisclaimer()).isTrue();
         }
 
         @Test
         @DisplayName("processing order is standard Lexicon last")
         void lexiconLast() {
-            assertThat(groups.get(2).getFeatureId()).isEqualTo("1");
+            assertThat(groups.get(2).getFeatureId()).isEqualTo(1L);
         }
 
         @Test

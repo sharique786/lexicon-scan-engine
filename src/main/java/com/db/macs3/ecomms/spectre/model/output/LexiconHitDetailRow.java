@@ -159,23 +159,24 @@ public class LexiconHitDetailRow implements Serializable {
         @Serial
         private static final long serialVersionUID = 1L;
 
-        private String id;
+        private Long id;
         private List<TermDtl> termDtls;
 
         /**
-         * @param id       the group's {@code feature_id}
+         * @param id       the group's {@code feature_id} — INTEGER per the delivered schema
+         *                 (was STRING in an earlier revision)
          * @param termDtls one entry per distinct term with a surviving match
          */
-        public EvaluatedLexicon(String id, List<TermDtl> termDtls) {
+        public EvaluatedLexicon(Long id, List<TermDtl> termDtls) {
             this.id = id;
             this.termDtls = termDtls;
         }
 
-        public String getId() {
+        public Long getId() {
             return id;
         }
 
-        public void setId(String id) {
+        public void setId(Long id) {
             this.id = id;
         }
 

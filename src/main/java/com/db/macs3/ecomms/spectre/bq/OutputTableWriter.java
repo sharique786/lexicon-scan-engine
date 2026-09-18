@@ -118,8 +118,10 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_REGEX_PATTERN, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.REGEX_MATCH_HIT_COUNT, DataTypes.LongType, true),
     });
+    // ID is INTEGER per the delivered schema (was STRING in an earlier revision) — matches
+    // LexiconHitSummaryRow.EvaluatedLexicon#getId(), now Long.
     private static final StructType EVALUATED_LEXICON_SUMMARY_TYPE = DataTypes.createStructType(new StructField[]{
-            DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.ID, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.ID, DataTypes.LongType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.NAME, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.TOTAL_TERMS_COUNT, DataTypes.LongType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.REGEX_HIT_COUNT, DataTypes.LongType, true),
@@ -153,8 +155,11 @@ public final class OutputTableWriter {
             // destination JSON column on write. NULLABLE per the delivered schema (was REQUIRED).
             DataTypes.createStructField(BqColumns.LexiconHitDetail.TermDtl.MATCHED_TEXT, DataTypes.StringType, true),
     });
+    // ID is INTEGER per the delivered schema (was STRING in an earlier revision) — matches
+    // LexiconHitDetailRow.EvaluatedLexicon#getId(), now Long. Shared by both restricted and
+    // unrestricted tables (identical shape).
     private static final StructType EVALUATED_LEXICON_DETAIL_TYPE = DataTypes.createStructType(new StructField[]{
-            DataTypes.createStructField(BqColumns.LexiconHitDetail.EvaluatedLexicon.ID, DataTypes.StringType, false),
+            DataTypes.createStructField(BqColumns.LexiconHitDetail.EvaluatedLexicon.ID, DataTypes.LongType, false),
             DataTypes.createStructField(BqColumns.LexiconHitDetail.EvaluatedLexicon.TERM_DTLS,
                     DataTypes.createArrayType(TERM_DTL_DETAIL_TYPE), false),
     });

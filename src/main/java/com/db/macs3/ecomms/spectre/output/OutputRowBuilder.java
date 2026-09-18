@@ -118,7 +118,7 @@ public final class OutputRowBuilder {
         }
 
         List<LexiconHitDetailRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
-        for (Map.Entry<String, List<TermMatchResult>> entry : evaluation.getFinalLexiconMatchesByFeatureId().entrySet()) {
+        for (Map.Entry<Long, List<TermMatchResult>> entry : evaluation.getFinalLexiconMatchesByFeatureId().entrySet()) {
             List<LexiconHitDetailRow.EvaluatedLexicon.TermDtl> termDtls = new ArrayList<>();
             for (TermMatchResult termMatch : entry.getValue()) {
                 String matchedTextJson = buildMatchedTextJson(messageId, termMatch.getMatches());
@@ -201,7 +201,7 @@ public final class OutputRowBuilder {
             }
 
             features.add(new FeatureHitSummaryRow.Feature(
-                    parseFeatureId(groupResult.getGroup().getFeatureId()),
+                    groupResult.getGroup().getFeatureId(),
                     groupResult.getGroup().getFeatureName(),
                     groupResult.getGroup().getFeatureType(),
                     groupResult.getGroup().isNoiseReduction(),
@@ -214,15 +214,5 @@ public final class OutputRowBuilder {
         return new FeatureHitSummaryRow(
                 messageId, features, datasetPartitionValue, featureTaggingType,
                 createdBy, createdTs, processId, pipelineExecId);
-    }
-
-    private static long parseFeatureId(String featureId) {
-        try {
-            return Long.parseLong(featureId);
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(
-                    "featureId '" + featureId + "' is not a valid integer — feature-hit-summary.features.id "
-                            + "requires an INTEGER-typed feature_id from the view.", e);
-        }
     }
 }

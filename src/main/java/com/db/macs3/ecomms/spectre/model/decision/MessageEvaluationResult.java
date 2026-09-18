@@ -29,7 +29,7 @@ public class MessageEvaluationResult implements Serializable {
     private List<GroupEvaluationResult> evaluatedGroups;
     private boolean shortCircuited;
     private List<TermMatchResult> disclaimerMatches;
-    private Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId;
+    private Map<Long, List<TermMatchResult>> finalLexiconMatchesByFeatureId;
     private int suppressedLexiconMatchCount;
 
     /**
@@ -46,21 +46,23 @@ public class MessageEvaluationResult implements Serializable {
      * @param finalLexiconMatchesByFeatureId Lexicon-category matches AFTER disclaimer-overlap
      *                                       suppression (full containment only — see
      *                                       {@code DecisionTreeEvaluator}), keyed by
-     *                                       {@code featureId} (i.e. by {@link FeatureGroup#getFeatureId()})
-     *                                       so a downstream row builder can reconstruct which
-     *                                       evaluated group each surviving match belongs to — this
-     *                                       is what {@code lexicon-hit-summary}/{@code -restricted}/
-     *                                       {@code -unrestricted} are built from; empty when
-     *                                       {@link #isShortCircuited} is true. A {@code featureId} with
-     *                                       zero surviving matches after suppression is absent from
-     *                                       this map entirely, not present with an empty list.
+     *                                       {@code featureId} (i.e. by {@link FeatureGroup#getFeatureId()},
+     *                                       LONG — matching the delivered {@code evaluated_lexicons.id}
+     *                                       INTEGER output schema) so a downstream row builder can
+     *                                       reconstruct which evaluated group each surviving match
+     *                                       belongs to — this is what {@code lexicon-hit-summary}/
+     *                                       {@code -restricted}/{@code -unrestricted} are built from;
+     *                                       empty when {@link #isShortCircuited} is true. A
+     *                                       {@code featureId} with zero surviving matches after
+     *                                       suppression is absent from this map entirely, not present
+     *                                       with an empty list.
      * @param suppressedLexiconMatchCount    how many raw Lexicon matches were discarded by
      *                                       disclaimer-overlap suppression, for observability/audit —
      *                                       not itself written to any output table
      */
     public MessageEvaluationResult(String messageId, List<GroupEvaluationResult> evaluatedGroups,
                                    boolean shortCircuited, List<TermMatchResult> disclaimerMatches,
-                                   Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId,
+                                   Map<Long, List<TermMatchResult>> finalLexiconMatchesByFeatureId,
                                    int suppressedLexiconMatchCount) {
         this.messageId = messageId;
         this.evaluatedGroups = evaluatedGroups;
@@ -102,11 +104,11 @@ public class MessageEvaluationResult implements Serializable {
         this.disclaimerMatches = disclaimerMatches;
     }
 
-    public Map<String, List<TermMatchResult>> getFinalLexiconMatchesByFeatureId() {
+    public Map<Long, List<TermMatchResult>> getFinalLexiconMatchesByFeatureId() {
         return finalLexiconMatchesByFeatureId;
     }
 
-    public void setFinalLexiconMatchesByFeatureId(Map<String, List<TermMatchResult>> finalLexiconMatchesByFeatureId) {
+    public void setFinalLexiconMatchesByFeatureId(Map<Long, List<TermMatchResult>> finalLexiconMatchesByFeatureId) {
         this.finalLexiconMatchesByFeatureId = finalLexiconMatchesByFeatureId;
     }
 

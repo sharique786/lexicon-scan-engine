@@ -24,7 +24,7 @@ public class FeatureGroup implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private String featureId;
+    private Long featureId;
     private String featureName;
     private String featureType;
     private boolean isNoiseReduction;
@@ -32,7 +32,10 @@ public class FeatureGroup implements Serializable {
     private List<FeatureDecisionRow> members;
 
     /**
-     * @param featureId        groups {@link #getMembers} — all share this value
+     * @param featureId        groups {@link #getMembers} — all share this value; LONG, matching
+     *                         both the view's own {@code feature_id} column ({@link FeatureDecisionRow#getFeatureId()})
+     *                         and the delivered {@code evaluated_lexicons.id}/{@code features.id}
+     *                         output schema (INTEGER)
      * @param featureName      the (possibly composite/parent) display name
      * @param featureType      {@link BqColumns.FeatureType} value
      * @param isNoiseReduction true iff ANY member row is flagged {@code is_noise_reduction=Y} —
@@ -45,7 +48,7 @@ public class FeatureGroup implements Serializable {
      *                         {@code featureId} — each row's {@code featuresToApply} names the
      *                         lexicon feature to load/scan for that member
      */
-    public FeatureGroup(String featureId, String featureName, String featureType,
+    public FeatureGroup(Long featureId, String featureName, String featureType,
                         boolean isNoiseReduction, String operator, List<FeatureDecisionRow> members) {
         if (members == null || members.isEmpty()) {
             throw new IllegalArgumentException("FeatureGroup requires at least one member row for featureId=" + featureId);
@@ -58,11 +61,11 @@ public class FeatureGroup implements Serializable {
         this.members = members;
     }
 
-    public String getFeatureId() {
+    public Long getFeatureId() {
         return featureId;
     }
 
-    public void setFeatureId(String featureId) {
+    public void setFeatureId(Long featureId) {
         this.featureId = featureId;
     }
 

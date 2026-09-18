@@ -52,16 +52,16 @@ public final class FeatureGroupingService {
 
         // LinkedHashMap preserves first-seen featureId order, which is what determines
         // relative ordering WITHIN a processing category below. The view's own feature_id
-        // column is LONG (see FeatureDecisionRow class Javadoc); converted to String here,
-        // the one place it's needed — FeatureGroup#getFeatureId() matches the delivered
-        // lexicon-hit-summary/-detail schema's evaluated_lexicons.id, which is STRING.
-        Map<String, List<FeatureDecisionRow>> byFeatureId = new LinkedHashMap<>();
+        // column is LONG (see FeatureDecisionRow class Javadoc), and FeatureGroup#getFeatureId()
+        // keeps that native type unconverted — it matches the delivered lexicon-hit-summary/
+        // -restricted/-unrestricted schema's evaluated_lexicons.id, which is INTEGER.
+        Map<Long, List<FeatureDecisionRow>> byFeatureId = new LinkedHashMap<>();
         for (FeatureDecisionRow row : rowsForOneMessage) {
-            byFeatureId.computeIfAbsent(String.valueOf(row.getFeatureId()), k -> new ArrayList<>()).add(row);
+            byFeatureId.computeIfAbsent(row.getFeatureId(), k -> new ArrayList<>()).add(row);
         }
 
         List<FeatureGroup> groups = new ArrayList<>(byFeatureId.size());
-        for (Map.Entry<String, List<FeatureDecisionRow>> entry : byFeatureId.entrySet()) {
+        for (Map.Entry<Long, List<FeatureDecisionRow>> entry : byFeatureId.entrySet()) {
             groups.add(buildGroup(entry.getKey(), entry.getValue()));
         }
 
@@ -69,7 +69,7 @@ public final class FeatureGroupingService {
         return groups;
     }
 
-    private static FeatureGroup buildGroup(String featureId, List<FeatureDecisionRow> members) {
+    private static FeatureGroup buildGroup(Long featureId, List<FeatureDecisionRow> members) {
         FeatureDecisionRow first = members.getFirst();
         validateConsistency(featureId, members, first);
 
@@ -90,7 +90,7 @@ public final class FeatureGroupingService {
                 members);
     }
 
-    private static void validateConsistency(String featureId, List<FeatureDecisionRow> members, FeatureDecisionRow first) {
+    private static void validateConsistency(Long featureId, List<FeatureDecisionRow> members, FeatureDecisionRow first) {
         for (FeatureDecisionRow row : members) {
             if (!sameValue(row.getFeatureType(), first.getFeatureType())) {
                 throw new IllegalArgumentException(
