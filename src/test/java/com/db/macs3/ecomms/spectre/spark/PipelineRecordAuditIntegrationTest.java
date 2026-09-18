@@ -15,9 +15,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -42,7 +42,7 @@ class PipelineRecordAuditIntegrationTest {
     private static SparkSession spark;
 
     private static final String SAMPLE_JSON = "{\"dataset_details\":[{\"dataset_id\":\"ds1\","
-            + "\"dataset_partition_value\":\"p1\"}],\"feature_partition_value\":\"2026-08-16\","
+            + "\"dataset_partition_value\":\"2026-09-08\"}],\"feature_partition_value\":\"2026-08-16\","
             + "\"pipeline_exec_id\":\"pipe-1\",\"policy_engine_id\":\"policy-1\",\"process_id\":\"proc-1\","
             + "\"trigger_type\":\"policy-alert-test\",\"config_file_path\":\"gs://bucket/config.yml\"}";
 
@@ -121,8 +121,14 @@ class PipelineRecordAuditIntegrationTest {
         assertThat(recordAuditRows.count()).isEqualTo(5);
         assertThat(deduped.count()).isEqualTo(3);
 
-        Map<String, String> statusByRecordId = deduped.collectAsList().stream()
-                .collect(Collectors.toMap(row -> row.getAs("record_id"), row -> row.getAs("status")));
+        Map<String, String> statusByRecordId = new LinkedHashMap<>();
+
+        deduped.select("record_id", "status").collectAsList().listIterator().forEachRemaining(row -> {
+            String recordId = row.getAs("record_id");
+            String status = row.getAs("status");
+            statusByRecordId.put(recordId, status);
+        });
+
         assertThat(statusByRecordId)
                 .containsEntry("msg-1", BqColumns.RecordStatus.SUCCESS)
                 .containsEntry("msg-2", BqColumns.RecordStatus.FAILED)

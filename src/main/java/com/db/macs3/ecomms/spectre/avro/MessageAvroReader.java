@@ -85,7 +85,7 @@ public final class MessageAvroReader {
         }
 
         if (combinedMessages == null) {
-            throw new IllegalArgumentException("MessageAvroReader: combinedMessages in null after reading AVRO files");
+            throw new IllegalStateException("MessageAvroReader: combinedMessages in null after reading AVRO files");
         }
 
         return combinedMessages.join(

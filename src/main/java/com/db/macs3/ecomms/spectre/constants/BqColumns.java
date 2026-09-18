@@ -64,8 +64,9 @@ public final class BqColumns {
         public static final String BODY_MINIMUM_HITS = "minimumHits";
         public static final String BODY_SCOPE = "scope";
 
-        // Recognised values of the "scope" array.
-        public static final String SCOPE_SUBJECT = "subject";
+        // Recognised values of the "scope" array — matched case-insensitively against
+        // FeatureDefinition.Body.hasScope, so the exact casing here is not load-bearing.
+        public static final String SCOPE_SUBJECT = "Subject";
         public static final String SCOPE_MESSAGE_BODY = "Message Body";
         public static final String SCOPE_ATTACHMENT = "Attachment";
     }

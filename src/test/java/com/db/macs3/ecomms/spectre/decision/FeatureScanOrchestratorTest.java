@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * assumed every PASS term's reportable Hyperscan expression id was always
  * its own term number, whether or not it needed AND NOT. Confirmed BROKEN
  * once the Compile Service's AND NOT fix removed native COMBINATION for AND
- * NOT terms — see {@link TermExpressionMetadata} class Javadoc (Lexicon
+ * NOT terms — see TermExpressionMetadata class Javadoc (Lexicon
  * Scan Engine project) for the full explanation. The tests below
  * ({@link #andNotTerm_requiredBeforeExcludedInText_noFalsePositive},
  * {@link #andNotTerm_correctTermIdWhenMatched},
@@ -126,8 +126,8 @@ class FeatureScanOrchestratorTest {
             scopeArr.append("\"").append(scopes[i]).append("\"");
         }
         scopeArr.append("]");
-        return "{\"featureId\":\"1\",\"featureName\":\"x\",\"featureType\":\"Lexicon\",\"isNoiseReduction\":false,"
-                + "\"body\":{\"id\":1,\"lexiconName\":\"" + feature + "\",\"objectId\":1,\"totalTermsCount\":5,"
+        return "{\"featureId\":\"1\",\"featureName\":\"x\",\"featureType\":\"lexicon\",\"isNoiseReduction\":\"N\","
+                + "\"body\":{\"id\":1,\"lexiconName\":\"" + feature + "\",\"objectId\":\"1\",\"totalTermsCount\":5,"
                 + "\"minimumHits\":1,\"scope\":" + scopeArr + "}}";
     }
 
@@ -629,6 +629,801 @@ class FeatureScanOrchestratorTest {
             Set<String> termIds = new HashSet<>();
             for (TermMatchResult r : results) termIds.add(r.getTermId());
             assertThat(termIds).containsExactlyInAnyOrder(feature + "::1", feature + "::2");
+        }
+    }
+
+    // ── CHAT/VOICE channel-specific MESSAGE_BODY handling ───────────────────────
+
+    /**
+     * The exact CHAT-type {@code content.raw_text} sample from the requirement: an HTML table
+     * report with 3 rows, only the LAST TWO of which have a non-empty {@code message_text} cell
+     * ({@code "Hi There"}, then {@code "<p>Can you share market price?</p>"}) — the first row's
+     * cell is empty (an attachment-only event).
+     */
+    private static final String CHAT_TABLE_RAW_TEXT =
+            "<html><head><style>.message-text-cell {white-space: pre-wrap;word-break: break-word;}"
+            + "</style></head><body><table border=\"1\" cellpadding=\"5\" cellspacing=\"0\"><thead><tr>"
+            + "<th>room_name</th><th>event_trigg_from</th><th>company_name</th><th>evt_id</th>"
+            + "<th>msg_type</th><th>event_time</th><th>email</th><th>message_text</th>"
+            + "<th>event_type</th><th>srcSysAttId</th><th>att_filename</th><th>att_file_size</th>"
+            + "<th>broadcast_id</th></tr></thead><tbody><tr><td class=\"room_name\"></td>"
+            + "<td class=\"event_trigg_from\"></td><td class=\"company_name\">DEUTSCHE BANK AG, LO</td>"
+            + "<td class=\"evt_id\">34644ea1-b6af-3448-8a5e-74e7eab27434</td><td class=\"msg_type\"></td>"
+            + "<td class=\"event_time\">2016-07-13T07:14:09Z</td>"
+            + "<td class=\"email\">lars.van-leeuwenstijn@db.com</td>"
+            + "<td class=\"message-text-cell message_text\"></td><td class=\"event_type\">Attachment</td>"
+            + "<td class=\"srcSysAttId\">File_0.xlsx</td><td class=\"att_filename\">File_0.xlsx</td>"
+            + "<td class=\"att_file_size\">30</td><td class=\"broadcast_id\"></td></tr>  <tr>"
+            + "<td class=\"room_name\"></td><td class=\"event_trigg_from\"></td>"
+            + "<td class=\"company_name\">DEUTSCHE BANK SECURI</td>"
+            + "<td class=\"evt_id\">2f48e35e-5997-3191-99e9-8c1789b3db90</td><td class=\"msg_type\"></td>"
+            + "<td class=\"event_time\">2016-09-28T13:08:14Z</td>"
+            + "<td class=\"email\">aakanksha.kadam@db.com</td>"
+            + "<td class=\"message-text-cell message_text\">Hi There</td>"
+            + "<td class=\"event_type\">Message</td><td class=\"srcSysAttId\"></td>"
+            + "<td class=\"att_filename\"></td><td class=\"att_file_size\"></td>"
+            + "<td class=\"broadcast_id\"></td></tr><tr><td class=\"room_name\"></td>"
+            + "<td class=\"event_trigg_from\"></td><td class=\"company_name\">DEUTSCHE BANK SECURI</td>"
+            + "<td class=\"evt_id\">2f48e35e-5997-3191-99e9-8c1789b3db90</td><td class=\"msg_type\"></td>"
+            + "<td class=\"event_time\">2016-09-28T13:08:14Z</td>"
+            + "<td class=\"email\">aakanksha.kadam@db.com</td>"
+            + "<td class=\"message-text-cell message_text\"><p>Can you share market price?</p></td>"
+            + "<td class=\"event_type\">Message</td><td class=\"srcSysAttId\"></td>"
+            + "<td class=\"att_filename\"></td><td class=\"att_file_size\"></td>"
+            + "<td class=\"broadcast_id\"></td></tr></tbody></table></body></html>";
+
+    @Test
+    @DisplayName("CHAT channel: matches 'market price' inside a message_text <td>, and the reported "
+                 + "start/end in raw_text point EXACTLY at 'market price' — never at an unrelated column")
+    void chatChannel_matchesInsideMessageTextCell_positionResolvesToRawText() {
+        String feature = "lex_chat-1";
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("market price", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1),
+                new Expression("DEUTSCHE BANK", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 2));
+
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_chat-1.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "market price"),
+                        simpleTermJson(feature, 2, "DEUTSCHE BANK")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, CHAT_TABLE_RAW_TEXT, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            // Only the message_text-cell term matches — "DEUTSCHE BANK" only ever appears in the
+            // company_name column, which must never reach Hyperscan for a CHAT/VOICE message.
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getTermId()).isEqualTo(feature + "::1");
+
+            var match = results.getFirst().getMatches().getFirst();
+            assertThat(match.getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
+            int start = match.getSpan().getStartCharIndex();
+            int end = match.getSpan().getEndCharIndex();
+            assertThat(CHAT_TABLE_RAW_TEXT.substring(start, end)).isEqualTo("market price");
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT channel is case-insensitive against channel_name — 'CHAT' behaves identically to 'chat'")
+    void chatChannel_caseInsensitive() {
+        String feature = "lex_chat-2";
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("market price", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_chat-2.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "market price")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("CHAT", "src", "sys", "conv-1"),
+                    new MessageContent(null, CHAT_TABLE_RAW_TEXT, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE channel: matches inside a message_text <td> the same way CHAT does")
+    void voiceChannel_matchesInsideMessageTextCell() {
+        String feature = "lex_voice-1";
+        String rawText = "<html><body><table><tbody><tr>"
+                + "<td class=\"room_name\"></td>"
+                + "<td class=\"message-text-cell message_text\">This is very strong language</td>"
+                + "<td class=\"event_type\">speechtotext</td></tr><tr>"
+                + "<td class=\"room_name\"></td>"
+                + "<td class=\"message-text-cell message_text\">Cats and dogs hate each other</td>"
+                + "<td class=\"event_type\">speechtotext</td></tr>"
+                + "</tbody></table></body></html>";
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("strong language", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_voice-1.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "strong language")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            var match = results.getFirst().getMatches().getFirst();
+            int start = match.getSpan().getStartCharIndex();
+            int end = match.getSpan().getEndCharIndex();
+            assertThat(rawText.substring(start, end)).isEqualTo("strong language");
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT channel falls back to whole-text stripping when raw_text has no message_text "
+                 + "<td> at all — e.g. plain, non-table text — so existing plain-text CHAT messages "
+                 + "keep matching exactly as before this feature existed")
+    void chatChannel_noMessageTextCell_fallsBackToPlainStripping() {
+        String feature = "lex_chat-3";
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("bomb", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_chat-3.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "bomb")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, "there is a bomb in the body", null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+        }
+    }
+
+    // ── CHAT/VOICE with varying row counts — matched text position/length correctness ──────────
+
+    /**
+     * Builds a minimal CHAT/VOICE-shaped {@code raw_text} table with one row per entry in
+     * {@code cellTexts} (in order), each row's {@code message_text} cell holding that entry —
+     * lets a test vary "how many rows/cells precede the matching one" just by varying this
+     * array's length, without hand-building a full table each time.
+     */
+    private static String messageTextTableRawText(String... cellTexts) {
+        StringBuilder sb = new StringBuilder("<html><body><table><tbody>");
+        for (String cellText : cellTexts) {
+            sb.append("<tr><td class=\"room_name\"></td>")
+              .append("<td class=\"message-text-cell message_text\">").append(cellText).append("</td>")
+              .append("<td class=\"event_type\">Message</td></tr>");
+        }
+        sb.append("</tbody></table></body></html>");
+        return sb.toString();
+    }
+
+    /**
+     * Asserts a single match's {@code startCharIndex}/{@code endCharIndex}/length resolve back
+     * to EXACTLY {@code expectedText} in {@code rawText} — the position/length correctness check
+     * this whole test group exists for.
+     */
+    private static void assertSingleMatchPositionAndLength(List<TermMatchResult> results, String rawText,
+                                                            String expectedText) {
+        assertThat(results).hasSize(1);
+        assertThat(results.getFirst().getMatches()).hasSize(1);
+        var span = results.getFirst().getMatches().getFirst().getSpan();
+        assertThat(span.length()).as("matched span length").isEqualTo(expectedText.length());
+        assertThat(rawText.substring(span.getStartCharIndex(), span.getEndCharIndex()))
+                .as("raw_text.substring(startCharIndex, endCharIndex)").isEqualTo(expectedText);
+        assertThat(span.getMatchedText()).isEqualTo(expectedText);
+    }
+
+    @Test
+    @DisplayName("VOICE, single row: position/length resolve exactly to the one message_text cell's content")
+    void voiceChannel_singleRow_positionAndLengthCorrect() {
+        String feature = "lex_voice-2";
+        String rawText = messageTextTableRawText("This call contains insider trading information");
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("insider trading", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_voice-2.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "insider trading")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "insider trading");
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE, 3 rows: match is in the LAST row — position must skip past the two preceding "
+                 + "rows' own message_text cells, not just their combined length coincidentally")
+    void voiceChannel_threeRows_matchInLastRow_positionAndLengthCorrect() {
+        String feature = "lex_voice-3";
+        String rawText = messageTextTableRawText(
+                "Cats and dogs hate each other",
+                "This is very strong language",
+                "Please transfer the funds to account 12345");
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("transfer the funds", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_voice-3.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "transfer the funds")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE, 5 rows: match is in a MIDDLE row (3rd of 5) — position must be correct with "
+                 + "both preceding AND following rows present")
+    void voiceChannel_fiveRows_matchInMiddleRow_positionAndLengthCorrect() {
+        String feature = "lex_voice-4";
+        String rawText = messageTextTableRawText(
+                "alpha bravo",
+                "charlie delta",
+                "insider trading is illegal and unethical",
+                "echo foxtrot",
+                "golf hotel");
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("insider trading", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_voice-4.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "insider trading")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "insider trading");
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE, 4 rows: the SAME term matches in TWO different rows — each occurrence's "
+                 + "position/length is resolved independently and correctly, not just the first")
+    void voiceChannel_fourRows_matchesInTwoRows_eachPositionAndLengthCorrect() {
+        String feature = "lex_voice-5";
+        String rawText = messageTextTableRawText(
+                "please wire the funds today",
+                "no relevant content here",
+                "we will wire the funds tomorrow instead",
+                "goodbye");
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("wire the funds", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_voice-5.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "wire the funds")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(2);
+            for (var match : results.getFirst().getMatches()) {
+                var span = match.getSpan();
+                assertThat(span.length()).isEqualTo("wire the funds".length());
+                assertThat(rawText.substring(span.getStartCharIndex(), span.getEndCharIndex()))
+                        .isEqualTo("wire the funds");
+            }
+            // And the two occurrences are genuinely at different positions, not the same one twice.
+            int firstStart = results.getFirst().getMatches().get(0).getSpan().getStartCharIndex();
+            int secondStart = results.getFirst().getMatches().get(1).getSpan().getStartCharIndex();
+            assertThat(firstStart).isNotEqualTo(secondStart);
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, 2 rows: match is in the SECOND row")
+    void chatChannel_twoRows_matchInSecondRow_positionAndLengthCorrect() {
+        String feature = "lex_chat-4";
+        String rawText = messageTextTableRawText(
+                "Hi there, how are you?",
+                "Can you please share confidential information");
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("confidential information",
+                        EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_chat-4.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "confidential information")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "confidential information");
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, 4 rows: match is in the THIRD row, and other rows' content is never mistaken for it")
+    void chatChannel_fourRows_matchInThirdRow_positionAndLengthCorrect() {
+        String feature = "lex_chat-5";
+        String rawText = messageTextTableRawText(
+                "good morning everyone",
+                "let's sync at 3pm",
+                "please transfer the funds before the deadline",
+                "thanks, talk soon");
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("transfer the funds", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_chat-5.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "transfer the funds")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+        }
+    }
+
+    // ── EMAIL — plain text and HTML content, position/length correctness ───────────────────────
+
+    @Test
+    @DisplayName("EMAIL, plain text (no HTML at all): position/length are an exact, direct substring — "
+                 + "no offset translation needed since there is no markup to skip over")
+    void emailChannel_plainText_positionAndLengthCorrect() {
+        String feature = "lex_email-1";
+        String rawText = "Please transfer the funds to account 12345 immediately";
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("transfer the funds", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_email-1.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "transfer the funds")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+
+            // For plain, HTML-free text the match position is a direct, un-translated index —
+            // exactly rawText.indexOf(the literal), with no HTML to have skipped over.
+            var span = results.getFirst().getMatches().getFirst().getSpan();
+            assertThat(span.getStartCharIndex()).isEqualTo(rawText.indexOf("transfer the funds"));
+        }
+    }
+
+    @Test
+    @DisplayName("EMAIL, HTML content where the match itself sits entirely inside one contiguous run of "
+                 + "text (no tag interrupts the matched phrase itself, only text around it): position/"
+                 + "length resolve to an exact substring, same guarantee as the CHAT/VOICE cell tests above")
+    void emailChannel_htmlContent_matchNotInterruptedByTags_positionAndLengthCorrect() {
+        String feature = "lex_email-2";
+        String rawText = "<div><p>Please see the attached statement.</p>"
+                + "<p>Kindly transfer the funds to the escrow account.</p></div>";
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("transfer the funds", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_email-2.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, "transfer the funds")));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+        }
+    }
+
+    @Test
+    @DisplayName("EMAIL, HTML content where HTML tags fall BETWEEN the matched words — the exact "
+                 + "requirement worked example (Enjoy/Happy): startCharIndex/endCharIndex/matchedText "
+                 + "match the values already verified independently in HtmlStrippingServiceTest")
+    void emailChannel_htmlContent_matchSpansAcrossTags_positionMatchesWorkedExample() {
+        String feature = "lex_email-3";
+        String rawText = "<p>Enjoy</p>\n<p>Happy Birthday</p>";
+        String patternText = "Enjoy(?:\\s+\\S+){0,2}\\s+Happy"; // actual regex text: Enjoy(?:\s+\S+){0,2}\s+Happy
+
+        byte[] dbBytes = compileAndSerialize(
+                new Expression(patternText, EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        // The metadata JSON's translatedPattern is JSON TEXT, not a Java string literal — every
+        // backslash in patternText must be doubled so the JSON parser reconstructs the same
+        // single-backslash regex text simpleTermJson's raw quotedCsv would otherwise mangle.
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_email-3.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, patternText.replace("\\", "\\\\"))));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            List<TermMatchResult> results = orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body")));
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            var span = results.getFirst().getMatches().getFirst().getSpan();
+            // Same values HtmlStrippingServiceTest.WorkedExample derives and asserts independently
+            // via java.util.regex against HtmlStrippingService.strip directly — reproduced here
+            // end-to-end through the real orchestrator + real Hyperscan.
+            assertThat(span.getMatchedText()).isEqualTo("Enjoy Happy");
+            assertThat(span.getStartCharIndex()).isEqualTo(3);
+            assertThat(span.getEndCharIndex()).isEqualTo(21);
+        }
+    }
+
+    // ── CHAT/VOICE + attachment: scope enforcement ──────────────────────────────
+    //
+    // feature_definition.body.scope gates which AREAS a feature's Hyperscan database is even
+    // run against (see scopeFor/scanRow above) — this is entirely orthogonal to the CHAT/VOICE
+    // message_text-cell extraction change: extraction only decides WHAT TEXT the MESSAGE_BODY
+    // area contains, never whether that area (or SUBJECT/ATTACHMENT) is scanned at all. The
+    // tests below lock in that the two remain independent for CHAT/VOICE messages that also
+    // carry an attachment — a combination the earlier CHAT/VOICE test group never exercised.
+
+    private static HyperscanBundleLoader bombLoader(String feature, String zipPath) {
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("bomb", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
+        return bundleLoader(feature, zipPath, dbBytes, wrapResults(simpleTermJson(feature, 1, "bomb")));
+    }
+
+    @Test
+    @DisplayName("CHAT, scope=[subject, Attachment] (no Message Body): 'bomb' present ONLY in the "
+                 + "message_text cell -> NOT a match, even though the word is genuinely in raw_text")
+    void chatChannel_scopeExcludesMessageBody_termOnlyInBody_noMatch() {
+        String feature = "lex_scope-1";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-1.zip");
+        String rawText = messageTextTableRawText("there is a bomb in the chat body");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, "no relevant subject text here", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "nothing relevant here")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "subject", "Attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, scope=[Attachment] only: 'bomb' present ONLY in the attachment -> IS a match")
+    void chatChannel_scopeIsAttachmentOnly_termOnlyInAttachment_matches() {
+        String feature = "lex_scope-2";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-2.zip");
+        String rawText = messageTextTableRawText("nothing relevant in the chat body");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, "no relevant subject either", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.ATTACHMENT);
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, scope=[Message Body] only: 'bomb' present ONLY in the attachment -> NOT a match, "
+                 + "even though the message genuinely has an attachment containing it")
+    void chatChannel_scopeIsMessageBodyOnly_termOnlyInAttachment_noMatch() {
+        String feature = "lex_scope-3";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-3.zip");
+        String rawText = messageTextTableRawText("nothing relevant in the chat body");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE, scope=[subject] only: 'bomb' present ONLY in the message_text cell -> NOT a match")
+    void voiceChannel_scopeIsSubjectOnly_termOnlyInBody_noMatch() {
+        String feature = "lex_scope-4";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-4.zip");
+        String rawText = messageTextTableRawText("there is a bomb in this voice transcript");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, "no relevant subject", null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "subject"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE, scope=[subject] only: 'bomb' present in subject AND in the message_text cell "
+                 + "AND in the attachment -> matches EXACTLY ONCE, from SUBJECT only")
+    void voiceChannel_scopeIsSubjectOnly_termInAllAreas_matchesSubjectOnly() {
+        String feature = "lex_scope-5";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-5.zip");
+        String rawText = messageTextTableRawText("there is a bomb in this voice transcript too");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, "bomb mentioned in the subject", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment too")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "subject"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.SUBJECT);
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, scope=[subject, Message Body, Attachment] (all three): 'bomb' present in every "
+                 + "area -> matches ALL THREE, merged into one TermMatchResult")
+    void chatChannel_allScopesIncluded_termInAllThreeAreas_matchesAllThree() {
+        String feature = "lex_scope-6";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-6.zip");
+        String rawText = messageTextTableRawText("there is a bomb in the chat body");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, "bomb mentioned in the subject", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "subject", "Message Body", "Attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(3);
+            Set<MatchArea> areas = new HashSet<>();
+            for (var match : results.getFirst().getMatches()) areas.add(match.getArea());
+            assertThat(areas).containsExactlyInAnyOrder(MatchArea.SUBJECT, MatchArea.MESSAGE_BODY, MatchArea.ATTACHMENT);
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, scope=[Message Body, Attachment]: 'bomb' appears in a NON-message_text column "
+                 + "(company_name) of the table AND in the attachment -> matches ONLY from the "
+                 + "attachment; the other table column never leaks into the Message Body scan")
+    void chatChannel_termInOtherTableColumn_onlyAttachmentMatches() {
+        String feature = "lex_scope-7";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-7.zip");
+        String rawText = "<html><body><table><tbody><tr>"
+                + "<td class=\"company_name\">BOMB SQUAD HOLDINGS</td>"
+                + "<td class=\"message-text-cell message_text\">nothing relevant here</td>"
+                + "</tr></tbody></table></body></html>";
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body", "Attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.ATTACHMENT);
+        }
+    }
+
+    @Test
+    @DisplayName("CHAT, scope=[Attachment] only, message has NO attachment at all: no match, and no "
+                 + "exception — robustness when the in-scope area simply doesn't exist on this message")
+    void chatChannel_scopeIsAttachmentOnly_noAttachmentPresent_noMatch() {
+        String feature = "lex_scope-8";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-8.zip");
+        String rawText = messageTextTableRawText("there is a bomb in the chat body");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("VOICE, scope=[Message Body] only: 'bomb' in BOTH the message_text cell AND the "
+                 + "attachment -> matches ONLY from MESSAGE_BODY, attachment excluded despite containing it too")
+    void voiceChannel_scopeIsMessageBodyOnly_termInBodyAndAttachment_matchesBodyOnly() {
+        String feature = "lex_scope-9";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-9.zip");
+        String rawText = messageTextTableRawText("there is a bomb in this voice transcript");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("voice", "src", "sys", "conv-1"),
+                    new MessageContent(null, rawText, null, null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment too")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
+        }
+    }
+
+    // ── feature_definition.body.scope: case-insensitive against the scanned area ───────────
+
+    @Test
+    @DisplayName("scope=[SUBJECT] (all uppercase): still selects the SUBJECT area")
+    void scope_allUppercase_stillSelectsSubjectArea() {
+        String feature = "lex_scope-10";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-10.zip");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, "nothing relevant in the body", "there is a bomb in the subject", null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "SUBJECT"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.SUBJECT);
+        }
+    }
+
+    @Test
+    @DisplayName("scope=[message body] (all lowercase, two-word value): still selects the MESSAGE_BODY area")
+    void scope_lowercaseTwoWordValue_stillSelectsMessageBodyArea() {
+        String feature = "lex_scope-11";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-11.zip");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, "there is a bomb in the body", "nothing relevant in the subject", null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "message body"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.MESSAGE_BODY);
+        }
+    }
+
+    @Test
+    @DisplayName("scope=[attachment] (all lowercase): still selects the ATTACHMENT area")
+    void scope_lowercaseAttachment_stillSelectsAttachmentArea() {
+        String feature = "lex_scope-12";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-12.zip");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, "nothing relevant in the body", "nothing relevant in the subject", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "attachment"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(1);
+            assertThat(results.getFirst().getMatches().getFirst().getArea()).isEqualTo(MatchArea.ATTACHMENT);
+        }
+    }
+
+    @Test
+    @DisplayName("scope=[SuBjEcT, MeSsAgE BoDy, aTTachMENT] (mixed casing on every value): matches all three areas")
+    void scope_mixedCasingOnEveryValue_matchesAllThreeAreas() {
+        String feature = "lex_scope-13";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-13.zip");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, "bomb mentioned in the body", "bomb mentioned in the subject", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature,
+                    defJson(feature, "SuBjEcT", "MeSsAgE BoDy", "aTTachMENT"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).hasSize(1);
+            assertThat(results.getFirst().getMatches()).hasSize(3);
+            Set<MatchArea> areas = new HashSet<>();
+            for (var match : results.getFirst().getMatches()) areas.add(match.getArea());
+            assertThat(areas).containsExactlyInAnyOrder(MatchArea.SUBJECT, MatchArea.MESSAGE_BODY, MatchArea.ATTACHMENT);
+        }
+    }
+
+    @Test
+    @DisplayName("scope=[SUBJECT] (uppercase) does NOT select MESSAGE_BODY or ATTACHMENT — case-insensitivity "
+                 + "only widens matching for the scope's own listed values, it doesn't select every area")
+    void scope_uppercaseSubjectOnly_doesNotAlsoSelectOtherAreas() {
+        String feature = "lex_scope-14";
+        HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-14.zip");
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, "bomb mentioned in the body", "nothing relevant in the subject", null),
+                    List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment")),
+                    new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "SUBJECT"));
+            List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
+
+            assertThat(results).isEmpty();
         }
     }
 }

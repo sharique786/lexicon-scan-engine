@@ -92,7 +92,7 @@ public class TermExpressionMetadata implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private static final String COMPILATION_STATUS_PASS = "PASS";
+    private static final String COMPILATION_STATUS_SUCCESS = "PASS";
 
     private String feature;
     private Map<Integer, TermEntry> byExpressionId;
@@ -360,7 +360,7 @@ public class TermExpressionMetadata implements Serializable {
         Map<Integer, TermEntry> byTermNumber = new HashMap<>();
         if (parsed.getResults() != null) {
             for (TermResultJson termResult : parsed.getResults()) {
-                if (COMPILATION_STATUS_PASS.equalsIgnoreCase(termResult.getCompilationStatus())) {
+                if (COMPILATION_STATUS_SUCCESS.equalsIgnoreCase(termResult.getCompilationStatus())) {
                     TermEntry entry = buildTermEntry(feature, termResult);
                     indexTermEntry(feature, entry, byExpressionId, byTermNumber);
                 }

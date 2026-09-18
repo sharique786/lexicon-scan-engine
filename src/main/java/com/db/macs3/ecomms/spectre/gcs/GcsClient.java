@@ -104,23 +104,25 @@ public class GcsClient implements Serializable {
      */
     public List<String> listImmediateChildDirectories(String bucket, String prefix) {
         log.debug("Listing immediate child directories under gs://{}/{}", bucket, prefix);
+        return getChildren(bucket, prefix);
+    }
+
+    private List<String> getChildren(String bucket, String prefix) {
         Instant callStart = Instant.now();
         try {
             List<String> children = new ArrayList<>();
-            for (Blob blob : storage().list(bucket,
-                    Storage.BlobListOption.prefix(prefix),
-                    Storage.BlobListOption.currentDirectory()).iterateAll()) {
+            Iterable<Blob> blobIterable = storage().list(bucket, Storage.BlobListOption.prefix(prefix),
+                    Storage.BlobListOption.currentDirectory()).iterateAll();
+
+            for (Blob blob : blobIterable) {
                 if (blob.isDirectory()) {
-                    String blobName = blob.getName(); // e.g. "policy_test/2026-08-16_10-00-00_101/"
-                    String childName = blobName.substring(prefix.length());
-                    if (childName.endsWith("/")) {
-                        childName = childName.substring(0, childName.length() - 1);
-                    }
+                    String childName = prepareChildName(blob, prefix) ;
                     if (!childName.isEmpty()) {
                         children.add(childName);
                     }
                 }
             }
+
             log.debug("Found {} child director(y/ies) under gs://{}/{} in {}ms",
                     children.size(), bucket, prefix, Duration.between(callStart, Instant.now()).toMillis());
             return children;
@@ -128,6 +130,15 @@ public class GcsClient implements Serializable {
             log.error("Failed to list child directories under gs://{}/{}: {}", bucket, prefix, e.getMessage(), e);
             throw e;
         }
+    }
+
+    private String prepareChildName(Blob blob, String prefix) {
+        String blobName = blob.getName(); // e.g. "policy_test/2026-08-16_10-00-00_101/"
+        String childName = blobName.substring(prefix.length());
+        if (childName.endsWith("/")) {
+            childName = childName.substring(0, childName.length() - 1);
+        }
+        return childName;
     }
 
     /**

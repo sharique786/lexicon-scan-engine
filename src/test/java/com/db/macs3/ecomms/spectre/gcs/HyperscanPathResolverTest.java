@@ -67,9 +67,9 @@ class HyperscanPathResolverTest {
     @DisplayName("buildZipPath produces the correct .zip filename")
     void buildsZipPath() {
         String zipPath = HyperscanPathResolver.buildZipPath(
-                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/", "lexicon_market_cond-1");
+                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/output/lex-hyperscan/", "lexicon_market_cond-1");
         assertThat(zipPath).isEqualTo(
-                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/lex-hyperscan/lexicon_market_cond-1.zip");
+                "gs://my-bucket/policy_test/2026-08-16_10-00-00_101/output/lex-hyperscan/lexicon_market_cond-1.zip");
     }
 
     @Test

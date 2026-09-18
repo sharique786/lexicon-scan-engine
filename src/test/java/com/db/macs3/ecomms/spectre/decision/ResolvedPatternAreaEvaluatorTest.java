@@ -43,7 +43,7 @@ class ResolvedPatternAreaEvaluatorTest {
     }
 
     private static ResolvedPatternTree.Chain threeLeafChain(String leaf1, String op1, int dist1,
-                                                             String leaf2, String op2, int dist2, String leaf3) {
+                                                            String leaf2, String op2, int dist2, String leaf3) {
         return new ResolvedPatternTree.Chain(List.of(leaf(leaf1), leaf(leaf2), leaf(leaf3)),
                 List.of(op1, op2), List.of(dist1, dist2));
     }

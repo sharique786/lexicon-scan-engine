@@ -36,8 +36,8 @@ class OutputRowBuilderTest {
     }
 
     private static String defJson(String feature, int totalTerms, int minHits) {
-        return "{\"featureId\":\"1\",\"featureName\":\"x\",\"featureType\":\"Lexicon\",\"isNoiseReduction\":false,"
-                + "\"body\":{\"id\":1,\"lexiconName\":\"" + feature + "\",\"objectId\":1,\"totalTermsCount\":" + totalTerms
+        return "{\"featureId\":\"1\",\"featureName\":\"x\",\"featureType\":\"lexicon\",\"isNoiseReduction\":\"N\","
+                + "\"body\":{\"id\":1,\"lexiconName\":\"" + feature + "\",\"objectId\":\"1\",\"totalTermsCount\":" + totalTerms
                 + ",\"minimumHits\":" + minHits + ",\"scope\":[\"Message Body\"]}}";
     }
 

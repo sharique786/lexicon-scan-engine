@@ -153,6 +153,24 @@ public final class HtmlStrippingService {
         }
 
         /**
+         * Builds an offset map directly from a caller-supplied boundaries array — for a caller
+         * that computes its own stripped-position → original-position mapping outside this
+         * class's own {@link #strip} algorithm (see {@code ChatVoiceMessageTextExtractor}, which
+         * maps an extracted subset of a document's text back to that document's own positions,
+         * not the {@code strip}-algorithm's tag/whitespace-run boundaries this class normally
+         * produces). {@code boundaries} must have one entry per stripped-text boundary position,
+         * {@code 0..strippedLength} inclusive (length {@code strippedLength + 1}), exactly the
+         * same contract {@link #strip} itself builds — see that method's own boundaries array
+         * for a worked example.
+         */
+        public static OffsetMap of(int[] boundaries) {
+            if (boundaries == null || boundaries.length == 0) {
+                throw new IllegalArgumentException("boundaries must be non-null and non-empty");
+            }
+            return new OffsetMap(boundaries);
+        }
+
+        /**
          * @param strippedPosition a boundary position in the stripped text, {@code 0..strippedLength} inclusive
          * @return the corresponding boundary position in the original text
          */
@@ -182,6 +200,28 @@ public final class HtmlStrippingService {
      */
     public static StripResult identity(String text) {
         return new StripResult(text == null ? "" : text, OffsetMap.identity());
+    }
+
+    /**
+     * {@link #strip}, but for text that is itself already an EXTRACT of some larger original
+     * document — {@code extractedText} is not the original document, and {@code extractionOffsetMap}
+     * already maps every one of {@code extractedText}'s own positions back to that larger
+     * document's real positions (see {@code ChatVoiceMessageTextExtractor}, whose
+     * {@code <td>}-cell extraction pass this exists for). Runs the normal tag/whitespace-stripping
+     * pass on {@code extractedText} exactly as {@link #strip} would, then COMPOSES the two offset
+     * maps — {@code extractedText} position → {@code extractionOffsetMap} → original-document
+     * position — so the returned {@link StripResult#offsetMap()} maps a Hyperscan match's position
+     * (in the doubly-stripped text this method returns) straight back to the ORIGINAL document's
+     * positions, never to the intermediate {@code extractedText}'s own positions.
+     */
+    public static StripResult stripExtracted(String extractedText, OffsetMap extractionOffsetMap) {
+        StripResult innerStrip = strip(extractedText);
+        int boundaryCount = innerStrip.strippedText().length() + 1;
+        int[] composedBoundaries = new int[boundaryCount];
+        for (int i = 0; i < boundaryCount; i++) {
+            composedBoundaries[i] = extractionOffsetMap.toOriginal(innerStrip.offsetMap().toOriginal(i));
+        }
+        return new StripResult(innerStrip.strippedText(), new OffsetMap(composedBoundaries));
     }
 
     /**

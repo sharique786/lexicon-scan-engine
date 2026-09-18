@@ -9,9 +9,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests {@link FeatureDefinition} parsing against the exact sample JSON
- * shapes from the requirements' "View Data" reference, including the
- * case-insensitive scope matching the sample data itself needs (mixed
- * casing: {@code "subject"} vs {@code "Message Body"}).
+ * shape from the requirements' "View Data" reference — {@code featureType}
+ * lowercase ({@code "lexicon"}), {@code body.objectId} as a JSON string,
+ * root-level {@code isNoiseReduction} as a {@code "Y"}/{@code "N"} string —
+ * plus the case-insensitive scope matching the sample data itself needs
+ * (mixed casing: {@code "subject"} vs {@code "Message Body"}).
  */
 @DisplayName("FeatureDefinition")
 class FeatureDefinitionTest {
@@ -21,15 +23,15 @@ class FeatureDefinitionTest {
             + "  \"body\": {"
             + "    \"id\": 1,"
             + "    \"lexiconName\": \"lexicon_market_cond-1\","
-            + "    \"objectId\": 2,"
+            + "    \"objectId\": \"2\","
             + "    \"totalTermsCount\": 10,"
             + "    \"minimumHits\": 3,"
             + "    \"scope\": [\"Message Body\", \"Attachment\"]"
             + "  },"
             + "  \"featureId\": \"1\","
             + "  \"featureName\": \"lexicon_market_cond_1\","
-            + "  \"featureType\": \"Lexicon\","
-            + "  \"isNoiseReduction\": false"
+            + "  \"featureType\": \"lexicon\","
+            + "  \"isNoiseReduction\": \"N\""
             + "}";
 
     private static final String MIXED_CASE_SCOPE_JSON =
@@ -37,15 +39,15 @@ class FeatureDefinitionTest {
             + "  \"body\": {"
             + "    \"id\": 2,"
             + "    \"lexiconName\": \"lexicon_market_cond-2\","
-            + "    \"objectId\": 3,"
+            + "    \"objectId\": \"3\","
             + "    \"totalTermsCount\": 20,"
             + "    \"minimumHits\": 5,"
             + "    \"scope\": [\"subject\", \"Message Body\"]"
             + "  },"
             + "  \"featureId\": \"2\","
             + "  \"featureName\": \"lexicon_market_cond_2\","
-            + "  \"featureType\": \"Lexicon\","
-            + "  \"isNoiseReduction\": true"
+            + "  \"featureType\": \"lexicon\","
+            + "  \"isNoiseReduction\": \"Y\""
             + "}";
 
     @Nested
@@ -58,8 +60,9 @@ class FeatureDefinitionTest {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
             assertThat(fd.getFeatureId()).isEqualTo("1");
             assertThat(fd.getFeatureName()).isEqualTo("lexicon_market_cond_1");
-            assertThat(fd.getFeatureType()).isEqualTo("Lexicon");
-            assertThat(fd.isNoiseReduction()).isFalse();
+            assertThat(fd.getFeatureType()).isEqualTo("lexicon");
+            assertThat(fd.getIsNoiseReduction()).isEqualTo("N");
+            assertThat(fd.isNoiseReductionFlagSet()).isFalse();
         }
 
         @Test
@@ -70,11 +73,11 @@ class FeatureDefinitionTest {
         }
 
         @Test
-        @DisplayName("parses body.id and body.objectId")
+        @DisplayName("parses body.id (still a number) and body.objectId (now a string)")
         void parsesBodyIds() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
             assertThat(fd.getBody().getId()).isEqualTo(1);
-            assertThat(fd.getBody().getObjectId()).isEqualTo(2);
+            assertThat(fd.getBody().getObjectId()).isEqualTo("2");
         }
 
         @Test
@@ -90,6 +93,40 @@ class FeatureDefinitionTest {
         void parsesScope() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
             assertThat(fd.getBody().getScope()).containsExactly("Message Body", "Attachment");
+        }
+    }
+
+    @Nested
+    @DisplayName("isNoiseReduction: \"Y\"/\"N\" string, case-insensitive")
+    class IsNoiseReductionFlag {
+
+        @Test
+        @DisplayName("\"N\" resolves to false")
+        void nResolvesToFalse() {
+            FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
+            assertThat(fd.isNoiseReductionFlagSet()).isFalse();
+        }
+
+        @Test
+        @DisplayName("\"Y\" resolves to true")
+        void yResolvesToTrue() {
+            FeatureDefinition fd = FeatureDefinition.parse(MIXED_CASE_SCOPE_JSON);
+            assertThat(fd.isNoiseReductionFlagSet()).isTrue();
+        }
+
+        @Test
+        @DisplayName("lowercase \"y\" also resolves to true")
+        void lowercaseYResolvesToTrue() {
+            FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON.replace("\"N\"", "\"y\""));
+            assertThat(fd.getIsNoiseReduction()).isEqualTo("y");
+            assertThat(fd.isNoiseReductionFlagSet()).isTrue();
+        }
+
+        @Test
+        @DisplayName("lowercase \"n\" resolves to false")
+        void lowercaseNResolvesToFalse() {
+            FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON.replace("\"N\"", "\"n\""));
+            assertThat(fd.isNoiseReductionFlagSet()).isFalse();
         }
     }
 
@@ -112,10 +149,26 @@ class FeatureDefinitionTest {
         }
 
         @Test
+        @DisplayName("hasScope matches fully uppercase candidate against a title-case stored value")
+        void matchesUppercaseCandidate() {
+            FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
+            assertThat(fd.getBody().hasScope("MESSAGE BODY")).isTrue();
+            assertThat(fd.getBody().hasScope("ATTACHMENT")).isTrue();
+        }
+
+        @Test
+        @DisplayName("hasScope matches a randomly mixed-case candidate")
+        void matchesMixedCaseCandidate() {
+            FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
+            assertThat(fd.getBody().hasScope("mEsSaGe BoDy")).isTrue();
+        }
+
+        @Test
         @DisplayName("hasScope returns false for a scope value not present")
         void returnsFalseForAbsentScope() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
             assertThat(fd.getBody().hasScope("subject")).isFalse();
+            assertThat(fd.getBody().hasScope("SUBJECT")).isFalse();
         }
 
         @Test
@@ -125,6 +178,15 @@ class FeatureDefinitionTest {
             assertThat(fd.getBody().hasScope("subject")).isTrue();
             assertThat(fd.getBody().hasScope("SUBJECT")).isTrue();
             assertThat(fd.getBody().hasScope("Message Body")).isTrue();
+            assertThat(fd.getBody().hasScope("message body")).isTrue();
+        }
+
+        @Test
+        @DisplayName("hasScope returns false when the scope array itself is empty")
+        void returnsFalseForEmptyScope() {
+            String json = SAMPLE_JSON.replace("[\"Message Body\", \"Attachment\"]", "[]");
+            FeatureDefinition fd = FeatureDefinition.parse(json);
+            assertThat(fd.getBody().hasScope("Message Body")).isFalse();
         }
     }
 

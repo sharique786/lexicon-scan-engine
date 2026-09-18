@@ -159,8 +159,8 @@ final class ResolvedPatternAreaEvaluator {
 
     /**
      * @return true iff {@code candidate} legally continues the chain after {@code previous} under
-     *         {@code operator}'s direction rule and {@code maxGap} — see class Javadoc "NEAR
-     *         bidirectionality" for why {@code NEAR} never checks direction.
+     * {@code operator}'s direction rule and {@code maxGap} — see class Javadoc "NEAR
+     * bidirectionality" for why {@code NEAR} never checks direction.
      */
     private static boolean canExtend(String operator, int maxGap, LeafOccurrence previous, LeafOccurrence candidate) {
         boolean directionOk = ResolvedPatternTree.OPERATOR_NEAR.equals(operator)

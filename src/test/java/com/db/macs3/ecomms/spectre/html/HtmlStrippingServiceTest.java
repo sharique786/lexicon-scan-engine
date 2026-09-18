@@ -177,4 +177,65 @@ class HtmlStrippingServiceTest {
                     .isEqualTo(HtmlStrippingService.strip(clean).strippedText());
         }
     }
+
+    @Nested
+    @DisplayName("OffsetMap.of(int[]) — a caller-supplied boundaries array")
+    class OffsetMapOf {
+
+        @Test
+        @DisplayName("toOriginal delegates straight to the supplied array")
+        void delegatesToSuppliedArray() {
+            HtmlStrippingService.OffsetMap map = HtmlStrippingService.OffsetMap.of(new int[]{5, 9, 20});
+            assertThat(map.toOriginal(0)).isEqualTo(5);
+            assertThat(map.toOriginal(1)).isEqualTo(9);
+            assertThat(map.toOriginal(2)).isEqualTo(20);
+        }
+
+        @Test
+        @DisplayName("null array throws")
+        void nullArrayThrows() {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> HtmlStrippingService.OffsetMap.of(null))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("empty array throws")
+        void emptyArrayThrows() {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> HtmlStrippingService.OffsetMap.of(new int[0]))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("stripExtracted — composing an extraction's own offset map with a further strip pass")
+    class StripExtracted {
+
+        @Test
+        @DisplayName("a two-stage composition resolves straight back to the ORIGINAL document, "
+                     + "never to the intermediate extracted text")
+        void composesBothOffsetMaps() {
+            // Simulates ChatVoiceMessageTextExtractor's shape: "extractedText" is itself a
+            // substring pulled out of some larger original document, starting at offset 100
+            // there, and still carries its own inner HTML tag to be stripped.
+            String extractedText = "Can you share <p>market</p> price?";
+            int[] extractionBoundaries = new int[extractedText.length() + 1];
+            for (int i = 0; i <= extractedText.length(); i++) {
+                extractionBoundaries[i] = 100 + i; // extractedText sits at original offset 100
+            }
+            HtmlStrippingService.OffsetMap extractionOffsetMap = HtmlStrippingService.OffsetMap.of(extractionBoundaries);
+
+            HtmlStrippingService.StripResult result =
+                    HtmlStrippingService.stripExtracted(extractedText, extractionOffsetMap);
+
+            assertThat(result.strippedText()).isEqualTo("Can you share market price?");
+
+            Matcher matcher = Pattern.compile("market price").matcher(result.strippedText());
+            assertThat(matcher.find()).isTrue();
+            int originalStart = result.offsetMap().toOriginal(matcher.start());
+            int originalEnd = result.offsetMap().toOriginal(matcher.end());
+            // Position in the ORIGINAL document (offset 100 + extractedText's own local offset),
+            // not in extractedText itself.
+            assertThat(originalStart).isEqualTo(100 + extractedText.indexOf("market"));
+        }
+    }
 }

@@ -1,6 +1,7 @@
 package com.db.macs3.ecomms.spectre.decision;
 
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
+import com.db.macs3.ecomms.spectre.html.ChatVoiceMessageTextExtractor;
 import com.db.macs3.ecomms.spectre.html.HtmlStrippingService;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanScanService;
@@ -11,7 +12,9 @@ import com.db.macs3.ecomms.spectre.model.match.MatchArea;
 import com.db.macs3.ecomms.spectre.model.match.MatchSpan;
 import com.db.macs3.ecomms.spectre.model.match.RawExpressionMatch;
 import com.db.macs3.ecomms.spectre.model.match.TermMatchResult;
+import com.db.macs3.ecomms.spectre.model.message.ChannelType;
 import com.db.macs3.ecomms.spectre.model.message.MessageAttachment;
+import com.db.macs3.ecomms.spectre.model.message.MessageSource;
 import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
 import com.db.macs3.ecomms.spectre.model.termmeta.TermExpressionMetadata;
 import com.db.macs3.ecomms.spectre.model.termmeta.TermExpressionMetadata.TermEntry;
@@ -101,6 +104,15 @@ import java.util.stream.Collectors;
  *       (and its {@code int[]} offset-map allocation) would be pure waste
  *       on text that can legitimately be megabytes long.</li>
  * </ul>
+ *
+ * <h2>MESSAGE_BODY stripping is channel-specific — see {@link #messageBodyStripResult}</h2>
+ * <p>EMAIL {@code raw_text} is stripped directly, as it always has been. CHAT/VOICE
+ * {@code raw_text} is an HTML table report where only the {@code <td>} cell(s) whose
+ * {@code class} carries the {@code message_text} token are real message content — every other
+ * column (room name, event type, email, attachment metadata, ...) must never reach Hyperscan.
+ * {@link #messageBodyStripResult} routes to {@code ChatVoiceMessageTextExtractor} for those two
+ * channels, falling back to the EMAIL-style direct strip when no {@code message_text} cell is
+ * found at all (e.g. a CHAT/VOICE message that isn't this table shape).
  */
 public final class FeatureScanOrchestrator implements AutoCloseable {
 
@@ -150,7 +162,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
 
         String rawText = message.getContent() == null ? null : message.getContent().getRawText();
         if (rawText != null && !rawText.isBlank()) {
-            areaTexts.add(new MessageAreaText(MatchArea.MESSAGE_BODY, null, rawText, HtmlStrippingService.strip(rawText)));
+            areaTexts.add(new MessageAreaText(MatchArea.MESSAGE_BODY, null, rawText, messageBodyStripResult(message, rawText)));
         }
 
         for (MessageAttachment attachment : message.attachmentsOrEmpty()) {
@@ -160,6 +172,48 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
             }
         }
         return areaTexts;
+    }
+
+    /**
+     * Resolves the MESSAGE_BODY area's {@link HtmlStrippingService.StripResult} for {@code rawText},
+     * per {@link ChannelType} — see {@code ChatVoiceMessageTextExtractor} class Javadoc for why
+     * CHAT/VOICE need a different strategy than the plain {@link HtmlStrippingService#strip} the
+     * EMAIL path has always used.
+     *
+     * <h2>EMAIL — unchanged</h2>
+     * <p>Strips {@code rawText} directly, exactly as before this method existed.
+     *
+     * <h2>CHAT/VOICE — extract {@code message_text} cells first, then strip</h2>
+     * <p>{@code rawText} for these channels is an HTML table report where most columns (room
+     * name, event type, email, attachment metadata, ...) are never scannable message content —
+     * only the {@code <td>} cell(s) whose {@code class} carries the {@code message_text} token
+     * do. Scanning the WHOLE table would feed Hyperscan every other column's text too, risking a
+     * lexicon match on content that was never part of the actual message. {@link ChatVoiceMessageTextExtractor#extract}
+     * pulls just those cells out (with an offset map back to {@code rawText}), and
+     * {@link HtmlStrippingService#stripExtracted} then strips any further HTML those cells
+     * themselves carry (e.g. a {@code <p>}-wrapped message) while composing that offset map with
+     * its own — so a match's position always resolves back to {@code rawText}, never to the
+     * intermediate, cells-only text.
+     *
+     * <h2>Fallback: not every CHAT/VOICE message is that table shape</h2>
+     * <p>When no {@code message_text} cell is found at all (including a {@code rawText} that
+     * isn't this table shape to begin with — e.g. a plain-text test fixture, or a CHAT/VOICE
+     * message this engine hasn't seen the shape of yet), this falls back to stripping
+     * {@code rawText} directly, same as EMAIL — never silently drops content that could still
+     * legitimately be scanned.
+     */
+    private static HtmlStrippingService.StripResult messageBodyStripResult(ScanMessage message, String rawText) {
+        MessageSource source = message.getSource();
+        ChannelType channelType = ChannelType.fromChannelName(source == null ? null : source.getChannelName());
+        if (channelType == ChannelType.CHAT || channelType == ChannelType.VOICE) {
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
+            if (extraction.anyCellFound()) {
+                return HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap());
+            }
+            log.debug("channelType={}: no message_text <td> cell found in raw_text — "
+                    + "falling back to whole-text HTML stripping", channelType);
+        }
+        return HtmlStrippingService.strip(rawText);
     }
 
     /**

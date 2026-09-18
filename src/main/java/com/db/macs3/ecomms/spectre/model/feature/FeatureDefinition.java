@@ -21,14 +21,15 @@ import java.util.Objects;
  *   "body": {
  *     "id": 1,
  *     "lexiconName": "lexicon_market_cond_4",
- *     "objectId": 2,
+ *     "objectId": "2",
  *     "scope": ["Message Body", "Attachment", "Subject"],
- *     "totalTermsCount": 17
+ *     "totalTermsCount": 17,
+ *     "minimumHits": 2
  *   },
  *   "featureId": "2",
  *   "featureName": "lexicon_market_cond_4",
- *   "featureType": "Lexicon",
- *   "isNoiseReduction": false
+ *   "featureType": "lexicon",
+ *   "isNoiseReduction": "N"
  * }
  * </pre>
  *
@@ -42,6 +43,21 @@ import java.util.Objects;
  * labels only. {@code featureId} (root-level) and {@code body.id}/
  * {@code body.objectId} are carried through for completeness but are not
  * (yet) consumed by any scanning/output logic in this engine.
+ *
+ * <h2>Schema change: {@code featureType} casing, {@code body.objectId} and {@code isNoiseReduction} types</h2>
+ * <p>Three further, independent value/type changes on top of the ones above:
+ * {@code featureType} now arrives lowercase ({@code "lexicon"}, was
+ * {@code "Lexicon"} — a plain value change, the field stays {@code String});
+ * {@code body.objectId} now arrives as a JSON string (was a JSON number —
+ * this class's {@link Body#getObjectId()} is therefore {@code String}, not
+ * {@code Integer}); and root-level {@code isNoiseReduction} now arrives as
+ * the {@code "Y"}/{@code "N"} string convention used elsewhere in this
+ * platform (was a JSON boolean — see {@link #getIsNoiseReduction()}).
+ * {@code body.scope}'s values ({@code "Message Body"}/{@code "Attachment"}/
+ * {@code "Subject"}) are unchanged in shape (still a {@code List<String>})
+ * but are — and, per {@link Body#hasScope}, always have been — matched
+ * case-insensitively against a scanned area, since upstream data is known to
+ * mix casing (e.g. {@code "subject"} vs {@code "Message Body"}).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeatureDefinition implements Serializable {
@@ -52,7 +68,7 @@ public class FeatureDefinition implements Serializable {
     private String featureId;
     private String featureName;
     private String featureType;
-    private boolean isNoiseReduction;
+    private String isNoiseReduction;
     private Body body;
 
     @JsonCreator
@@ -60,7 +76,7 @@ public class FeatureDefinition implements Serializable {
             @JsonProperty("featureId") String featureId,
             @JsonProperty("featureName") String featureName,
             @JsonProperty("featureType") String featureType,
-            @JsonProperty("isNoiseReduction") boolean isNoiseReduction,
+            @JsonProperty("isNoiseReduction") String isNoiseReduction,
             @JsonProperty("body") Body body) {
         this.featureId = featureId;
         this.featureName = featureName;
@@ -93,12 +109,25 @@ public class FeatureDefinition implements Serializable {
         this.featureType = featureType;
     }
 
-    public boolean isNoiseReduction() {
+    /**
+     * @return the raw {@code "Y"}/{@code "N"} value as delivered — see
+     *         {@link #isNoiseReductionFlagSet()} for the boolean-flag reading of it
+     */
+    public String getIsNoiseReduction() {
         return isNoiseReduction;
     }
 
-    public void setNoiseReduction(boolean noiseReduction) {
-        isNoiseReduction = noiseReduction;
+    public void setIsNoiseReduction(String isNoiseReduction) {
+        this.isNoiseReduction = isNoiseReduction;
+    }
+
+    /**
+     * @return true iff {@link #getIsNoiseReduction()} is {@code "Y"}, matched
+     *         case-insensitively; false for {@code "N"}, null, blank, or any
+     *         other value
+     */
+    public boolean isNoiseReductionFlagSet() {
+        return "Y".equalsIgnoreCase(isNoiseReduction);
     }
 
     public Body getBody() {
@@ -118,7 +147,7 @@ public class FeatureDefinition implements Serializable {
             return false;
         }
         FeatureDefinition other = (FeatureDefinition) obj;
-        return isNoiseReduction == other.isNoiseReduction
+        return Objects.equals(isNoiseReduction, other.isNoiseReduction)
                 && Objects.equals(featureId, other.featureId)
                 && Objects.equals(featureName, other.featureName)
                 && Objects.equals(featureType, other.featureType)
@@ -145,7 +174,7 @@ public class FeatureDefinition implements Serializable {
 
         private Integer id;
         private String lexiconName;
-        private Integer objectId;
+        private String objectId;
         private Integer totalTermsCount;
         private Integer minimumHits;
         private List<String> scope;
@@ -154,7 +183,7 @@ public class FeatureDefinition implements Serializable {
         public Body(
                 @JsonProperty("id") Integer id,
                 @JsonProperty("lexiconName") String lexiconName,
-                @JsonProperty("objectId") Integer objectId,
+                @JsonProperty("objectId") String objectId,
                 @JsonProperty("totalTermsCount") Integer totalTermsCount,
                 @JsonProperty("minimumHits") Integer minimumHits,
                 @JsonProperty("scope") List<String> scope) {
@@ -182,11 +211,11 @@ public class FeatureDefinition implements Serializable {
             this.lexiconName = lexiconName;
         }
 
-        public Integer getObjectId() {
+        public String getObjectId() {
             return objectId;
         }
 
-        public void setObjectId(Integer objectId) {
+        public void setObjectId(String objectId) {
             this.objectId = objectId;
         }
 
