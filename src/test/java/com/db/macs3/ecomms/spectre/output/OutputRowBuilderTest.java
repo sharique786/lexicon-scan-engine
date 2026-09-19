@@ -100,8 +100,9 @@ class OutputRowBuilderTest {
         }
 
         @Test
-        @DisplayName("omits a group that was evaluated but matched nothing — regex_hit_count would be zero")
-        void omitsZeroHitGroups() {
+        @DisplayName("a group that was evaluated but matched nothing is still reported: real id/name/" +
+                "total_terms_count, regex_hit_count 0, and one N/A / N/A / 0 term_dtls placeholder")
+        void reportsZeroHitGroupWithPlaceholderTerm() {
             List<FeatureDecisionRow> rows = List.of(
                     row("1", "lexicon", "lexicon_market_cond-3", defJson("lexicon_market_cond-3", 8, 2)));
             List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(rows);
@@ -111,7 +112,42 @@ class OutputRowBuilderTest {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
                     "msg-999", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
 
-            assertThat(row.getEvaluatedLexicons()).isEmpty();
+            assertThat(row.getEvaluatedLexicons()).hasSize(1);
+            var entry = row.getEvaluatedLexicons().getFirst();
+            assertThat(entry.getId()).isEqualTo(1L);
+            assertThat(entry.getName()).isEqualTo("1-name");
+            assertThat(entry.getTotalTermsCount()).isEqualTo(8L);
+            assertThat(entry.getRegexHitCount()).isZero();
+            assertThat(entry.getTermDtls()).hasSize(1);
+            assertThat(entry.getTermDtls().getFirst().getTermId()).isEqualTo("N/A");
+            assertThat(entry.getTermDtls().getFirst().getTermRegexPattern()).isEqualTo("N/A");
+            assertThat(entry.getTermDtls().getFirst().getRegexMatchHitCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("in one message, a group that hit keeps its real terms while a group that did not " +
+                "gets the placeholder — neither affects the other")
+        void mixedHitAndNoHitGroups() {
+            List<FeatureDecisionRow> rows = List.of(
+                    row("2", "disclaimer", "std_disclaimer-1", defJson("std_disclaimer-1", 5, 1)),
+                    row("1", "lexicon", "lexicon_market_cond-1", defJson("lexicon_market_cond-1", 10, 3)));
+            List<FeatureGroup> groups = FeatureGroupingService.groupAndOrder(rows);
+            Map<String, List<TermMatchResult>> canned = Map.of("lexicon_market_cond-1", List.of(
+                    new TermMatchResult("lexicon_market_cond-1::2", "bomb",
+                            List.of(AreaMatch.messageBody(new MatchSpan(50, 54, "bomb"))))));
+            DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-101", groups, scanner);
+
+            LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            var disclaimer = row.getEvaluatedLexicons().stream().filter(e -> e.getId().equals(2L)).findFirst().orElseThrow();
+            assertThat(disclaimer.getRegexHitCount()).isZero();
+            assertThat(disclaimer.getTermDtls().getFirst().getTermId()).isEqualTo("N/A");
+            var lexicon = row.getEvaluatedLexicons().stream().filter(e -> e.getId().equals(1L)).findFirst().orElseThrow();
+            assertThat(lexicon.getRegexHitCount()).isEqualTo(1L);
+            assertThat(lexicon.getTermDtls()).hasSize(1);
+            assertThat(lexicon.getTermDtls().getFirst().getTermId()).isEqualTo("lexicon_market_cond-1::2");
         }
 
         @Test

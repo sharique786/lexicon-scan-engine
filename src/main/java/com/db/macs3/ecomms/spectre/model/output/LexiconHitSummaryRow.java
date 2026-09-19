@@ -26,14 +26,15 @@ import java.util.Objects;
  * {@code body.lexiconName}) it came from, since {@code term_id} is
  * {@code <feature>::<index>}.
  *
- * <p>Only groups that were ACTUALLY evaluated AND matched at least one term
- * appear — a NoiseReduction group short-circuit means every later group
- * (further NoiseReduction, the Disclaimer group, all Lexicon groups) simply
- * has no entry at all here, since {@code DecisionTreeEvaluator} never
- * evaluated them; separately, a group that WAS evaluated but matched
- * nothing ({@link EvaluatedLexicon#getRegexHitCount} would be zero) is
- * likewise omitted by {@code OutputRowBuilder#buildSummaryRow} — this table
- * reports what hit, not an evaluation audit trail.
+ * <p>Only groups that were ACTUALLY evaluated appear — a NoiseReduction group
+ * short-circuit means every later group (further NoiseReduction, the
+ * Disclaimer group, all Lexicon groups) simply has no entry at all here,
+ * since {@code DecisionTreeEvaluator} never evaluated them. A group that WAS
+ * evaluated but matched nothing still appears, with
+ * {@link EvaluatedLexicon#getRegexHitCount} {@code 0} and one placeholder
+ * {@link TermDtl} ({@code term_id}/{@code term_regex_pattern} {@code "N/A"},
+ * {@link TermDtl#getRegexMatchHitCount} {@code 0}) — see
+ * {@code OutputRowBuilder#buildSummaryRow}.
  *
  * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
  * schema verbatim (rechecked against the live table): {@code evaluated_lexicons}
@@ -183,9 +184,11 @@ public class LexiconHitSummaryRow implements Serializable {
          * @param totalTermsCount sum of every member's {@code feature_definition.body.totalTermsCount} —
          *                        NULLABLE per the delivered schema
          * @param regexHitCount   count of DISTINCT {@code term_id}s that matched across every
-         *                        member of this group (the length of {@link #getTermDtls}) —
+         *                        member of this group — 0 for a no-hit group, even though
+         *                        {@link #getTermDtls} then holds one placeholder entry —
          *                        NULLABLE per the delivered schema
-         * @param termDtls        one entry per distinct term that matched, across every member
+         * @param termDtls        one entry per distinct term that matched, across every member;
+         *                        a single {@code "N/A"} placeholder entry if none did
          */
         public EvaluatedLexicon(Long id, String name, Long totalTermsCount, Long regexHitCount,
                                 List<TermDtl> termDtls) {

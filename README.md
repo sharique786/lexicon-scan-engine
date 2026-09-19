@@ -468,7 +468,7 @@ every entry name actually found in the zip — never a silent partial load.
 
 | Table | Grain | Notes |
 |---|---|---|
-| `lexicon-hit-summary` | One row per message | One `evaluated_lexicons` entry per **evaluated feature group** (not per sub-feature member) — includes NoiseReduction/Disclaimer/Lexicon groups alike, using raw (pre-suppression) match counts. `term_dtls.term_id` is now always the term's own `<feature>::<n>` — see [Hyperscan file processing](#hyperscan-file-processing-and-not-and-decomposed-terms) |
+| `lexicon-hit-summary` | One row per message | One `evaluated_lexicons` entry per **evaluated feature group** (not per sub-feature member) — includes NoiseReduction/Disclaimer/Lexicon groups alike, using raw (pre-suppression) match counts. An evaluated group with **no matching term** is still listed, with its real `id`/`name`/`total_terms_count`, `regex_hit_count = 0`, and a single `term_dtls` placeholder (`term_id = N/A`, `term_regex_pattern = N/A`, `regex_match_hit_count = 0`); groups never evaluated (after a NoiseReduction short-circuit) still have no entry. `term_dtls.term_id` is now always the term's own `<feature>::<n>` — see [Hyperscan file processing](#hyperscan-file-processing-and-not-and-decomposed-terms) |
 | `lexicon-hit-restricted` | One row per message (restricted source only) | Lexicon-category groups only, **post** disclaimer-suppression; `matched_text` is a serialized `hit_details_hs` JSON structure per term |
 | `lexicon-hit-unrestricted` | One row per message (unrestricted source only) | Identical shape to `-restricted`, split purely by source GCS subfolder |
 | `feature-hit-summary` | One row per message | Every evaluated group's resolved hit status, plus each multi-member group's own sub-feature breakdown |

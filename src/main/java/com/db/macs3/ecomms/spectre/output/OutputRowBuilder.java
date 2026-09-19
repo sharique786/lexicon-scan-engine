@@ -29,6 +29,12 @@ public final class OutputRowBuilder {
 
     private static final ObjectMapper MATCHED_TEXT_MAPPER = new ObjectMapper();
 
+    /**
+     * {@code lexicon-hit-summary} placeholder values for an evaluated group with no matching term.
+     */
+    private static final String NO_HIT_TERM_ID = "N/A";
+    private static final String NO_HIT_TERM_REGEX_PATTERN = "N/A";
+
     private OutputRowBuilder() {
     }
 
@@ -37,12 +43,13 @@ public final class OutputRowBuilder {
     /**
      * Builds the {@code lexicon-hit-summary} row for one message — one
      * {@link LexiconHitSummaryRow.EvaluatedLexicon} entry per EVALUATED
-     * group that matched at least one term (see {@link LexiconHitSummaryRow}
-     * class Javadoc for why this is per-group, not per-sub-feature-member),
-     * regardless of feature type (NoiseReduction/Disclaimer/Lexicon all
-     * included) — a group {@code DecisionTreeEvaluator} evaluated but which
-     * matched nothing (empty {@code termDtls}, {@code regexHitCount == 0})
-     * is omitted entirely, not included with a zero count.
+     * group (see {@link LexiconHitSummaryRow} class Javadoc for why this is
+     * per-group, not per-sub-feature-member), regardless of feature type
+     * (NoiseReduction/Disclaimer/Lexicon all included). A group
+     * {@code DecisionTreeEvaluator} evaluated but which matched nothing is
+     * included too, with {@code regexHitCount == 0} and a single placeholder
+     * {@code termDtls} entry ({@code term_id}/{@code term_regex_pattern}
+     * {@code "N/A"}, {@code regex_match_hit_count} 0).
      *
      * <p>Uses each group's RAW (pre-disclaimer-suppression) matches, since
      * this table is a broad "what did we hit" summary, not the alert-worthy
@@ -76,17 +83,21 @@ public final class OutputRowBuilder {
                 }
             }
 
-            // Only report a group that actually matched something — a group this job evaluated
-            // but which had zero matching terms (regexHitCount == termDtls.size()) is noise for a
-            // "what hit" summary, not evaluation audit trail (that's pipeline_stage_audit's job).
-            if (!termDtls.isEmpty()) {
-                evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(
-                        groupResult.getGroup().getFeatureId(),
-                        groupResult.getGroup().getFeatureName(),
-                        totalTermsCount,
-                        (long) termDtls.size(),
-                        termDtls));
+            // A group this job evaluated but which matched nothing is still reported, with one
+            // placeholder term_dtls entry (N/A / N/A / 0) and regex_hit_count 0 — so a message that
+            // hit nothing is distinguishable from one that was never evaluated. regex_hit_count is
+            // the count of REAL matching terms, so it stays 0 here rather than termDtls.size() (1).
+            long regexHitCount = termDtls.size();
+            if (termDtls.isEmpty()) {
+                termDtls.add(new LexiconHitSummaryRow.TermDtl(NO_HIT_TERM_ID, NO_HIT_TERM_REGEX_PATTERN, 0L));
+                regexHitCount = 0;
             }
+            evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(
+                    groupResult.getGroup().getFeatureId(),
+                    groupResult.getGroup().getFeatureName(),
+                    totalTermsCount,
+                    regexHitCount,
+                    termDtls));
         }
 
         return new LexiconHitSummaryRow(
