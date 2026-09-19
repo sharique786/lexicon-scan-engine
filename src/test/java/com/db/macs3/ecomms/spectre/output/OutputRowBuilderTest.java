@@ -41,6 +41,23 @@ class OutputRowBuilderTest {
                 + ",\"minimumHits\":" + minHits + ",\"scope\":[\"Message Body\"]}}";
     }
 
+    private static FeatureDecisionRow noiseRow(long featureId, String featuresToApply, String operator) {
+        return new FeatureDecisionRow("proc-1", "msg-102", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
+                "NoiseReduction", featureId, featureId + "-name", null, featuresToApply,
+                true, operator, defJson(featuresToApply, 3, 1), DATASET_PARTITION_VALUE, "101");
+    }
+
+    /** A NoiseReduction group that hits, ahead of a lexicon group that is therefore never evaluated. */
+    private static MessageEvaluationResult shortCircuitedEvaluation() {
+        List<FeatureDecisionRow> rows = List.of(
+                noiseRow(9L, "spam-1", null), row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1)));
+        Map<String, List<TermMatchResult>> canned = Map.of(
+                "spam-1", List.of(new TermMatchResult("spam-1::1", "spam",
+                        List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam"))))));
+        return DecisionTreeEvaluator.evaluate("msg-102", FeatureGroupingService.groupAndOrder(rows),
+                r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+    }
+
     /**
      * Builds a realistic disclaimer(suppresses one match) + lexicon(one survives) evaluation.
      */
@@ -214,26 +231,96 @@ class OutputRowBuilderTest {
         }
 
         @Test
-        @DisplayName("returns null for a short-circuited message — nothing to write, not an empty row")
-        void returnsNullWhenShortCircuited() {
-            List<FeatureDecisionRow> nrRows = List.of(
-                    new FeatureDecisionRow("proc-1", "msg-102", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
-                            "NoiseReduction", 9L, "9-name", null, "spam-1",
-                            true, null, defJson("spam-1", 3, 1), DATASET_PARTITION_VALUE, "101"),
-                    row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1))
-            );
-            List<FeatureGroup> nrGroups = FeatureGroupingService.groupAndOrder(nrRows);
-            Map<String, List<TermMatchResult>> nrCanned = Map.of(
-                    "spam-1", List.of(new TermMatchResult("spam-1::1", "spam",
-                            List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam"))))));
-            MessageEvaluationResult nrEval = DecisionTreeEvaluator.evaluate("msg-102", nrGroups,
-                    r -> nrCanned.getOrDefault(r.getFeaturesToApply(), List.of()));
-
+        @DisplayName("a message short-circuited by a NoiseReduction hit still gets a detail row carrying that " +
+                "group's match — id, term_id, and matched_text")
+        void noiseReductionHitIsWrittenToDetailRow() {
+            MessageEvaluationResult nrEval = shortCircuitedEvaluation();
             assertThat(nrEval.isShortCircuited()).isTrue(); // sanity check the premise before checking the row builder
 
-            LexiconHitDetailRow nullRow = OutputRowBuilder.buildDetailRow(
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-102", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, nrEval, "scan-engine", NOW);
-            assertThat(nullRow).isNull();
+
+            assertThat(row).isNotNull();
+            assertThat(row.getEvaluatedLexicons()).hasSize(1); // the never-evaluated lexicon group is absent
+            var entry = row.getEvaluatedLexicons().getFirst();
+            assertThat(entry.getId()).isEqualTo(9L);
+            assertThat(entry.getTermDtls()).hasSize(1);
+            assertThat(entry.getTermDtls().getFirst().getTermId()).isEqualTo("spam-1::1");
+            assertThat(entry.getTermDtls().getFirst().getMatchedText())
+                    .contains("hit_details_hs").contains("\"spam\"").contains("\"start\":0");
+        }
+
+        @Test
+        @DisplayName("the same message's lexicon-hit-summary row carries the NoiseReduction match too, " +
+                "so all three tables agree")
+        void noiseReductionHitIsInSummaryRowToo() {
+            LexiconHitSummaryRow summary = OutputRowBuilder.buildSummaryRow(
+                    "msg-102", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, shortCircuitedEvaluation(), "scan-engine", NOW);
+
+            assertThat(summary.getEvaluatedLexicons()).hasSize(1);
+            var entry = summary.getEvaluatedLexicons().getFirst();
+            assertThat(entry.getId()).isEqualTo(9L);
+            assertThat(entry.getRegexHitCount()).isEqualTo(1L);
+            assertThat(entry.getTermDtls().getFirst().getTermId()).isEqualTo("spam-1::1");
+            assertThat(entry.getTermDtls().getFirst().getRegexMatchHitCount()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("every matching member of a hit multi-member NoiseReduction group is written, under its one id")
+        void multiMemberNoiseGroupWritesAllMemberMatches() {
+            List<FeatureDecisionRow> rows = List.of(
+                    noiseRow(9L, "spam-1", "OR"), noiseRow(9L, "spam-2", "OR"),
+                    row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1)));
+            Map<String, List<TermMatchResult>> canned = Map.of(
+                    "spam-1", List.of(new TermMatchResult("spam-1::1", "spam",
+                            List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam"))))),
+                    "spam-2", List.of(new TermMatchResult("spam-2::3", "junk",
+                            List.of(AreaMatch.subject(new MatchSpan(2, 6, "junk"))))));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-102",
+                    FeatureGroupingService.groupAndOrder(rows), r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-102", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons()).hasSize(1);
+            assertThat(row.getEvaluatedLexicons().getFirst().getTermDtls())
+                    .extracting(LexiconHitDetailRow.EvaluatedLexicon.TermDtl::getTermId)
+                    .containsExactlyInAnyOrder("spam-1::1", "spam-2::3");
+        }
+
+        @Test
+        @DisplayName("a NoiseReduction group that is NOT a hit (AND group, only one member matched) is not " +
+                "written — only the lexicon hit that followed is")
+        void nonHitNoiseGroupIsNotWritten() {
+            List<FeatureDecisionRow> rows = List.of(
+                    noiseRow(9L, "spam-1", "AND"), noiseRow(9L, "spam-2", "AND"),
+                    row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1)));
+            Map<String, List<TermMatchResult>> canned = Map.of(
+                    "spam-1", List.of(new TermMatchResult("spam-1::1", "spam",
+                            List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam"))))), // spam-2 has none: AND fails
+                    "lex-1", List.of(new TermMatchResult("lex-1::1", "bomb",
+                            List.of(AreaMatch.messageBody(new MatchSpan(10, 14, "bomb"))))));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-102",
+                    FeatureGroupingService.groupAndOrder(rows), r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+            assertThat(evaluation.isShortCircuited()).isFalse();
+
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-102", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons()).hasSize(1);
+            assertThat(row.getEvaluatedLexicons().getFirst().getId()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("still returns null — no row — when nothing hit at all")
+        void returnsNullWhenNothingHit() {
+            List<FeatureDecisionRow> rows = List.of(
+                    noiseRow(9L, "spam-1", null), row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1)));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-103",
+                    FeatureGroupingService.groupAndOrder(rows), r -> List.of());
+
+            assertThat(OutputRowBuilder.buildDetailRow(
+                    "msg-103", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW)).isNull();
         }
     }
 

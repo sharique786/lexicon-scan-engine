@@ -15,10 +15,11 @@ import java.util.Objects;
  * table. Which table a given row is destined for is a WRITE-TIME decision
  * (see {@code OutputTableWriter}), not encoded in this class itself.
  *
- * <p>Unlike {@link LexiconHitSummaryRow}, only Lexicon-category (post
- * disclaimer-suppression) matches are represented here — see
- * {@code OutputRowBuilder} — since this table exists specifically to carry
- * {@link EvaluatedLexicon.TermDtl#getMatchedText} detail for genuine hits, not
+ * <p>Unlike {@link LexiconHitSummaryRow}, only genuine hits are represented
+ * here — Lexicon-category matches (post disclaimer-suppression) and the
+ * matches of a NoiseReduction group that was a hit (see
+ * {@code OutputRowBuilder}) — since this table exists specifically to carry
+ * {@link EvaluatedLexicon.TermDtl#getMatchedText} detail for those, not
  * a broad per-group summary.
  *
  * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
@@ -48,7 +49,8 @@ public class LexiconHitDetailRow implements Serializable {
      * @param processId             the process run this row belongs to
      * @param pipelineExecId        the pipeline execution this row belongs to
      * @param evaluatedLexicons     one entry per Lexicon-category group that had at least
-     *                              one surviving (post-suppression) match
+     *                              one surviving (post-suppression) match, plus one for a
+     *                              NoiseReduction group that was a hit
      * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for the
      *                              dataset this message came from — see {@code ScanMessage} class Javadoc
      * @param createdBy             the writing job's identity

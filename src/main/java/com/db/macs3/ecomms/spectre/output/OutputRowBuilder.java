@@ -108,14 +108,19 @@ public final class OutputRowBuilder {
 
     /**
      * Builds the {@code lexicon-hit-restricted}/{@code -unrestricted} row
-     * for one message, using the disclaimer-SUPPRESSED match set (see
-     * {@link MessageEvaluationResult finalLexiconMatchesByFeatureId()}).
+     * for one message from two sources: the disclaimer-SUPPRESSED Lexicon
+     * match set (see {@link MessageEvaluationResult finalLexiconMatchesByFeatureId()}),
+     * plus the matches of any NoiseReduction group that was a hit. The latter is
+     * necessarily the message's LAST evaluated group — a NoiseReduction hit
+     * short-circuits the decision tree, so no Disclaimer or Lexicon group ran and
+     * there is no suppression to apply. A NoiseReduction group that was evaluated
+     * but not a hit (including an AND group with only some members matching) is
+     * not reported here.
      *
-     * @return null when there is nothing to report — the message was
-     * short-circuited by noise reduction, or every Lexicon-category
-     * group had zero surviving matches after suppression. This table
-     * carries genuine hit detail, not a broad per-message summary the
-     * way {@code lexicon-hit-summary} is, so a message with nothing to
+     * @return null when there is nothing to report — no NoiseReduction group was
+     * a hit, and every Lexicon-category group had zero surviving matches after
+     * suppression. This table carries genuine hit detail, not a broad per-message
+     * summary the way {@code lexicon-hit-summary} is, so a message with nothing to
      * report simply has no row here — the caller should skip writing
      * when this returns null, not write a row with an empty
      * {@code evaluated_lexicons} array.
@@ -124,12 +129,23 @@ public final class OutputRowBuilder {
                                                      LocalDate datasetPartitionValue,
                                                      MessageEvaluationResult evaluation,
                                                      String createdBy, Instant createdTs) {
-        if (evaluation.getFinalLexiconMatchesByFeatureId().isEmpty()) {
+        Map<Long, List<TermMatchResult>> matchesByFeatureId = new LinkedHashMap<>();
+        for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
+            if (groupResult.getGroup().isNoiseReduction() && groupResult.isHit()) {
+                List<TermMatchResult> noiseMatches = new ArrayList<>();
+                groupResult.getMemberMatches().values().forEach(noiseMatches::addAll);
+                if (!noiseMatches.isEmpty()) {
+                    matchesByFeatureId.put(groupResult.getGroup().getFeatureId(), noiseMatches);
+                }
+            }
+        }
+        matchesByFeatureId.putAll(evaluation.getFinalLexiconMatchesByFeatureId());
+        if (matchesByFeatureId.isEmpty()) {
             return null;
         }
 
         List<LexiconHitDetailRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
-        for (Map.Entry<Long, List<TermMatchResult>> entry : evaluation.getFinalLexiconMatchesByFeatureId().entrySet()) {
+        for (Map.Entry<Long, List<TermMatchResult>> entry : matchesByFeatureId.entrySet()) {
             List<LexiconHitDetailRow.EvaluatedLexicon.TermDtl> termDtls = new ArrayList<>();
             for (TermMatchResult termMatch : entry.getValue()) {
                 String matchedTextJson = buildMatchedTextJson(messageId, termMatch.getMatches());
