@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,6 +100,38 @@ class PipelineRecordAuditIntegrationTest {
 
         assertThat(recordAuditRows.count()).isEqualTo(3);
         assertThat(deduped.count()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("sent_date/run_date/source_name survive the Kryo Dataset round-trip and land in the right columns")
+    void messageAttributesReachTheAuditColumns() {
+        Instant sent = Instant.parse("2026-09-08T10:15:30Z");
+        MessageProcessingResult success = MessageProcessingResult.success("msg-1", true, "2026-09-08", null, null, null);
+        success.setSourceName("Bloomberg Chat");
+        success.setSentDate(sent);
+        success.setRunDate("2026-09-08");
+        MessageProcessingResult failure = MessageProcessingResult.failure("msg-2", false, "2026-09-08", "boom");
+        failure.setSourceName("Exchange");
+        failure.setSentDate(sent);
+        failure.setRunDate("2026-09-08");
+        MessageProcessingResult bare = MessageProcessingResult.success("msg-3", true, "2026-09-08", null, null, null);
+
+        List<Row> rows = dedupOnNaturalKey(buildRecordAuditRows(List.of(success, failure, bare)))
+                .select(BqColumns.PipelineRecordAudit.RECORD_ID, BqColumns.PipelineRecordAudit.SOURCE_NAME,
+                        BqColumns.PipelineRecordAudit.SENT_DATE, BqColumns.PipelineRecordAudit.RUN_DATE)
+                .collectAsList();
+
+        Map<String, Row> byRecordId = new LinkedHashMap<>();
+        rows.forEach(row -> byRecordId.put(row.getString(0), row));
+
+        assertThat(byRecordId.get("msg-1").getString(1)).isEqualTo("Bloomberg Chat");
+        assertThat(byRecordId.get("msg-1").getTimestamp(2).toInstant()).isEqualTo(sent);
+        assertThat(byRecordId.get("msg-1").getString(3)).isEqualTo("2026-09-08");
+        assertThat(byRecordId.get("msg-2").getString(1)).isEqualTo("Exchange");
+        assertThat(byRecordId.get("msg-2").getTimestamp(2).toInstant()).isEqualTo(sent);
+        assertThat(byRecordId.get("msg-3").isNullAt(1)).isTrue();
+        assertThat(byRecordId.get("msg-3").isNullAt(2)).isTrue();
+        assertThat(byRecordId.get("msg-3").isNullAt(3)).isTrue();
     }
 
     @Test

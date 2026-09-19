@@ -2,6 +2,7 @@ package com.db.macs3.ecomms.spectre.avro;
 
 import com.db.macs3.ecomms.spectre.model.message.MessageAttachment;
 import com.db.macs3.ecomms.spectre.model.message.MessageContent;
+import com.db.macs3.ecomms.spectre.model.message.MessageMetadata;
 import com.db.macs3.ecomms.spectre.model.message.MessageProcessing;
 import com.db.macs3.ecomms.spectre.model.message.MessageSource;
 import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
@@ -16,7 +17,7 @@ import java.util.List;
 /**
  * Converts one Spark {@link Row} of AVRO message data into a
  * {@link ScanMessage} — the one place that knows the AVRO schema's nested
- * shape ({@code source.*}, {@code message.content.*}, the
+ * shape ({@code source.*}, {@code message.metadata.*}, {@code message.content.*}, the
  * {@code attachments} array's {@code metadata}/{@code content} sub-structs,
  * {@code processing.*}), so every other class works with {@link ScanMessage}
  * directly.
@@ -37,11 +38,13 @@ public final class MessageRowConverter implements Serializable {
     public static ScanMessage fromRow(Row row, String datasetPartitionValue, boolean restricted) {
         String messageId = RowReaders.getStringOrNull(row, AvroConstants.FIELD_MESSAGE_ID);
         MessageSource source = readSource(row);
+        MessageMetadata metadata = readMetadata(row);
         MessageContent content = readContent(row);
         List<MessageAttachment> attachments = readAttachments(row);
         MessageProcessing processing = readProcessing(row);
 
-        return new ScanMessage(messageId, source, content, attachments, processing, datasetPartitionValue, restricted);
+        return new ScanMessage(
+                messageId, source, metadata, content, attachments, processing, datasetPartitionValue, restricted);
     }
 
     private static MessageSource readSource(Row row) {
@@ -54,6 +57,18 @@ public final class MessageRowConverter implements Serializable {
                 RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_SOURCE_NAME),
                 RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_SRC_SYS_NAME),
                 RowReaders.getStringOrNull(sourceRow, AvroConstants.FIELD_SRC_SYS_CONV_ID));
+    }
+
+    private static MessageMetadata readMetadata(Row row) {
+        if (!RowReaders.hasNonNullField(row, AvroConstants.FIELD_MESSAGE)) {
+            return null;
+        }
+        Row messageRow = row.getAs(AvroConstants.FIELD_MESSAGE);
+        if (!RowReaders.hasNonNullField(messageRow, AvroConstants.FIELD_METADATA)) {
+            return null;
+        }
+        Row metadataRow = messageRow.getAs(AvroConstants.FIELD_METADATA);
+        return new MessageMetadata(RowReaders.getUtcInstantOrNull(metadataRow, AvroConstants.FIELD_START_TIME_UTC));
     }
 
     private static MessageContent readContent(Row row) {

@@ -8,6 +8,7 @@ import org.apache.spark.sql.Row;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -27,6 +28,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PipelineRecordAuditRowMapperTest {
 
     private static final LocalDate EXECUTION_DATE = LocalDate.parse("2026-09-08");
+
+    // Positions in OutputTableWriter.toRow(PipelineRecordAuditRow) — same order as PIPELINE_RECORD_AUDIT_SCHEMA.
+    private static final int SENT_DATE_INDEX = 28;
+    private static final int RUN_DATE_INDEX = 29;
+    private static final int SOURCE_NAME_INDEX = 30;
 
     private static final String SAMPLE_JSON = "{\"dataset_details\":[{\"dataset_id\":\"ds1\","
             + "\"dataset_partition_value\":\"p1\"}],\"feature_partition_value\":\"2026-08-16\","
@@ -122,6 +128,40 @@ class PipelineRecordAuditRowMapperTest {
         assertThat(row.getString(5)).isEqualTo("lexicon-scan-engine");
         assertThat(row.getString(25)).isEqualTo("scan-engine");
         assertThat(row.getDate(27).toLocalDate()).isEqualTo(EXECUTION_DATE);
+    }
+
+    @Test
+    @DisplayName("sent_date/run_date/source_name are filled from the result, for success AND failure")
+    void messageAttributesPopulated() {
+        Instant sent = Instant.parse("2026-09-08T10:15:30Z");
+        MessageProcessingResult success = MessageProcessingResult.success("msg-1", true, "2026-09-08", null, null, null);
+        success.setSentDate(sent);
+        success.setRunDate("2026-09-08");
+        success.setSourceName("Bloomberg Chat");
+        MessageProcessingResult failure = MessageProcessingResult.failure("msg-2", false, "2026-09-08", "boom");
+        failure.setSentDate(sent);
+        failure.setRunDate("2026-09-08");
+        failure.setSourceName("Exchange");
+
+        List<Row> rows = mapAll(List.of(success, failure));
+
+        for (int i = 0; i < rows.size(); i++) {
+            Row row = rows.get(i);
+            assertThat(row.getTimestamp(SENT_DATE_INDEX).toInstant()).isEqualTo(sent);
+            assertThat(row.getString(RUN_DATE_INDEX)).isEqualTo("2026-09-08");
+            assertThat(row.getString(SOURCE_NAME_INDEX)).isEqualTo(i == 0 ? "Bloomberg Chat" : "Exchange");
+        }
+    }
+
+    @Test
+    @DisplayName("sent_date/run_date/source_name stay null when the result carries none — the columns are nullable")
+    void messageAttributesNullWhenAbsent() {
+        Row row = mapAll(List.of(MessageProcessingResult.success("msg-1", true, "2026-09-08", null, null, null)))
+                .getFirst();
+
+        assertThat(row.get(SENT_DATE_INDEX)).isNull();
+        assertThat(row.get(RUN_DATE_INDEX)).isNull();
+        assertThat(row.get(SOURCE_NAME_INDEX)).isNull();
     }
 
     @Test

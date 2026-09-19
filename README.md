@@ -473,7 +473,7 @@ every entry name actually found in the zip — never a silent partial load.
 | `lexicon-hit-unrestricted` | One row per message (unrestricted source only) | Identical shape to `-restricted`, split purely by source GCS subfolder |
 | `feature-hit-summary` | One row per message | Every evaluated group's resolved hit status, plus each multi-member group's own sub-feature breakdown |
 | `pipeline_stage_audit` | One row per job start + one per completion | `IN_PROGRESS` → `SUCCESS`/`FAILED` |
-| `pipeline_record_audit` | One row per **failed** message | Per-message processing failures — the whole job does not fail on one message's error |
+| `pipeline_record_audit` | One row per message (`SUCCESS` or `FAILED`) | A per-message failure is recorded here and does not fail the job. Three columns come from the AVRO message, on success and failure rows alike: `source_name` (`source.source_name`, STRING), `sent_date` (`message.metadata.start_time_utc`, TIMESTAMP — ISO-8601, read as UTC when it carries no offset; NULL if absent or unparseable), `run_date` (`processing.run_date` — an AVRO `date` — written to the STRING column as ISO-8601 `yyyy-MM-dd`) |
 
 `lexicon-hit-restricted`'s rows are also mirrored to a single CSV file at
 `gs://<hdb-gcs-bucket>/<policy_engine_id>/<process_id>/restricted/<pipeline_exec_id>.csv`

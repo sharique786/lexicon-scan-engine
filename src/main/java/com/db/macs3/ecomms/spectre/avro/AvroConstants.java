@@ -25,6 +25,7 @@ final class AvroConstants {
     static final String FIELD_CLEAN_TEXT = "clean_text";
     static final String FIELD_ATTACHMENTS = "attachments";
     static final String FIELD_METADATA = "metadata";
+    static final String FIELD_START_TIME_UTC = "start_time_utc";
     static final String FIELD_ATTACHMENT_ID = "attachment_id";
     static final String FIELD_PARENT_ATTACHMENT_ID = "parent_attachment_id";
     static final String FIELD_FILE_NAME = "file_name";

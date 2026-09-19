@@ -176,15 +176,19 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         String datasetPartitionValue = row.getAs(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT);
         ScanMessage message = MessageRowConverter.fromRow(row, datasetPartitionValue, restricted);
 
+        MessageProcessingResult result;
         try {
-            return buildSuccessResult(row, orchestrator, message, restricted, datasetPartitionValue);
+            result = buildSuccessResult(row, orchestrator, message, restricted, datasetPartitionValue);
         } catch (Exception e) {
             // A single message's processing failure must NOT fail the whole job — recorded
             // here for pipeline_record_audit instead (see ScanEngineJobRunner.writeOutputs,
-            // which writes every isError() result there).
+            // which writes every result there, success and failure alike).
             log.warn("Processing failed for message_id={}: {}", message.getMessageId(), e.getMessage(), e);
-            return MessageProcessingResult.failure(message.getMessageId(), restricted, datasetPartitionValue, e.toString());
+            result = MessageProcessingResult.failure(message.getMessageId(), restricted, datasetPartitionValue, e.toString());
         }
+        // source_name/sent_date/run_date come from the AVRO message, and pipeline_record_audit wants
+        // them for a failed record just as much as for a successful one.
+        return result.withMessageAttributes(message);
     }
 
     private MessageProcessingResult buildSuccessResult(Row row, FeatureScanOrchestrator orchestrator,

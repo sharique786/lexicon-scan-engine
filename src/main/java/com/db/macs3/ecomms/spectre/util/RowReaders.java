@@ -1,9 +1,17 @@
 package com.db.macs3.ecomms.spectre.util;
 
 import org.apache.spark.sql.Row;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 
 /**
  * Shared helpers for reading typed, possibly-null values out of a Spark
@@ -19,6 +27,8 @@ import java.time.LocalDate;
  * builds on it, so the same tolerance applies uniformly.
  */
 public final class RowReaders {
+
+    private static final Logger log = LoggerFactory.getLogger(RowReaders.class);
 
     private RowReaders() {
     }
@@ -72,5 +82,60 @@ public final class RowReaders {
         }
         throw new IllegalStateException(
                 "Unsupported type for date field '" + fieldName + "': " + value.getClass().getName());
+    }
+
+    /**
+     * Reads a UTC timestamp field as an {@link Instant}, tolerating a plain AVRO {@code string}
+     * ({@link #parseUtcInstantOrNull}) as well as a {@code timestamp-*} logical type, which Spark
+     * hands back as {@link Timestamp} (the default) or {@link Instant}.
+     *
+     * @return null when the field is absent/null, or is a string that cannot be parsed — an
+     * unreadable timestamp must never fail the whole message (or, since conversion runs outside
+     * the per-message try/catch, the whole partition), so it is logged at DEBUG only, to avoid one
+     * line per message if an entire feed uses an unexpected format
+     */
+    public static Instant getUtcInstantOrNull(Row row, String fieldName) {
+        if (!hasNonNullField(row, fieldName)) {
+            return null;
+        }
+        Object value = row.getAs(fieldName);
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        if (value instanceof String text) {
+            Instant parsed = parseUtcInstantOrNull(text);
+            if (parsed == null) {
+                log.debug("Field '{}' has an unparseable timestamp value '{}' — treating as null", fieldName, text);
+            }
+            return parsed;
+        }
+        throw new IllegalStateException(
+                "Unsupported type for timestamp field '" + fieldName + "': " + value.getClass().getName());
+    }
+
+    /**
+     * Parses ISO-8601 text — with an offset/{@code Z} ({@code 2026-09-08T10:15:30Z},
+     * {@code 2026-09-08T10:15:30+02:00}) or without one ({@code 2026-09-08T10:15:30.123}, read as
+     * UTC since the source field is by definition UTC) — with a space accepted in place of the
+     * {@code T}. @return null if blank or in any other format.
+     */
+    static Instant parseUtcInstantOrNull(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        String normalised = text.trim().replace(' ', 'T');
+        try {
+            return OffsetDateTime.parse(normalised).toInstant();
+        } catch (DateTimeParseException ignored) {
+            // no offset — fall through to the offset-less form
+        }
+        try {
+            return LocalDateTime.parse(normalised).toInstant(ZoneOffset.UTC);
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 }

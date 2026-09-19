@@ -309,7 +309,8 @@ public class ScanEngineJobRunner {
 
         // Every record — success and failure alike — gets a row here, each with its own SUCCESS/FAILED
         // status. Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/
-        // errorMessage/executionDate/createdBy/createdTs are populated here — every other field (rule
+        // errorMessage/executionDate/createdBy/createdTs, plus sentDate/runDate/sourceName copied from
+        // the AVRO message, are populated here — every other field (rule
         // evaluation details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to
         // stages this job doesn't run and has no source data for — see PipelineRecordAuditRowMapper
         // class Javadoc.

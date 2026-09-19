@@ -7,9 +7,9 @@ import java.util.Objects;
 
 /**
  * Flattened, Spark-serialisable representation of one AVRO message record.
- * Only the fields this engine actually reads are carried;
- * {@code message.metadata} is intentionally NOT modelled here since nothing
- * in this engine's processing needs it.
+ * Only the fields this engine actually reads are carried; of
+ * {@code message.metadata}, only {@code start_time_utc} is modelled (see
+ * {@link MessageMetadata}), since {@code pipeline_record_audit.sent_date} needs it.
  *
  * <h2>Which text field is scanned</h2>
  * <p>{@link MessageContent} carries both {@code rawText} and {@code cleanText}.
@@ -28,6 +28,7 @@ public class ScanMessage implements Serializable {
 
     private String messageId;
     private MessageSource source;
+    private MessageMetadata metadata;
     private MessageContent content;
     private List<MessageAttachment> attachments;
     private MessageProcessing processing;
@@ -35,8 +36,19 @@ public class ScanMessage implements Serializable {
     private boolean restricted;
 
     /**
+     * Same as the full constructor with no {@code message.metadata} — for callers that never
+     * need it.
+     */
+    public ScanMessage(String messageId, MessageSource source, MessageContent content,
+                       List<MessageAttachment> attachments, MessageProcessing processing,
+                       String datasetPartitionValue, boolean restricted) {
+        this(messageId, source, null, content, attachments, processing, datasetPartitionValue, restricted);
+    }
+
+    /**
      * @param messageId             joins to {@code FeatureDecisionRow.getMessageId}
      * @param source                channel/source-system identification
+     * @param metadata              {@code message.metadata} — currently just {@code start_time_utc}
      * @param content               the message body — header, subject, raw/clean text
      * @param attachments           zero or more attached files' extracted text
      * @param processing            {@code run_date} (AVRO {@code date} logical type)/
@@ -55,11 +67,12 @@ public class ScanMessage implements Serializable {
      *                              (lexicon-hit-restricted vs -unrestricted) this message's
      *                              hits are written to
      */
-    public ScanMessage(String messageId, MessageSource source, MessageContent content,
+    public ScanMessage(String messageId, MessageSource source, MessageMetadata metadata, MessageContent content,
                        List<MessageAttachment> attachments, MessageProcessing processing,
                        String datasetPartitionValue, boolean restricted) {
         this.messageId = messageId;
         this.source = source;
+        this.metadata = metadata;
         this.content = content;
         this.attachments = attachments;
         this.processing = processing;
@@ -81,6 +94,14 @@ public class ScanMessage implements Serializable {
 
     public void setSource(MessageSource source) {
         this.source = source;
+    }
+
+    public MessageMetadata getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(MessageMetadata metadata) {
+        this.metadata = metadata;
     }
 
     public MessageContent getContent() {
@@ -142,6 +163,7 @@ public class ScanMessage implements Serializable {
         return restricted == other.restricted
                 && Objects.equals(messageId, other.messageId)
                 && Objects.equals(source, other.source)
+                && Objects.equals(metadata, other.metadata)
                 && Objects.equals(content, other.content)
                 && Objects.equals(attachments, other.attachments)
                 && Objects.equals(processing, other.processing)
@@ -150,12 +172,14 @@ public class ScanMessage implements Serializable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(messageId, source, content, attachments, processing, datasetPartitionValue, restricted);
+        return Objects.hash(messageId, source, metadata, content, attachments, processing, datasetPartitionValue,
+                restricted);
     }
 
     @Override
     public String toString() {
-        return "ScanMessage[messageId=" + messageId + ", source=" + source + ", content=" + content
+        return "ScanMessage[messageId=" + messageId + ", source=" + source + ", metadata=" + metadata
+                + ", content=" + content
                 + ", attachments=" + attachments + ", processing=" + processing
                 + ", datasetPartitionValue=" + datasetPartitionValue + ", restricted=" + restricted + "]";
     }

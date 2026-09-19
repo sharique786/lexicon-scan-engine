@@ -24,7 +24,9 @@ import java.util.List;
  * {@code Dataset}, rather than via {@code JavaRDD.map}.
  *
  * <p>Only processId/triggerType/pipelineExecId/recordId/stageName/status/
- * returnCode/errorMessage/executionDate/createdBy/createdTs are populated —
+ * returnCode/errorMessage/executionDate/createdBy/createdTs, plus
+ * sentDate/runDate/sourceName (copied from the AVRO message — see
+ * {@link MessageProcessingResult#withMessageAttributes}), are populated —
  * every other field (rule evaluation details, token counts, Gemini request
  * timing, rerun/eval-test linkage) belongs to stages this job doesn't run
  * and has no source data for. The Integer count/token fields default to 0
@@ -71,7 +73,8 @@ public final class PipelineRecordAuditRowMapper implements MapPartitionsFunction
                     isError ? BqColumns.RecordStatus.FAILED : BqColumns.RecordStatus.SUCCESS,
                     isError ? 1 : 0, result.getErrorMessage(), null, 0, null, 0,
                     0, 0, 0, 0, 0, 0,
-                    Instant.now(), createdBy, null, executionDate, null, null, null, null, null, null)));
+                    Instant.now(), createdBy, null, executionDate,
+                    result.getSentDate(), result.getRunDate(), result.getSourceName(), null, null, null)));
         }
         return rows.iterator();
     }
