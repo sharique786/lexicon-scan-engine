@@ -71,6 +71,57 @@ class OutputTableWriterTest {
     }
 
     @Nested
+    @DisplayName("lexicon-hit-summary.evaluated_lexicons.term_dtls.term_description (new NULLABLE STRING column)")
+    class TermDescriptionColumn {
+
+        @Test
+        @DisplayName("schema declares term_description as a NULLABLE StringType field of term_dtls")
+        void schemaHasTermDescriptionField() {
+            DataType evaluatedLexiconsField = fieldType(
+                    OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA, BqColumns.LexiconHitSummary.EVALUATED_LEXICONS);
+            StructType termDtlStruct = elementStruct(
+                    fieldType(elementStruct(evaluatedLexiconsField), BqColumns.LexiconHitSummary.EvaluatedLexicon.TERM_DTLS));
+
+            assertThat(fieldType(termDtlStruct, BqColumns.LexiconHitSummary.TermDtl.TERM_DESCRIPTION))
+                    .isEqualTo(DataTypes.StringType);
+            StructField field = termDtlStruct.fields()[
+                    termDtlStruct.fieldIndex(BqColumns.LexiconHitSummary.TermDtl.TERM_DESCRIPTION)];
+            assertThat(field.nullable()).isTrue();
+        }
+
+        @Test
+        @DisplayName("toRow(...) carries the term's original description into the term_dtls cell")
+        void toRowCarriesTermDescription() {
+            LexiconHitSummaryRow.EvaluatedLexicon lexicon = new LexiconHitSummaryRow.EvaluatedLexicon(
+                    7L, "lex_name", 5L, 1L,
+                    List.of(new LexiconHitSummaryRow.TermDtl("lex_name::1", "pattern", 1L,
+                            "(manipulate) NEAR{5} ((price) OR (spread) OR (stock))")));
+            LexiconHitSummaryRow summaryRow = new LexiconHitSummaryRow(
+                    "msg-1", "proc-1", "pipe-1", List.of(lexicon), SOME_DATE, "scan-engine", NOW);
+
+            Row row = OutputTableWriter.toRow(summaryRow);
+            Row lexiconRow = row.<scala.collection.Seq<Row>>getAs(3).apply(0);
+            Row termDtlRow = lexiconRow.<scala.collection.Seq<Row>>getAs(4).apply(0);
+            assertThat(termDtlRow.<String>getAs(3)).isEqualTo("(manipulate) NEAR{5} ((price) OR (spread) OR (stock))");
+        }
+
+        @Test
+        @DisplayName("toRow(...) carries a null term_description through as null, not a blank string")
+        void toRowCarriesNullTermDescriptionAsNull() {
+            LexiconHitSummaryRow.EvaluatedLexicon lexicon = new LexiconHitSummaryRow.EvaluatedLexicon(
+                    7L, "lex_name", 5L, 1L,
+                    List.of(new LexiconHitSummaryRow.TermDtl("lex_name::1", "pattern", 1L, null)));
+            LexiconHitSummaryRow summaryRow = new LexiconHitSummaryRow(
+                    "msg-1", "proc-1", "pipe-1", List.of(lexicon), SOME_DATE, "scan-engine", NOW);
+
+            Row row = OutputTableWriter.toRow(summaryRow);
+            Row lexiconRow = row.<scala.collection.Seq<Row>>getAs(3).apply(0);
+            Row termDtlRow = lexiconRow.<scala.collection.Seq<Row>>getAs(4).apply(0);
+            assertThat(termDtlRow.isNullAt(3)).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("toRow(...) carries a genuine Long into the id cell, not a String")
     class ToRowIdValue {
 
@@ -79,7 +130,7 @@ class OutputTableWriterTest {
         void summaryRowIdIsLong() {
             LexiconHitSummaryRow.EvaluatedLexicon lexicon = new LexiconHitSummaryRow.EvaluatedLexicon(
                     7L, "lex_name", 5L, 1L,
-                    List.of(new LexiconHitSummaryRow.TermDtl("lex_name::1", "pattern", 1L)));
+                    List.of(new LexiconHitSummaryRow.TermDtl("lex_name::1", "pattern", 1L, "the lexicon term text")));
             LexiconHitSummaryRow summaryRow = new LexiconHitSummaryRow(
                     "msg-1", "proc-1", "pipe-1", List.of(lexicon), SOME_DATE, "scan-engine", NOW);
 

@@ -17,6 +17,7 @@ public class TermMatchResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private String termId;
+    private String termDescription;
     private String termRegexPattern;
     private List<AreaMatch> matches;
 
@@ -30,11 +31,29 @@ public class TermMatchResult implements Serializable {
      *                         feature's result, not represented by an empty-matches instance)
      */
     public TermMatchResult(String termId, String termRegexPattern, List<AreaMatch> matches) {
+        this(termId, termRegexPattern, null, matches);
+    }
+
+    /**
+     * @param termId           {@code <body.lexiconName>::<index>} — see
+     *                         {@code TermIdBuilder}
+     * @param termRegexPattern the compiled Hyperscan pattern text for this term,
+     *                         for {@code lexicon-hit-summary.term_dtls.term_regex_pattern}
+     * @param termDescription  the Compile Service's own {@code termDescription} — the original,
+     *                         analyst-authored lexicon term text, verbatim, for
+     *                         {@code lexicon-hit-summary.term_dtls.term_description}. May be null
+     *                         (e.g. a caller with no {@code TermExpressionMetadata} to source it from).
+     * @param matches          every occurrence found, tagged by area — non-empty
+     *                         (a term with zero matches is simply absent from a
+     *                         feature's result, not represented by an empty-matches instance)
+     */
+    public TermMatchResult(String termId, String termRegexPattern, String termDescription, List<AreaMatch> matches) {
         if (matches == null || matches.isEmpty()) {
             throw new IllegalArgumentException("TermMatchResult requires at least one match for termId=" + termId);
         }
         this.termId = termId;
         this.termRegexPattern = termRegexPattern;
+        this.termDescription = termDescription;
         this.matches = matches;
     }
 
@@ -44,6 +63,14 @@ public class TermMatchResult implements Serializable {
 
     public void setTermId(String termId) {
         this.termId = termId;
+    }
+
+    public String getTermDescription() {
+        return termDescription;
+    }
+
+    public void setTermDescription(String termDescription) {
+        this.termDescription = termDescription;
     }
 
     public String getTermRegexPattern() {
@@ -73,17 +100,18 @@ public class TermMatchResult implements Serializable {
         TermMatchResult other = (TermMatchResult) obj;
         return Objects.equals(termId, other.termId)
                 && Objects.equals(termRegexPattern, other.termRegexPattern)
+                && Objects.equals(termDescription, other.termDescription)
                 && Objects.equals(matches, other.matches);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(termId, termRegexPattern, matches);
+        return Objects.hash(termId, termRegexPattern, termDescription, matches);
     }
 
     @Override
     public String toString() {
         return "TermMatchResult[termId=" + termId + ", termRegexPattern=" + termRegexPattern
-                + ", matches=" + matches + "]";
+                + ", termDescription=" + termDescription + ", matches=" + matches + "]";
     }
 }

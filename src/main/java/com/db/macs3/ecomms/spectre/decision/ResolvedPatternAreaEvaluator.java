@@ -132,24 +132,52 @@ final class ResolvedPatternAreaEvaluator {
 
     private static List<MatchSpan> matchesChain(ResolvedPatternTree.Chain chain, String areaOriginalText) {
         List<int[]> words = wordSpans(areaOriginalText);
-        List<List<LeafOccurrence>> occurrencesPerLeaf = new ArrayList<>(chain.getLeaves().size());
-        for (Pattern leaf : chain.getLeaves()) {
-            List<LeafOccurrence> occurrences = findOccurrences(leaf, areaOriginalText, words);
+        List<ResolvedPatternTree> elements = chain.getLeaves();
+        List<List<LeafOccurrence>> occurrencesPerElement = new ArrayList<>(elements.size());
+        for (ResolvedPatternTree element : elements) {
+            List<LeafOccurrence> occurrences = occurrencesFor(element, areaOriginalText, words);
             if (occurrences.isEmpty()) {
-                return List.of(); // this leaf never appears at all — the whole chain cannot match here
+                return List.of(); // this element never occurs at all — the whole chain cannot match here
             }
-            occurrencesPerLeaf.add(occurrences);
+            occurrencesPerElement.add(occurrences);
         }
 
         Set<MatchSpan> collected = new LinkedHashSet<>();
         int[] visits = {0};
-        backtrack(occurrencesPerLeaf, chain.getOperators(), chain.getDistances(), 0, null,
-                new LeafOccurrence[occurrencesPerLeaf.size()], areaOriginalText, collected, visits);
+        backtrack(occurrencesPerElement, chain.getOperators(), chain.getDistances(), 0, null,
+                new LeafOccurrence[occurrencesPerElement.size()], areaOriginalText, collected, visits);
         if (visits[0] > MAX_BACKTRACK_VISITS) {
             log.debug("resolved-pattern chain evaluation truncated after {} backtracking visits — "
                     + "reporting {} occurrence(s) found so far", visits[0], collected.size());
         }
         return new ArrayList<>(collected);
+    }
+
+    /**
+     * Every occurrence of one chain element — a flat regex {@link ResolvedPatternTree.Leaf} via
+     * {@link #findOccurrences}, or, for a nested {@link ResolvedPatternTree.Chain} element (see that
+     * class's Javadoc "Nested chain elements"), every satisfying combination of the INNER group,
+     * recursively resolved against this same area text and each converted to a {@link LeafOccurrence}
+     * via its own {@link MatchSpan}'s word indices. Either way the outer chain's backtracking measures
+     * its own gap the same way — from the near boundary of one occurrence to the near boundary of the
+     * next — regardless of whether that occurrence came from a single leaf or a whole inner group.
+     */
+    private static List<LeafOccurrence> occurrencesFor(ResolvedPatternTree element, String areaOriginalText,
+                                                        List<int[]> words) {
+        if (element instanceof ResolvedPatternTree.Leaf leaf) {
+            return findOccurrences(leaf.getPattern(), areaOriginalText, words);
+        }
+        List<MatchSpan> nestedSpans = findMatchingSpans(element, areaOriginalText);
+        List<LeafOccurrence> occurrences = new ArrayList<>(nestedSpans.size());
+        for (MatchSpan span : nestedSpans) {
+            int startWordIndex = wordIndexAtOrBefore(words, span.getStartCharIndex() + 1);
+            int endWordIndex = wordIndexAtOrBefore(words, span.getEndCharIndex());
+            if (startWordIndex >= 0 && endWordIndex >= 0) {
+                occurrences.add(new LeafOccurrence(
+                        span.getStartCharIndex(), span.getEndCharIndex(), startWordIndex, endWordIndex));
+            }
+        }
+        return occurrences;
     }
 
     private static void backtrack(List<List<LeafOccurrence>> occurrencesPerLeaf, List<String> operators,
@@ -186,28 +214,47 @@ final class ResolvedPatternAreaEvaluator {
      * @return true iff {@code candidate} legally continues the chain after {@code previous} under
      * {@code operator}'s direction rule and {@code maxGap} — see class Javadoc "NEAR
      * bidirectionality" for why {@code NEAR} never checks direction.
+     *
+     * <p>Gap is measured between the NEAR boundary of whichever occurrence comes first in the text
+     * and the NEAR boundary of whichever comes second — i.e. the earlier occurrence's END word index
+     * and the later occurrence's START word index — never using an occurrence's END on both sides.
+     * A prior version always compared {@code previous.endWordIndex()} against
+     * {@code candidate.endWordIndex()}: for a multi-word leaf (e.g. "mouth shut", "Off shore",
+     * "caught red handed") positioned as the later-occurring span, that leaf's OWN internal words got
+     * counted as part of the gap (an occurrence's END is {@code (word count - 1)} words to the right
+     * of its START), silently rejecting real NEAR{n}/FOLLOWEDBY{n} matches whose true word-gap was
+     * within {@code maxGap} — confirmed against a real compiled Compile Service lexicon where every
+     * multi-word-leaf proximity term failed to produce a final hit despite Hyperscan's own native
+     * COMBINATION correctly reporting all leaves present.
      */
     private static boolean canExtend(String operator, int maxGap, LeafOccurrence previous, LeafOccurrence candidate) {
-        boolean directionOk = ResolvedPatternTree.OPERATOR_NEAR.equals(operator)
-                || candidate.endWordIndex() > previous.endWordIndex();
-        int gap = Math.abs(candidate.endWordIndex() - previous.endWordIndex()) - 1;
+        boolean previousFirst = previous.endWordIndex() < candidate.startWordIndex();
+        boolean candidateFirst = candidate.endWordIndex() < previous.startWordIndex();
+        if (!previousFirst && !candidateFirst) {
+            return false; // overlapping occurrences — not a valid two-leaf gap
+        }
+        int gap = previousFirst
+                ? candidate.startWordIndex() - previous.endWordIndex() - 1
+                : previous.startWordIndex() - candidate.endWordIndex() - 1;
+        boolean directionOk = ResolvedPatternTree.OPERATOR_NEAR.equals(operator) || previousFirst;
         return directionOk && gap >= 0 && gap <= maxGap;
     }
 
     /**
-     * Every occurrence of {@code leaf} in {@code areaOriginalText}, carrying
-     * both its full character span (to synthesize an output {@link MatchSpan})
-     * and the word index its END falls in (for the same gap-counting
-     * definition {@code NEAR{n}}/{@code FOLLOWEDBY{n}} use elsewhere in this
-     * platform).
+     * Every occurrence of {@code leaf} in {@code areaOriginalText}, carrying its full character span
+     * (to synthesize an output {@link MatchSpan}) and the word indices its START and END fall in —
+     * both are needed by {@link #canExtend} to measure the gap from whichever boundary of a
+     * multi-word leaf actually faces the other occurrence, rather than always its END (see that
+     * method's Javadoc for why using END on both sides double-counts a multi-word leaf's own words).
      */
     private static List<LeafOccurrence> findOccurrences(Pattern leaf, String areaOriginalText, List<int[]> words) {
         List<LeafOccurrence> occurrences = new ArrayList<>();
         Matcher matcher = leaf.matcher(areaOriginalText);
         while (matcher.find()) {
+            int startWordIndex = wordIndexAtOrBefore(words, matcher.start() + 1);
             int endWordIndex = wordIndexAtOrBefore(words, matcher.end());
-            if (endWordIndex >= 0) {
-                occurrences.add(new LeafOccurrence(matcher.start(), matcher.end(), endWordIndex));
+            if (startWordIndex >= 0 && endWordIndex >= 0) {
+                occurrences.add(new LeafOccurrence(matcher.start(), matcher.end(), startWordIndex, endWordIndex));
             }
             if (matcher.end() == matcher.start()) {
                 break; // guard against a zero-width match looping forever
@@ -310,6 +357,6 @@ final class ResolvedPatternAreaEvaluator {
         return result;
     }
 
-    private record LeafOccurrence(int startChar, int endChar, int endWordIndex) {
+    private record LeafOccurrence(int startChar, int endChar, int startWordIndex, int endWordIndex) {
     }
 }

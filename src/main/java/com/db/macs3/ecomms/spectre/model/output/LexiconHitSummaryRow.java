@@ -32,8 +32,8 @@ import java.util.Objects;
  * since {@code DecisionTreeEvaluator} never evaluated them. A group that WAS
  * evaluated but matched nothing still appears, with
  * {@link EvaluatedLexicon#getRegexHitCount} {@code 0} and one placeholder
- * {@link TermDtl} ({@code term_id}/{@code term_regex_pattern} {@code "N/A"},
- * {@link TermDtl#getRegexMatchHitCount} {@code 0}) — see
+ * {@link TermDtl} ({@code term_id}/{@code term_regex_pattern}/{@code term_description}
+ * {@code "N/A"}, {@link TermDtl#getRegexMatchHitCount} {@code 0}) — see
  * {@code OutputRowBuilder#buildSummaryRow}.
  *
  * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
@@ -275,6 +275,7 @@ public class LexiconHitSummaryRow implements Serializable {
         private String termId;
         private String termRegexPattern;
         private Long regexMatchHitCount;
+        private String termDescription;
 
         /**
          * @param termId             {@code <feature>::<index>} — see {@code TermIdBuilder}
@@ -286,11 +287,16 @@ public class LexiconHitSummaryRow implements Serializable {
          *                           pattern matching 5 separate times across the message
          *                           body records {@code 5} here. NULLABLE per the delivered
          *                           schema.
+         * @param termDescription    the Compile Service's own {@code termDescription} — the
+         *                           original, analyst-authored lexicon term text, verbatim
+         *                           (e.g. {@code "(manipulate) NEAR{5} ((price) OR (spread))"}).
+         *                           NULLABLE per the delivered schema.
          */
-        public TermDtl(String termId, String termRegexPattern, Long regexMatchHitCount) {
+        public TermDtl(String termId, String termRegexPattern, Long regexMatchHitCount, String termDescription) {
             this.termId = termId;
             this.termRegexPattern = termRegexPattern;
             this.regexMatchHitCount = regexMatchHitCount;
+            this.termDescription = termDescription;
         }
 
         public String getTermId() {
@@ -317,6 +323,14 @@ public class LexiconHitSummaryRow implements Serializable {
             this.regexMatchHitCount = regexMatchHitCount;
         }
 
+        public String getTermDescription() {
+            return termDescription;
+        }
+
+        public void setTermDescription(String termDescription) {
+            this.termDescription = termDescription;
+        }
+
         @Override
         public boolean equals(Object obj) {
             if (this == obj) {
@@ -328,18 +342,19 @@ public class LexiconHitSummaryRow implements Serializable {
             TermDtl other = (TermDtl) obj;
             return Objects.equals(regexMatchHitCount, other.regexMatchHitCount)
                     && Objects.equals(termId, other.termId)
-                    && Objects.equals(termRegexPattern, other.termRegexPattern);
+                    && Objects.equals(termRegexPattern, other.termRegexPattern)
+                    && Objects.equals(termDescription, other.termDescription);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(termId, termRegexPattern, regexMatchHitCount);
+            return Objects.hash(termId, termRegexPattern, regexMatchHitCount, termDescription);
         }
 
         @Override
         public String toString() {
             return "TermDtl[termId=" + termId + ", termRegexPattern=" + termRegexPattern
-                    + ", regexMatchHitCount=" + regexMatchHitCount + "]";
+                    + ", regexMatchHitCount=" + regexMatchHitCount + ", termDescription=" + termDescription + "]";
         }
     }
 }

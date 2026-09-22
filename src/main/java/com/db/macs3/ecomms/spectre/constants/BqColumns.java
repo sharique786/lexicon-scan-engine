@@ -121,6 +121,7 @@ public final class BqColumns {
             public static final String TERM_ID = "term_id";
             public static final String TERM_REGEX_PATTERN = "term_regex_pattern";
             public static final String REGEX_MATCH_HIT_COUNT = "regex_match_hit_count";
+            public static final String TERM_DESCRIPTION = "term_description";
         }
     }
 

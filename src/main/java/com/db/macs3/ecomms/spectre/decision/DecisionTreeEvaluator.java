@@ -223,7 +223,8 @@ public final class DecisionTreeEvaluator {
                 }
             }
             if (!survivingMatches.isEmpty()) {
-                kept.add(new TermMatchResult(termMatch.getTermId(), termMatch.getTermRegexPattern(), survivingMatches));
+                kept.add(new TermMatchResult(termMatch.getTermId(), termMatch.getTermRegexPattern(),
+                        termMatch.getTermDescription(), survivingMatches));
             }
         }
 

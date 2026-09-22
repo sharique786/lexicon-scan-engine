@@ -42,12 +42,12 @@ import java.util.regex.Pattern;
  * structural parse error (the zip cursor running out, or having leftovers)
  * rather than a silent mismatch.
  *
- * <h2>{@link Chain}/{@link And}/{@link AndNot} are mutable POJOs, marked {@code non-sealed}</h2>
+ * <h2>{@link Leaf}/{@link Chain}/{@link And}/{@link AndNot} are mutable POJOs, marked {@code non-sealed}</h2>
  * <p>Java requires every direct permitted subtype of a {@code sealed}
  * interface to be {@code final}, {@code sealed}, or {@code non-sealed}. This
  * project's model-package convention (mutable POJOs, no {@code final}) rules
- * out {@code final}, so {@link Chain}/{@link And}/{@link AndNot} (and
- * {@link ShapeNode}'s {@code ChainShape}/{@code AndShape}/{@code AndNotShape})
+ * out {@code final}, so {@link Leaf}/{@link Chain}/{@link And}/{@link AndNot} (and
+ * {@link ShapeNode}'s {@code LeafShape}/{@code ChainShape}/{@code AndShape}/{@code AndNotShape})
  * are {@code non-sealed} instead — the sealed CONTRACT on
  * {@link ResolvedPatternTree}/{@link ShapeNode} themselves (exhaustive
  * {@code instanceof}/{@code switch} over a closed set) is unaffected, since
@@ -67,33 +67,111 @@ import java.util.regex.Pattern;
 public sealed interface ResolvedPatternTree {
 
     /**
-     * A (possibly length-1, i.e. no proximity operator at all) sequence of
-     * leaves connected by NEAR/FOLLOWEDBY.
+     * One flat regex leaf — the common case for a {@link Chain} element. The only
+     * {@link ResolvedPatternTree} implementation that is NOT itself a compound node; every other
+     * implementation exists to combine two or more of these (possibly via a nested {@link Chain} —
+     * see {@link Chain} class Javadoc "Nested chain elements").
+     */
+    non-sealed class Leaf implements ResolvedPatternTree {
+
+        private Pattern pattern;
+
+        public Leaf(Pattern pattern) {
+            this.pattern = pattern;
+        }
+
+        public Pattern getPattern() {
+            return pattern;
+        }
+
+        public void setPattern(Pattern pattern) {
+            this.pattern = pattern;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || this.getClass() != obj.getClass()) {
+                return false;
+            }
+            // Pattern itself has no equals() override (identity-based) — compare by source/flags,
+            // the same fields two independently-compiled-but-equivalent Patterns would share.
+            Leaf other = (Leaf) obj;
+            return Objects.equals(pattern.pattern(), other.pattern.pattern()) && pattern.flags() == other.pattern.flags();
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(pattern.pattern(), pattern.flags());
+        }
+
+        @Override
+        public String toString() {
+            return "Leaf[" + pattern.pattern() + "]";
+        }
+    }
+
+    /**
+     * A (possibly length-1, i.e. no proximity operator at all) sequence of elements connected by
+     * NEAR/FOLLOWEDBY.
+     *
+     * <h2>Nested chain elements</h2>
+     * <p>An element is usually a {@link Leaf} (one flat regex), but may itself be a nested
+     * {@link Chain} — confirmed real shape: {@code "leaf1 NEAR{5} (leaf2 NEAR{5} leaf3)"}, where the
+     * parenthesized right-hand side is its own 2-leaf proximity chain, not a third flat leaf of the
+     * outer chain. {@link ResolvedPatternAreaEvaluator} (in the {@code decision} package) evaluates a
+     * nested-{@code Chain} element by recursively resolving IT as its own sub-condition against the
+     * same area text first, then treating each of ITS satisfying occurrence spans as one candidate
+     * occurrence the OUTER chain measures its own gap against — i.e. "is some satisfying match of the
+     * inner group within N words of the outer leaf," not a flattened word-by-word count across both
+     * levels. Only {@link Chain} nesting inside a {@link Chain} element has been observed; an
+     * {@link And} or {@link AndNot} nested this way is unconfirmed and not specially parsed by
+     * {@link #parseShape}/{@link #build} — see {@code parseSegment}.
      */
     non-sealed class Chain implements ResolvedPatternTree {
 
-        private List<Pattern> leaves;
+        private List<ResolvedPatternTree> elements;
         private List<String> operators;
         private List<Integer> distances;
 
         /**
-         * @param leaves    one compiled, case-insensitive pattern per leaf, in left-to-right term order
-         * @param operators {@code "NEAR"} or {@code "FOLLOWEDBY"} between consecutive leaves —
-         *                  {@code operators.size() == leaves.size() - 1}
+         * @param elements  one {@link Leaf} (or, per class Javadoc, nested {@link Chain}) per position,
+         *                  in left-to-right term order
+         * @param operators {@code "NEAR"} or {@code "FOLLOWEDBY"} between consecutive elements —
+         *                  {@code operators.size() == elements.size() - 1}
          * @param distances the raw distance for each operator — same size as {@code operators}
          */
-        public Chain(List<Pattern> leaves, List<String> operators, List<Integer> distances) {
-            this.leaves = leaves;
+        public Chain(List<ResolvedPatternTree> elements, List<String> operators, List<Integer> distances) {
+            this.elements = elements;
             this.operators = operators;
             this.distances = distances;
         }
 
-        public List<Pattern> getLeaves() {
-            return leaves;
+        /**
+         * Convenience for the common flat case — every element a single regex leaf, no nesting.
+         */
+        public static Chain ofLeafPatterns(List<Pattern> leafPatterns, List<String> operators, List<Integer> distances) {
+            List<ResolvedPatternTree> elements = new ArrayList<>(leafPatterns.size());
+            for (Pattern leafPattern : leafPatterns) {
+                elements.add(new Leaf(leafPattern));
+            }
+            return new Chain(elements, operators, distances);
         }
 
-        public void setLeaves(List<Pattern> leaves) {
-            this.leaves = leaves;
+        /**
+         * @return this chain's elements, left-to-right — each is a {@link Leaf} unless it's a nested
+         * {@link Chain} (see class Javadoc "Nested chain elements"). Named {@code getLeaves} for
+         * call-site continuity with this class's pre-nesting API; despite the name, an entry is not
+         * guaranteed to be a {@link Leaf}.
+         */
+        public List<ResolvedPatternTree> getLeaves() {
+            return elements;
+        }
+
+        public void setLeaves(List<ResolvedPatternTree> elements) {
+            this.elements = elements;
         }
 
         public List<String> getOperators() {
@@ -121,19 +199,19 @@ public sealed interface ResolvedPatternTree {
                 return false;
             }
             Chain other = (Chain) obj;
-            return Objects.equals(leaves, other.leaves)
+            return Objects.equals(elements, other.elements)
                     && Objects.equals(operators, other.operators)
                     && Objects.equals(distances, other.distances);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(leaves, operators, distances);
+            return Objects.hash(elements, operators, distances);
         }
 
         @Override
         public String toString() {
-            return "Chain[leaves=" + leaves + ", operators=" + operators + ", distances=" + distances + "]";
+            return "Chain[elements=" + elements + ", operators=" + operators + ", distances=" + distances + "]";
         }
     }
 
@@ -293,24 +371,37 @@ public sealed interface ResolvedPatternTree {
     // ── Shape discovery (adapted from the ResolvedPatternMatcher reference — shape only, no leaf text) ──
 
     sealed interface ShapeNode {
+
+        /**
+         * One flat regex leaf's shape — consumes exactly one entry from the {@code regexPattern}
+         * cursor during {@link #zip}. The shape-side counterpart of {@link Leaf}.
+         */
+        non-sealed class LeafShape implements ShapeNode {
+        }
+
+        /**
+         * @see Chain class Javadoc "Nested chain elements" — an entry of {@code elementShapes} is
+         * either a {@link LeafShape} or, when {@link #parseSegment} finds a chain element that is
+         * itself a fully-parenthesized proximity group, a nested {@code ChainShape}.
+         */
         non-sealed class ChainShape implements ShapeNode {
 
-            private int leafCount;
+            private List<ShapeNode> elementShapes;
             private List<String> operators;
             private List<Integer> distances;
 
-            ChainShape(int leafCount, List<String> operators, List<Integer> distances) {
-                this.leafCount = leafCount;
+            ChainShape(List<ShapeNode> elementShapes, List<String> operators, List<Integer> distances) {
+                this.elementShapes = elementShapes;
                 this.operators = operators;
                 this.distances = distances;
             }
 
-            int getLeafCount() {
-                return leafCount;
+            List<ShapeNode> getElementShapes() {
+                return elementShapes;
             }
 
-            void setLeafCount(int leafCount) {
-                this.leafCount = leafCount;
+            void setElementShapes(List<ShapeNode> elementShapes) {
+                this.elementShapes = elementShapes;
             }
 
             List<String> getOperators() {
@@ -424,11 +515,12 @@ public sealed interface ResolvedPatternTree {
     }
 
     static ShapeNode.ChainShape parseChainShape(String text) {
+        List<ShapeNode> elementShapes = new ArrayList<>();
         List<String> operators = new ArrayList<>();
         List<Integer> distances = new ArrayList<>();
 
         int depth = 0;
-        int leafCount = 0;
+        int segmentStart = 0;
         int charIndex = 0;
         while (charIndex < text.length()) {
             char currentChar = text.charAt(charIndex);
@@ -441,17 +533,81 @@ public sealed interface ResolvedPatternTree {
                 Matcher proximityMatcher = PROXIMITY_KEYWORD.matcher(text);
                 proximityMatcher.region(charIndex, text.length());
                 if (proximityMatcher.lookingAt()) {
-                    leafCount++;
+                    elementShapes.add(parseSegment(text.substring(segmentStart, charIndex)));
                     operators.add(proximityMatcher.group(1));
                     distances.add(Integer.parseInt(proximityMatcher.group(2)));
                     charIndex = proximityMatcher.end();
+                    segmentStart = charIndex;
                     continue;
                 }
             }
             charIndex++;
         }
-        leafCount++; // the final segment after the last operator (or the only segment, if none)
-        return new ShapeNode.ChainShape(leafCount, operators, distances);
+        elementShapes.add(parseSegment(text.substring(segmentStart))); // final segment, or the only one
+        return new ShapeNode.ChainShape(elementShapes, operators, distances);
+    }
+
+    /**
+     * One chain element's own shape — a flat {@link ShapeNode.LeafShape} unless {@code segment}
+     * (trimmed) is wrapped in exactly ONE balanced top-level paren pair whose INSIDE itself contains
+     * a further top-level NEAR/FOLLOWEDBY operator. A segment like {@code "(?:price|spread)"} is just
+     * ordinary regex alternation syntax and stays a {@link ShapeNode.LeafShape} despite its own
+     * parens — nothing inside it is a proximity operator, so it consumes exactly one
+     * {@code regexPattern} entry verbatim, same as any other leaf. See {@link Chain} class Javadoc
+     * "Nested chain elements".
+     */
+    static ShapeNode parseSegment(String segment) {
+        String trimmed = segment.trim();
+        if (trimmed.length() >= 2 && trimmed.charAt(0) == '(' && trimmed.charAt(trimmed.length() - 1) == ')') {
+            int depth = 0;
+            boolean wholeSegmentIsOneGroup = true;
+            for (int charIndex = 0; charIndex < trimmed.length(); charIndex++) {
+                char currentChar = trimmed.charAt(charIndex);
+                if (currentChar == '(') {
+                    depth++;
+                } else if (currentChar == ')') {
+                    depth--;
+                    if (depth == 0 && charIndex != trimmed.length() - 1) {
+                        wholeSegmentIsOneGroup = false;
+                        break;
+                    }
+                }
+            }
+            if (wholeSegmentIsOneGroup) {
+                String inner = trimmed.substring(1, trimmed.length() - 1);
+                if (containsTopLevelProximityKeyword(inner)) {
+                    return parseChainShape(inner);
+                }
+            }
+        }
+        return new ShapeNode.LeafShape();
+    }
+
+    /**
+     * @return true iff {@code text} contains a {@code NEAR{n}}/{@code FOLLOWEDBY{n}} operator at
+     * paren-depth 0 — the signal {@link #parseSegment} uses to tell a nested proximity group apart
+     * from a segment that merely happens to be regex-syntax-parenthesized.
+     */
+    static boolean containsTopLevelProximityKeyword(String text) {
+        int depth = 0;
+        int charIndex = 0;
+        while (charIndex < text.length()) {
+            char currentChar = text.charAt(charIndex);
+            if (currentChar == '(') {
+                depth++;
+            } else if (currentChar == ')') {
+                depth--;
+            }
+            if (depth == 0) {
+                Matcher proximityMatcher = PROXIMITY_KEYWORD.matcher(text);
+                proximityMatcher.region(charIndex, text.length());
+                if (proximityMatcher.lookingAt()) {
+                    return true;
+                }
+            }
+            charIndex++;
+        }
+        return false;
     }
 
     /**
@@ -503,27 +659,42 @@ public sealed interface ResolvedPatternTree {
                     zip(feature, termId, and.getLeft(), cursor),
                     zip(feature, termId, and.getRight(), cursor));
         }
-        ShapeNode.ChainShape chainShape = (ShapeNode.ChainShape) shape;
-        List<Pattern> leaves = new ArrayList<>(chainShape.getLeafCount());
-        for (int leafPosition = 0; leafPosition < chainShape.getLeafCount(); leafPosition++) {
+        if (shape instanceof ShapeNode.LeafShape) {
             if (!cursor.hasNext()) {
                 throw new TermExpressionMetadata.TermMetadataParseException(
                         "Term '" + termId + "' in feature '" + feature + "': resolvedPatterns' shape implies more "
                                 + "leaves than regexPattern/translatedPattern provides.");
             }
-            leaves.add(Pattern.compile(cursor.next(), JAVA_LEAF_FLAGS));
+            return new Leaf(Pattern.compile(cursor.next(), JAVA_LEAF_FLAGS));
         }
-        return new Chain(leaves, chainShape.getOperators(), chainShape.getDistances());
+        // ChainShape — an element may recursively be a LeafShape (the common case) or a nested
+        // ChainShape (see Chain class Javadoc "Nested chain elements"); either way, zipping it
+        // recursively both builds the right ResolvedPatternTree node and advances the shared cursor
+        // by exactly as many regexPattern entries as that element actually needs.
+        ShapeNode.ChainShape chainShape = (ShapeNode.ChainShape) shape;
+        List<ResolvedPatternTree> elements = new ArrayList<>(chainShape.getElementShapes().size());
+        for (ShapeNode elementShape : chainShape.getElementShapes()) {
+            elements.add(zip(feature, termId, elementShape, cursor));
+        }
+        return new Chain(elements, chainShape.getOperators(), chainShape.getDistances());
     }
 
     /**
      * Total leaf count across a whole tree, recursively — used to validate {@code patternMapping}'s
-     * id count against a tree that may be a plain {@link Chain}, an {@link AndNot}, or (now) an
-     * {@link And}, without the caller needing to know which.
+     * id count against a tree that may be a plain {@link Chain} (whose own elements may themselves be
+     * nested {@link Chain}s — see that class's Javadoc "Nested chain elements"), an {@link AndNot}, or
+     * (now) an {@link And}, without the caller needing to know which.
      */
     static int countLeaves(ResolvedPatternTree tree) {
+        if (tree instanceof Leaf) {
+            return 1;
+        }
         if (tree instanceof Chain chain) {
-            return chain.getLeaves().size();
+            int total = 0;
+            for (ResolvedPatternTree element : chain.getLeaves()) {
+                total += countLeaves(element);
+            }
+            return total;
         }
         if (tree instanceof AndNot andNot) {
             return countLeaves(andNot.getRequired()) + countLeaves(andNot.getExcluded());

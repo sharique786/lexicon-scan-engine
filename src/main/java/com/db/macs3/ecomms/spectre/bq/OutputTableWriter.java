@@ -117,6 +117,9 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_REGEX_PATTERN, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.REGEX_MATCH_HIT_COUNT, DataTypes.LongType, true),
+            // New column: the Compile Service's own termDescription (original analyst-authored term
+            // text), verbatim, for auditability — see TermExpressionMetadata.TermEntry#getTermDescription.
+            DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_DESCRIPTION, DataTypes.StringType, true),
     });
     // ID is INTEGER per the delivered schema (was STRING in an earlier revision) — matches
     // LexiconHitSummaryRow.EvaluatedLexicon#getId(), now Long.
@@ -325,7 +328,8 @@ public final class OutputTableWriter {
         scala.collection.Seq<Row> lexicons = toArraySeq(summaryRow.getEvaluatedLexicons().stream().map(lexicon -> RowFactory.create(
                 lexicon.getId(), lexicon.getName(), lexicon.getTotalTermsCount(), lexicon.getRegexHitCount(),
                 toArraySeq(lexicon.getTermDtls().stream().map(termDtl -> RowFactory.create(
-                                termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount()))
+                                termDtl.getTermId(), termDtl.getTermRegexPattern(), termDtl.getRegexMatchHitCount(),
+                                termDtl.getTermDescription()))
                         .collect(Collectors.toList()))
         )).collect(Collectors.toList()));
         return RowFactory.create(summaryRow.getMessageId(), summaryRow.getProcessId(), summaryRow.getPipelineExecId(),

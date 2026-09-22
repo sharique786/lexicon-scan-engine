@@ -69,6 +69,40 @@ class TermExpressionMetadataTest {
         }
 
         @Test
+        @DisplayName("termDescription is carried through verbatim — the original analyst-authored lexicon "
+                + "term text, for lexicon-hit-summary.term_dtls.term_description")
+        void termDescriptionIsCarriedThroughVerbatim() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::1", "termDescription": "(manipulate) NEAR{5} ((price) OR (spread) OR (stock))",
+                   "compilationStatus": "PASS", "translatedPattern": ["insider"],
+                   "requiresExclusionCheck": false, "hyperscanExpressionId": 1}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(1);
+
+            assertThat(entry.getTermDescription()).isEqualTo("(manipulate) NEAR{5} ((price) OR (spread) OR (stock))");
+        }
+
+        @Test
+        @DisplayName("A term with no termDescription field at all parses fine, with a null description")
+        void missingTermDescriptionIsNullNotAnError() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::1", "compilationStatus": "PASS", "translatedPattern": ["insider"],
+                   "requiresExclusionCheck": false, "hyperscanExpressionId": 1}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(1);
+
+            assertThat(entry.getTermDescription()).isNull();
+        }
+
+        @Test
         @DisplayName("A FAILED term is not indexed at all — it was never compiled into the .hdb")
         void failedTermsAreNotIndexed() {
             String json = """
@@ -244,6 +278,46 @@ class TermExpressionMetadataTest {
             assertThat(chain.getLeaves()).hasSize(3);
             assertThat(chain.getOperators()).containsExactly("FOLLOWEDBY", "FOLLOWEDBY");
             assertThat(chain.getDistances()).containsExactly(4, 4);
+        }
+
+        @Test
+        @DisplayName("A nested proximity group (sample term 26 shape) parses into a Chain whose second "
+                + "element is itself a nested Chain, not a third flat leaf")
+        void nestedChainElementParsesCorrectly() {
+            // Real shape observed from the Compile Service: the right-hand side of the outer NEAR{5}
+            // is itself parenthesized as its own 2-leaf NEAR{5} chain, not flattened into a 3-leaf
+            // sequential chain the way the Compile Service used to emit this term.
+            String json = """
+                {"results": [
+                  {"termId": "%s::26", "compilationStatus": "PASS",
+                   "regexPattern": ["(?:manipulate|front run)", "(?:price|spread)", "stock"],
+                   "requiresExclusionCheck": false,
+                   "resolvedPatterns": "(?:manipulate|front run) NEAR{5} ((?:price|spread) NEAR{5} stock)",
+                   "hyperscanExpressionId": 26, "patternMapping": "(56&(57&58))"}
+                ]}
+                """.formatted(FEATURE);
+
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+            TermEntry entry = meta.termByAnyExpressionId(26);
+
+            assertThat(entry).isNotNull();
+            assertThat(entry.requiresPerAreaEvaluation()).isTrue();
+
+            ResolvedPatternTree.Chain outer = (ResolvedPatternTree.Chain) entry.getResolvedPatternTree();
+            assertThat(outer.getLeaves()).hasSize(2);
+            assertThat(outer.getOperators()).containsExactly("NEAR");
+            assertThat(outer.getDistances()).containsExactly(5);
+            assertThat(outer.getLeaves().get(0)).isInstanceOf(ResolvedPatternTree.Leaf.class);
+
+            ResolvedPatternTree.Chain nested = (ResolvedPatternTree.Chain) outer.getLeaves().get(1);
+            assertThat(nested.getLeaves()).hasSize(2);
+            assertThat(nested.getOperators()).containsExactly("NEAR");
+            assertThat(nested.getDistances()).containsExactly(5);
+
+            // Total leaf count across the whole (nested) tree must still agree with patternMapping's
+            // id count — this is what previously threw "regexPattern has more leaves than
+            // resolvedPatterns' shape implies" before nested-Chain support existed.
+            assertThat(ResolvedPatternTree.countLeaves(outer)).isEqualTo(3);
         }
 
         @Test

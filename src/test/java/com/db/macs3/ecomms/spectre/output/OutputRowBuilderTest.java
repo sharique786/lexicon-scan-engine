@@ -74,7 +74,7 @@ class OutputRowBuilderTest {
         canned.put("lexicon_market_cond-1", List.of(
                 new TermMatchResult("lexicon_market_cond-1::1", "information",
                         List.of(AreaMatch.messageBody(new MatchSpan(15, 27, "information")))), // suppressed
-                new TermMatchResult("lexicon_market_cond-1::2", "bomb",
+                new TermMatchResult("lexicon_market_cond-1::2", "bomb", "bomb threat OR explosive device",
                         List.of(AreaMatch.messageBody(new MatchSpan(50, 54, "bomb"))))));       // survives
 
         DecisionTreeEvaluator.FeatureRowScanner scanner = r -> canned.getOrDefault(r.getFeaturesToApply(), List.of());
@@ -107,6 +107,18 @@ class OutputRowBuilderTest {
         }
 
         @Test
+        @DisplayName("term_description carries the original (Compile Service) lexicon term text through to term_dtls")
+        void carriesTermDescriptionThrough() {
+            LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
+            var lexiconEntry = row.getEvaluatedLexicons().stream()
+                    .filter(e -> e.getId().equals(1L)).findFirst().orElseThrow();
+            var survivingTermDtl = lexiconEntry.getTermDtls().stream()
+                    .filter(t -> t.getTermId().equals("lexicon_market_cond-1::2")).findFirst().orElseThrow();
+            assertThat(survivingTermDtl.getTermDescription()).isEqualTo("bomb threat OR explosive device");
+        }
+
+        @Test
         @DisplayName("uses RAW (pre-suppression) counts — summary reflects everything checked, not just alerts")
         void usesPreSuppressionCounts() {
             LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
@@ -118,7 +130,7 @@ class OutputRowBuilderTest {
 
         @Test
         @DisplayName("a group that was evaluated but matched nothing is still reported: real id/name/" +
-                "total_terms_count, regex_hit_count 0, and one N/A / N/A / 0 term_dtls placeholder")
+                "total_terms_count, regex_hit_count 0, and one N/A / N/A / 0 / N/A term_dtls placeholder")
         void reportsZeroHitGroupWithPlaceholderTerm() {
             List<FeatureDecisionRow> rows = List.of(
                     row("1", "lexicon", "lexicon_market_cond-3", defJson("lexicon_market_cond-3", 8, 2)));
@@ -139,6 +151,7 @@ class OutputRowBuilderTest {
             assertThat(entry.getTermDtls().getFirst().getTermId()).isEqualTo("N/A");
             assertThat(entry.getTermDtls().getFirst().getTermRegexPattern()).isEqualTo("N/A");
             assertThat(entry.getTermDtls().getFirst().getRegexMatchHitCount()).isZero();
+            assertThat(entry.getTermDtls().getFirst().getTermDescription()).isEqualTo("N/A");
         }
 
         @Test

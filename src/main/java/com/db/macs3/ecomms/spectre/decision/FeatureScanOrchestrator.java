@@ -403,7 +403,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                 ? entry.getTermRegexPattern()
                 : getTermRegexPattern(entry, patternTextByExpressionId);
 
-        return new TermMatchResult(termId, termRegexPattern, combined);
+        return new TermMatchResult(termId, termRegexPattern, entry.getTermDescription(), combined);
     }
 
     private String getTermRegexPattern(TermEntry entry, Map<Integer, String> patternTextByExpressionId) {

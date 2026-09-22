@@ -34,6 +34,7 @@ public final class OutputRowBuilder {
      */
     private static final String NO_HIT_TERM_ID = "N/A";
     private static final String NO_HIT_TERM_REGEX_PATTERN = "N/A";
+    private static final String NO_HIT_TERM_DESCRIPTION = "N/A";
 
     private OutputRowBuilder() {
     }
@@ -48,7 +49,7 @@ public final class OutputRowBuilder {
      * (NoiseReduction/Disclaimer/Lexicon all included). A group
      * {@code DecisionTreeEvaluator} evaluated but which matched nothing is
      * included too, with {@code regexHitCount == 0} and a single placeholder
-     * {@code termDtls} entry ({@code term_id}/{@code term_regex_pattern}
+     * {@code termDtls} entry ({@code term_id}/{@code term_regex_pattern}/{@code term_description}
      * {@code "N/A"}, {@code regex_match_hit_count} 0).
      *
      * <p>Uses each group's RAW (pre-disclaimer-suppression) matches, since
@@ -78,18 +79,19 @@ public final class OutputRowBuilder {
                     // of its AreaMatch list, NOT the distinct-term count (that is regexHitCount,
                     // below, at the EvaluatedLexicon level).
                     long regexMatchHitCount = termMatch.getMatches().size();
-                    termDtls.add(new LexiconHitSummaryRow.TermDtl(
-                            termMatch.getTermId(), termMatch.getTermRegexPattern(), regexMatchHitCount));
+                    termDtls.add(new LexiconHitSummaryRow.TermDtl(termMatch.getTermId(), termMatch.getTermRegexPattern(),
+                            regexMatchHitCount, termMatch.getTermDescription()));
                 }
             }
 
             // A group this job evaluated but which matched nothing is still reported, with one
-            // placeholder term_dtls entry (N/A / N/A / 0) and regex_hit_count 0 — so a message that
-            // hit nothing is distinguishable from one that was never evaluated. regex_hit_count is
+            // placeholder term_dtls entry (N/A / N/A / 0 / N/A) and regex_hit_count 0 — so a message
+            // that hit nothing is distinguishable from one that was never evaluated. regex_hit_count is
             // the count of REAL matching terms, so it stays 0 here rather than termDtls.size() (1).
             long regexHitCount = termDtls.size();
             if (termDtls.isEmpty()) {
-                termDtls.add(new LexiconHitSummaryRow.TermDtl(NO_HIT_TERM_ID, NO_HIT_TERM_REGEX_PATTERN, 0L));
+                termDtls.add(new LexiconHitSummaryRow.TermDtl(
+                        NO_HIT_TERM_ID, NO_HIT_TERM_REGEX_PATTERN, 0L, NO_HIT_TERM_DESCRIPTION));
                 regexHitCount = 0;
             }
             evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(

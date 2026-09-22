@@ -33,18 +33,22 @@ class ResolvedPatternAreaEvaluatorTest {
         return Pattern.compile(text, ResolvedPatternTree.JAVA_LEAF_FLAGS);
     }
 
+    private static ResolvedPatternTree.Leaf leafNode(String text) {
+        return new ResolvedPatternTree.Leaf(leaf(text));
+    }
+
     private static ResolvedPatternTree.Chain singleLeafChain(String text) {
-        return new ResolvedPatternTree.Chain(List.of(leaf(text)), List.of(), List.of());
+        return new ResolvedPatternTree.Chain(List.of(leafNode(text)), List.of(), List.of());
     }
 
     private static ResolvedPatternTree.Chain twoLeafChain(String leaf1, String operator, int distance, String leaf2) {
         return new ResolvedPatternTree.Chain(
-                List.of(leaf(leaf1), leaf(leaf2)), List.of(operator), List.of(distance));
+                List.of(leafNode(leaf1), leafNode(leaf2)), List.of(operator), List.of(distance));
     }
 
     private static ResolvedPatternTree.Chain threeLeafChain(String leaf1, String op1, int dist1,
                                                             String leaf2, String op2, int dist2, String leaf3) {
-        return new ResolvedPatternTree.Chain(List.of(leaf(leaf1), leaf(leaf2), leaf(leaf3)),
+        return new ResolvedPatternTree.Chain(List.of(leafNode(leaf1), leafNode(leaf2), leafNode(leaf3)),
                 List.of(op1, op2), List.of(dist1, dist2));
     }
 
@@ -126,14 +130,14 @@ class ResolvedPatternAreaEvaluatorTest {
         }
 
         @Test
-        @DisplayName("a multi-character leaf's word index lands on its LAST character, not its first")
+        @DisplayName("a multi-character leaf's gap is measured from its NEAR boundary, not double-counting its own characters")
         void multiCharacterLeafLandsOnLastCharacter() {
             // 市場 (chars 0-1) ... 隠蔽 (chars 4-5): 操 and 作 (indices 2,3) are strictly between the
             // end of the first leaf and the start of the second — 2 characters of gap.
             String text = "市場操作隠蔽";
-            assertThat(evaluate(twoLeafChain("市場", ResolvedPatternTree.OPERATOR_NEAR, 3, "隠蔽"), text))
-                    .containsExactly(new MatchSpan(0, 6, "市場操作隠蔽"));
             assertThat(evaluate(twoLeafChain("市場", ResolvedPatternTree.OPERATOR_NEAR, 2, "隠蔽"), text))
+                    .containsExactly(new MatchSpan(0, 6, "市場操作隠蔽"));
+            assertThat(evaluate(twoLeafChain("市場", ResolvedPatternTree.OPERATOR_NEAR, 1, "隠蔽"), text))
                     .isEmpty();
         }
 
@@ -168,11 +172,11 @@ class ResolvedPatternAreaEvaluatorTest {
             // リスク(katakana, 0-2) を(hiragana, 3) 検討(kanji, 4-5) する(hiragana, 6-7) — one
             // unbroken run with no whitespace across three different Unicode scripts.
             String text = "リスクを検討する";
-            // End of リスク is character index 2; end of 検討 is character index 5 — two characters
-            // (を, 検) strictly between them.
-            assertThat(evaluate(twoLeafChain("リスク", ResolvedPatternTree.OPERATOR_NEAR, 2, "検討"), text))
-                    .hasSize(1);
+            // Only を (index 3) sits strictly between the end of リスク (index 2) and the start of
+            // 検討 (index 4) — one character of gap; 検 itself is part of the second leaf, not the gap.
             assertThat(evaluate(twoLeafChain("リスク", ResolvedPatternTree.OPERATOR_NEAR, 1, "検討"), text))
+                    .hasSize(1);
+            assertThat(evaluate(twoLeafChain("リスク", ResolvedPatternTree.OPERATOR_NEAR, 0, "検討"), text))
                     .isEmpty();
         }
     }
@@ -185,10 +189,11 @@ class ResolvedPatternAreaEvaluatorTest {
         @DisplayName("NEAR{n} counts Hangul syllable characters strictly between two matches")
         void nearCountsHangulCharacters() {
             // 주식(0-1) 시장(2-3) 조작(4-5) — "stock market manipulation" with no spaces.
+            // 시 and 장 (indices 2,3) are strictly between the end of 주식 and the start of 조작.
             String text = "주식시장조작";
-            assertThat(evaluate(twoLeafChain("주식", ResolvedPatternTree.OPERATOR_NEAR, 3, "조작"), text))
-                    .hasSize(1);
             assertThat(evaluate(twoLeafChain("주식", ResolvedPatternTree.OPERATOR_NEAR, 2, "조작"), text))
+                    .hasSize(1);
+            assertThat(evaluate(twoLeafChain("주식", ResolvedPatternTree.OPERATOR_NEAR, 1, "조작"), text))
                     .isEmpty();
         }
     }
@@ -200,12 +205,14 @@ class ResolvedPatternAreaEvaluatorTest {
         @Test
         @DisplayName("a whitespace-delimited Latin word between two CJK terms counts as exactly one word")
         void latinWordBetweenCjkTermsCountsAsOneWord() {
+            // "report" is the sole whitespace-delimited word strictly between 股票 and 操纵 — one
+            // word of gap, exactly as it would count for pure-Latin text either side.
             String text = "股票 report 操纵";
-            assertThat(evaluate(twoLeafChain("股票", ResolvedPatternTree.OPERATOR_NEAR, 2, "操纵"), text))
-                    .hasSize(1);
             assertThat(evaluate(twoLeafChain("股票", ResolvedPatternTree.OPERATOR_NEAR, 1, "操纵"), text))
+                    .hasSize(1);
+            assertThat(evaluate(twoLeafChain("股票", ResolvedPatternTree.OPERATOR_NEAR, 0, "操纵"), text))
                     .isEmpty();
-            assertThat(evaluate(twoLeafChain("股票", ResolvedPatternTree.OPERATOR_FOLLOWEDBY, 2, "操纵"), text))
+            assertThat(evaluate(twoLeafChain("股票", ResolvedPatternTree.OPERATOR_FOLLOWEDBY, 1, "操纵"), text))
                     .hasSize(1);
         }
     }
@@ -420,6 +427,53 @@ class ResolvedPatternAreaEvaluatorTest {
                     singleLeafChain("disclosure"));
 
             assertThat(evaluate(and, "completely unrelated text")).isEmpty();
+        }
+    }
+
+    @Nested
+    @DisplayName("Nested chain elements — a chain element that is itself a proximity chain "
+            + "(regression: lexicon_research_1::26 shape)")
+    class NestedChainElements {
+
+        // "manipulate" NEAR{n} (an inner "price" NEAR{5} "stock" chain) — mirrors the real
+        // Compile Service shape "(manipulate) NEAR{5} ((price) NEAR{5} (stock))".
+        private static ResolvedPatternTree.Chain outerChain(int outerDistance) {
+            return new ResolvedPatternTree.Chain(
+                    List.of(leafNode("manipulate"), twoLeafChain("price", ResolvedPatternTree.OPERATOR_NEAR, 5, "stock")),
+                    List.of(ResolvedPatternTree.OPERATOR_NEAR), List.of(outerDistance));
+        }
+
+        @Test
+        @DisplayName("matches when both the outer gap AND the inner group's own gap are satisfied")
+        void matchesWhenBothOuterAndInnerGapsSatisfied() {
+            // manipulate(0) the(1) closing(2) price(3) of(4) the(5) stock(6) market(7):
+            // inner gap(price,stock)=2 <=5; outer gap(manipulate, nested span)=2 <=5.
+            String text = "manipulate the closing price of the stock market";
+            assertThat(evaluate(outerChain(5), text)).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("fails when the OUTER gap is too large, even though the inner group is satisfied on its own")
+        void failsWhenOuterGapTooLarge() {
+            String text = "manipulate the closing price of the stock market";
+            assertThat(evaluate(outerChain(1), text)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("fails when the INNER group's own condition is not satisfied, regardless of the outer gap")
+        void failsWhenInnerGroupConditionNotSatisfied() {
+            // price(2) ... stock(14): inner gap = 11, exceeds the inner chain's own NEAR{5} — the
+            // nested element has NO satisfying occurrence at all, so the outer chain cannot match
+            // here even with a generous outer distance.
+            String text = "manipulate the price of one two three four five six seven eight nine ten stock";
+            assertThat(evaluate(outerChain(50), text)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("fails outright when the outer leaf is entirely absent, even though the inner group matches")
+        void failsWhenOuterLeafAbsent() {
+            String text = "the closing price of the stock market";
+            assertThat(evaluate(outerChain(5), text)).isEmpty();
         }
     }
 }

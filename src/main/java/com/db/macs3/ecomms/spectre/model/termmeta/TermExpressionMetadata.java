@@ -174,6 +174,7 @@ public class TermExpressionMetadata implements Serializable {
         private static final long serialVersionUID = 1L;
 
         private int termNumber;
+        private String termDescription;
         private String termRegexPattern;
         private boolean requiresExclusionCheck;
         private List<Integer> requiredExpressionIds;
@@ -185,6 +186,11 @@ public class TermExpressionMetadata implements Serializable {
          *                               what {@code TermIdBuilder.build(feature, termNumber)} needs
          *                               to build the correct {@code term_id} string, regardless of
          *                               which raw expression id actually matched
+         * @param termDescription        the Compile Service's own {@code termDescription} —
+         *                               the original, analyst-authored lexicon term text (e.g.
+         *                               {@code "(manipulate) NEAR{5} ((price) OR (spread))"}), verbatim,
+         *                               for {@code lexicon-hit-summary.term_dtls.term_description}. Not
+         *                               used for any matching/evaluation logic — display only.
          * @param termRegexPattern       the term's pattern text for display — the verbatim
          *                               {@code resolvedPatterns} string when present (preserves the
          *                               NEAR/FOLLOWEDBY operator and distance for analyst readability),
@@ -208,10 +214,11 @@ public class TermExpressionMetadata implements Serializable {
          *                               text, never merged across areas — word-distance across two
          *                               different texts is meaningless.
          */
-        public TermEntry(int termNumber, String termRegexPattern, boolean requiresExclusionCheck,
+        public TermEntry(int termNumber, String termDescription, String termRegexPattern, boolean requiresExclusionCheck,
                          List<Integer> requiredExpressionIds, List<Integer> excludedExpressionIds,
                          ResolvedPatternTree resolvedPatternTree) {
             this.termNumber = termNumber;
+            this.termDescription = termDescription;
             this.termRegexPattern = termRegexPattern;
             this.requiresExclusionCheck = requiresExclusionCheck;
             this.requiredExpressionIds = requiredExpressionIds;
@@ -225,6 +232,14 @@ public class TermExpressionMetadata implements Serializable {
 
         public void setTermNumber(int termNumber) {
             this.termNumber = termNumber;
+        }
+
+        public String getTermDescription() {
+            return termDescription;
+        }
+
+        public void setTermDescription(String termDescription) {
+            this.termDescription = termDescription;
         }
 
         public String getTermRegexPattern() {
@@ -306,6 +321,7 @@ public class TermExpressionMetadata implements Serializable {
             TermEntry other = (TermEntry) obj;
             return termNumber == other.termNumber
                     && requiresExclusionCheck == other.requiresExclusionCheck
+                    && Objects.equals(termDescription, other.termDescription)
                     && Objects.equals(termRegexPattern, other.termRegexPattern)
                     && Objects.equals(requiredExpressionIds, other.requiredExpressionIds)
                     && Objects.equals(excludedExpressionIds, other.excludedExpressionIds)
@@ -314,13 +330,14 @@ public class TermExpressionMetadata implements Serializable {
 
         @Override
         public int hashCode() {
-            return Objects.hash(termNumber, termRegexPattern, requiresExclusionCheck, requiredExpressionIds,
-                    excludedExpressionIds, resolvedPatternTree);
+            return Objects.hash(termNumber, termDescription, termRegexPattern, requiresExclusionCheck,
+                    requiredExpressionIds, excludedExpressionIds, resolvedPatternTree);
         }
 
         @Override
         public String toString() {
-            return "TermEntry[termNumber=" + termNumber + ", termRegexPattern=" + termRegexPattern
+            return "TermEntry[termNumber=" + termNumber + ", termDescription=" + termDescription
+                    + ", termRegexPattern=" + termRegexPattern
                     + ", requiresExclusionCheck=" + requiresExclusionCheck
                     + ", requiredExpressionIds=" + requiredExpressionIds
                     + ", excludedExpressionIds=" + excludedExpressionIds
@@ -390,8 +407,8 @@ public class TermExpressionMetadata implements Serializable {
 
         RequiredExcludedIds ids = resolveIds(feature, termResult, tree);
 
-        return new TermEntry(
-                termNumber, termRegexPattern, requiresExclusion, ids.getRequired(), ids.getExcluded(), tree);
+        return new TermEntry(termNumber, termResult.getTermDescription(), termRegexPattern, requiresExclusion,
+                ids.getRequired(), ids.getExcluded(), tree);
     }
 
     private static class RequiredExcludedIds implements Serializable {
