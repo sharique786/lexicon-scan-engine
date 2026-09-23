@@ -560,6 +560,45 @@ class TermExpressionMetadataTest {
     }
 
     @Nested
+    @DisplayName("Inline-compiled proximity — one regexPattern entry, resolvedPatterns still shows NEAR/FOLLOWEDBY")
+    class InlineCompiledProximityTerms {
+
+        /**
+         * REGRESSION — the Compile Service began compiling NEAR/FOLLOWEDBY terms that fit in Hyperscan as
+         * ONE regex with the proximity baked in, while leaving resolvedPatterns in operator form. Zipping
+         * that 2-leaf shape against 1 regex threw "resolvedPatterns' shape implies more leaves than
+         * regexPattern provides", failing the whole feature's load (every message → failure row).
+         */
+        @Test
+        @DisplayName("REGRESSION lexicon_research_1::9 shape: parses without throwing, no tree, resolved by id")
+        void inlineProximityTermParsesWithoutTree() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::9", "termDescription": "keep FOLLOWEDBY{3} mouth shut", "compilationStatus": "PASS",
+                   "regexPattern": ["\\\\bkeep\\\\b(?:\\\\s+\\\\S+){0,3}\\\\s+\\\\bmouth shut\\\\b"],
+                   "requiresExclusionCheck": false,
+                   "resolvedPatterns": "\\\\bkeep\\\\b FOLLOWEDBY{3} \\\\bmouth shut\\\\b",
+                   "hyperscanExpressionId": 9},
+                  {"termId": "%s::22", "compilationStatus": "PASS", "regexPattern": ["\\\\blaunder\\\\b"],
+                   "requiresExclusionCheck": false, "resolvedPatterns": "\\\\blaunder\\\\b",
+                   "hyperscanExpressionId": 22}
+                ]}
+                """.formatted(FEATURE, FEATURE);
+
+            TermExpressionMetadata metadata = TermExpressionMetadata.parse(FEATURE, json);
+
+            TermEntry inline = metadata.termByAnyExpressionId(9);
+            assertThat(inline.getTermNumber()).isEqualTo(9);
+            assertThat(inline.getResolvedPatternTree()).isNull();
+            assertThat(inline.requiresPerAreaEvaluation()).isFalse();
+            assertThat(inline.getRequiredExpressionIds()).containsExactly(9);
+            assertThat(inline.getTermRegexPattern()).isEqualTo("\\bkeep\\b FOLLOWEDBY{3} \\bmouth shut\\b");
+            // A plain single-leaf term (resolvedPatterns == the regex) is untouched by this path.
+            assertThat(metadata.termByAnyExpressionId(22).getResolvedPatternTree()).isNotNull();
+        }
+    }
+
+    @Nested
     @DisplayName("Plain AND terms — a NEAR/FOLLOWEDBY chain plainly ANDed with a further leaf, not AND NOT")
     class PlainAndTerms {
 

@@ -1458,6 +1458,51 @@ class FeatureScanOrchestratorTest {
     }
 
     @Test
+    @DisplayName("REGRESSION lexicon_research_1::9/22: inline-compiled proximity + \\b term hit on mixed "
+                 + "Hebrew/English text (real Hyperscan); a gap over the limit does not")
+    void inlineProximityAndWordBoundaryTerms_hitOnMixedLanguageText() {
+        String feature = "lexicon_inline-1";
+        EnumSet<ExpressionFlag> flags = EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS);
+        byte[] dbBytes = compileAndSerialize(
+                new Expression("\\bkeep\\b(?:\\s+\\S+){0,3}\\s+\\bmouth shut\\b", flags, 9),
+                new Expression("\\blaunder\\b", flags, 22));
+        String json = wrapResults(
+                """
+                {"termId": "lexicon_inline-1::9", "termDescription": "keep FOLLOWEDBY{3} mouth shut",
+                 "compilationStatus": "PASS",
+                 "regexPattern": ["\\\\bkeep\\\\b(?:\\\\s+\\\\S+){0,3}\\\\s+\\\\bmouth shut\\\\b"],
+                 "requiresExclusionCheck": false,
+                 "resolvedPatterns": "\\\\bkeep\\\\b FOLLOWEDBY{3} \\\\bmouth shut\\\\b", "hyperscanExpressionId": 9}
+                """,
+                """
+                {"termId": "lexicon_inline-1::22", "termDescription": "launder", "compilationStatus": "PASS",
+                 "regexPattern": ["\\\\blaunder\\\\b"], "requiresExclusionCheck": false,
+                 "resolvedPatterns": "\\\\blaunder\\\\b", "hyperscanExpressionId": 22}
+                """);
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lexicon_inline-1.zip", dbBytes, json);
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            String hebrew = "מניפולציה בשוק יכולה להניב רווחים גדולים. אנחנו יכולים להשתמש בזה לפני ההכרזה.";
+            ScanMessage mixed = new ScanMessage("msg-101",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, hebrew + "\n Second line review retained launder while the order "
+                            + "book, keep in the market mouth shut", null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+
+            List<TermMatchResult> results = orchestrator.scannerFor(mixed).scan(decisionRow);
+            assertThat(results).extracting(TermMatchResult::getTermId)
+                    .containsExactlyInAnyOrder(feature + "::9", feature + "::22");
+
+            ScanMessage tooFar = new ScanMessage("msg-102",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, hebrew + " keep one two three four mouth shut", null, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            assertThat(orchestrator.scannerFor(tooFar).scan(decisionRow)).isEmpty();
+        }
+    }
+
+    @Test
     @DisplayName("scope=[SUBJECT] (uppercase) does NOT select MESSAGE_BODY or ATTACHMENT — case-insensitivity "
                  + "only widens matching for the scope's own listed values, it doesn't select every area")
     void scope_uppercaseSubjectOnly_doesNotAlsoSelectOtherAreas() {

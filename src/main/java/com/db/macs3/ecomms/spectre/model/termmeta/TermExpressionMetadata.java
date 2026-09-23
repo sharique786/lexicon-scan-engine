@@ -395,13 +395,14 @@ public class TermExpressionMetadata implements Serializable {
         boolean requiresExclusion = Boolean.TRUE.equals(termResult.getRequiresExclusionCheck());
 
         ResolvedPatternTree tree = null;
-        if (termResult.getResolvedPatterns() != null && !termResult.getResolvedPatterns().isBlank()) {
+        boolean inlineProximity = isInlineCompiledProximity(termResult, leaves, requiresExclusion);
+        if (!inlineProximity && termResult.getResolvedPatterns() != null && !termResult.getResolvedPatterns().isBlank()) {
             List<String> treeLeaves = withExclusionLeaves(leaves, termResult.getExclusionRegex());
             tree = ResolvedPatternTree.build(feature, termResult.getTermId(), termResult.getResolvedPatterns(), treeLeaves);
             validateShapeAgreement(feature, termResult, tree, requiresExclusion);
         }
 
-        String termRegexPattern = tree != null
+        String termRegexPattern = tree != null || inlineProximity
                 ? termResult.getResolvedPatterns()
                 : (leaves == null ? null : String.join(" & ", leaves));
 
@@ -409,6 +410,30 @@ public class TermExpressionMetadata implements Serializable {
 
         return new TermEntry(termNumber, termResult.getTermDescription(), termRegexPattern, requiresExclusion,
                 ids.getRequired(), ids.getExcluded(), tree);
+    }
+
+    private static final Pattern PROXIMITY_MARKER = Pattern.compile("\\b(?:NEAR|FOLLOWEDBY)\\{\\d+\\}");
+
+    /**
+     * True when the Compile Service compiled a NEAR/FOLLOWEDBY term's proximity INTO one Hyperscan
+     * regex (e.g. {@code \bkeep\b(?:\s+\S+){0,3}\s+\bmouth shut\b}) rather than decomposing it into
+     * QUIET leaves: exactly one {@code regexPattern} entry that differs from {@code resolvedPatterns},
+     * {@code resolvedPatterns} still carrying proximity operator text, no {@code patternMapping}, and a
+     * plain reportable {@code hyperscanExpressionId}. Hyperscan then verifies the whole condition
+     * itself, so no {@link ResolvedPatternTree} is built (its shape would imply more leaves than the
+     * one inline regex provides) and the term is resolved by the ordinary id-presence path.
+     */
+    private static boolean isInlineCompiledProximity(TermResultJson termResult, List<String> leaves,
+                                                     boolean requiresExclusion) {
+        String resolved = termResult.getResolvedPatterns();
+        return !requiresExclusion
+                && resolved != null && !resolved.isBlank()
+                && leaves != null && leaves.size() == 1
+                && !resolved.trim().equals(leaves.getFirst())
+                && (termResult.getPatternMapping() == null || termResult.getPatternMapping().isBlank())
+                && (termResult.getExclusionRegex() == null || termResult.getExclusionRegex().isEmpty())
+                && termResult.getHyperscanExpressionId() != null
+                && PROXIMITY_MARKER.matcher(resolved).find();
     }
 
     private static class RequiredExcludedIds implements Serializable {
