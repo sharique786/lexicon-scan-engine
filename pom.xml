@@ -85,6 +85,25 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- spark-core transitively depends on jakarta.servlet-api:5.0.0 (for its bundled,
+                 shaded Jetty — used by the Spark UI and the always-on metrics servlet, even with
+                 spark.ui.enabled=false), but spring-boot-starter-parent's own BOM manages this
+                 same artifact up to 6.1.0 (Jakarta EE 10/11, for its OWN embedded-Tomcat use case
+                 — this project has no embedded servlet container of its own; see the
+                 spring-boot-starter exclusion below). Left unpinned, Maven's "nearest wins"
+                 resolution takes the parent BOM's 6.1.0 over Spark's requested 5.0.0 — confirmed
+                 by actually constructing a local-mode SparkSession in a test (see
+                 SparkSessionConfigTest/PipelineRecordAuditIntegrationTest), which fails with
+                 `NoClassDefFoundError: jakarta/servlet/SingleThreadModel`: that class exists in
+                 Servlet 5.0 (deprecated) but was REMOVED in Servlet 6.0, and Spark's shaded Jetty
+                 (built against 5.0) still references it. Pinned back to Spark's own requested
+                 version — `provided` scope, so this affects the local/test classpath only and is
+                 never shaded into the Dataproc submit jar either way. -->
+            <dependency>
+                <groupId>jakarta.servlet</groupId>
+                <artifactId>jakarta.servlet-api</artifactId>
+                <version>5.0.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -160,6 +179,27 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
+        <!-- ── YAML (the Dataproc submit config file passed via the config_file_path
+             argument). NOT jackson-dataformat-yaml: that module's version is tied to
+             jackson-bom (pinned to 2.13.4 above, to match Spark's own bundled Jackson —
+             see that dependencyManagement entry's comment), but Spring Boot 4's own
+             dependency tree already pulls in a much newer snakeyaml (2.5) — confirmed by
+             reproducing a real `NoSuchMethodError: ParserImpl.<init>` at test time,
+             since jackson-dataformat-yaml 2.13.4's YAMLParser was compiled against
+             snakeyaml 1.30's constructor signature, not 2.x's. Rather than pinning
+             snakeyaml back down (risking breaking Spring Boot 4's OWN yaml property
+             loading, itself compiled against the 2.x API) or bumping the whole
+             jackson-bom (which the Spark-alignment comment above says not to do
+             casually), this depends on plain snakeyaml directly instead — version
+             managed by spring-boot-starter-parent's own BOM, so it always matches
+             whatever snakeyaml Spring Boot itself already needs — and DataprocConfig
+             binds the resulting raw Map through the existing, already-pinned
+             jackson-databind ObjectMapper via convertValue(...), never through
+             YAMLFactory. -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
 
         <!-- ── HTML stripping / Unicode normalisation (ported approach from the
              Lexicon Scanner Service) ── -->
@@ -233,7 +273,7 @@
                                  autoconfiguration fat jar), so overriding rather than merging is correct here. -->
                             <transformers combine.self="override">
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.db.macs3.ecomms.spectre.scanengine.spark.ScanEngineApplication</mainClass>
+                                    <mainClass>com.db.macs3.ecomms.spectre.LexiconScanEngineApplication</mainClass>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
@@ -280,17 +320,39 @@
                          even for LOCAL, in-JVM SparkSessions (unlike a real spark-submit/cluster
                          job, which gets these from Spark's own bin/spark-class launcher via
                          org.apache.spark.launcher.JavaModuleOptions — Surefire bypasses that
-                         entirely, so they must be supplied here). This exact flag set is Spark's
-                         own documented set for Java 17+ (confirmed via SPARK-33772), which remains
-                         correct on JDK 21 since JDK 17-25 share the same module system. -->
+                         entirely, so they must be supplied here). This is Spark's own documented
+                         full flag set for Java 17+ (SPARK-33772; org.apache.spark.launcher.JavaModuleOptions
+                         in a real Spark distribution's own launch scripts), which remains correct on
+                         JDK 21 since JDK 17-25 share the same module system.
+                         NOTE: an earlier revision of this argLine carried only a SUBSET of this list
+                         (java.lang/java.lang.invoke/java.util/java.nio/sun.nio.ch/jdk.internal.misc) —
+                         not because the rest were judged unnecessary, but because no test had yet
+                         actually exercised the codepaths that need them. Confirmed missing for real:
+                         constructing a genuine local-mode SparkSession and running a Dataset action
+                         involving DATE/TIMESTAMP columns (see SparkSessionConfigTest/
+                         PipelineRecordAuditIntegrationTest, the first tests in this project to do
+                         either) failed with `IllegalAccessException: symbolic reference class is not
+                         accessible: class sun.util.calendar.ZoneInfo, from ... SparkDateTimeUtils` —
+                         needing sun.util.calendar, which was missing from the subset above. Filled out
+                         to Spark's complete documented set rather than adding just that one entry,
+                         since the same "never actually exercised" gap could just as easily have been
+                         hiding any of the others. -->
                     <argLine>
                         -Xmx2g
                         -XX:+IgnoreUnrecognizedVMOptions
                         --add-opens=java.base/java.lang=ALL-UNNAMED
                         --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
-                        --add-opens=java.base/java.util=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens=java.base/java.io=ALL-UNNAMED
+                        --add-opens=java.base/java.net=ALL-UNNAMED
                         --add-opens=java.base/java.nio=ALL-UNNAMED
+                        --add-opens=java.base/java.util=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
                         --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+                        --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+                        --add-opens=java.base/sun.security.action=ALL-UNNAMED
+                        --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
                         --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED
                     </argLine>
                 </configuration>

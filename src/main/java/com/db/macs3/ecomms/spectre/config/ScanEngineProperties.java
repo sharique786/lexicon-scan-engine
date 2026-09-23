@@ -1,0 +1,74 @@
+package com.db.macs3.ecomms.spectre.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * Spring-bound job-infrastructure configuration — everything NOT supplied per invocation by
+ * {@link RuntimeArgs} or the {@link DataprocConfig} YAML. Bound from {@code application.yml} in
+ * production and {@code application-test.yml} for tests.
+ *
+ * <h2>{@link #maxAttachmentSizeBytes}</h2>
+ * <p>Bound via {@code @Value} from the environment variable {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES}
+ * directly, because {@code SPECTRE_...} does not follow the {@code scan-engine.*} prefix's relaxed-binding
+ * naming. {@code null} (env var absent) means no limit — every attachment is scanned regardless of size.
+ */
+@ConfigurationProperties(prefix = "scan-engine")
+public class ScanEngineProperties {
+
+    /**
+     * See class Javadoc — bound via {@code @Value}, not this class's own relaxed binding.
+     */
+    @Value("${SPECTRE_MAX_ATTACHMENT_SIZE_BYTES:#{null}}")
+    private Long maxAttachmentSizeBytes;
+
+    /**
+     * Bounds each Spark partition's cached-bundle count (database + term metadata together) — see {@code HyperscanBundleLoader}.
+     */
+    @Value("${max-cached-databases-per-partition:20}")
+    private int maxCachedDatabasesPerPartition;
+
+    /**
+     * The identity written to every output/audit row's {@code created_by} column.
+     */
+    @Value("${created-by: SPECTRE-COMPOSER-SA}")
+    private String createdBy;
+
+    /**
+     * This job's {@code pipeline_stage_audit.stage_name} identity.
+     */
+    @Value("${stage-name: spectre-lexicon-tagging}")
+    private String stageName;
+
+    public Long getMaxAttachmentSizeBytes() {
+        return maxAttachmentSizeBytes;
+    }
+
+    public void setMaxAttachmentSizeBytes(Long maxAttachmentSizeBytes) {
+        this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
+    }
+
+    public int getMaxCachedDatabasesPerPartition() {
+        return maxCachedDatabasesPerPartition;
+    }
+
+    public void setMaxCachedDatabasesPerPartition(int maxCachedDatabasesPerPartition) {
+        this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public String getStageName() {
+        return stageName;
+    }
+
+    public void setStageName(String stageName) {
+        this.stageName = stageName;
+    }
+}
