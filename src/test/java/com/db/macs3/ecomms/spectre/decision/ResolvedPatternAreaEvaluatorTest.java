@@ -431,6 +431,50 @@ class ResolvedPatternAreaEvaluatorTest {
     }
 
     @Nested
+    @DisplayName("Multi-word-leaf production examples (regression: lexicon_research_1::9/10 shape, "
+            + "reported 2026-09-23)")
+    class MultiWordLeafProductionExamples {
+
+        // Both leaves and text below are taken verbatim from lexicon_research_1's real
+        // compile-results.json (terms ::9 and ::10) and the two message texts reported as
+        // "not matching." Re-verified end-to-end against the REAL .hdb/JSON via
+        // FeatureScanOrchestrator (not just this class) — both terms genuinely hit. This is the
+        // exact bug class the v3.10 near-boundary gap fix (see canExtend's own Javadoc, which
+        // names "mouth shut" and "Off shore" as its own worked examples) already covers; these
+        // tests exist to pin that confirmation down permanently, not because a new defect was
+        // found.
+
+        @Test
+        @DisplayName("keep FOLLOWEDBY{3} mouth shut — gap is exactly 3 (in, the, market)")
+        void keepFollowedByMouthShut() {
+            String text = "Second-line review retained keep in the market mouth shut after the syndicate "
+                    + "update because the wording needs assessment.";
+            assertThat(evaluate(
+                    twoLeafChain("keep", ResolvedPatternTree.OPERATOR_FOLLOWEDBY, 3, "mouth shut"), text))
+                    .hasSize(1);
+            // One word narrower than the true gap must still fail — confirms this isn't
+            // passing merely because the gap check was accidentally skipped.
+            assertThat(evaluate(
+                    twoLeafChain("keep", ResolvedPatternTree.OPERATOR_FOLLOWEDBY, 2, "mouth shut"), text))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("Off shore NEAR{2} account — leaves occur in reverse (account before Off shore), "
+                + "gap is exactly 2 (during, trading)")
+        void offShoreNearAccount() {
+            String text = "The case note highlights account during trading Off shore before the closing "
+                    + "discussion for follow-up by the surveillance team.";
+            assertThat(evaluate(
+                    twoLeafChain("Off shore", ResolvedPatternTree.OPERATOR_NEAR, 2, "account"), text))
+                    .hasSize(1);
+            assertThat(evaluate(
+                    twoLeafChain("Off shore", ResolvedPatternTree.OPERATOR_NEAR, 1, "account"), text))
+                    .isEmpty();
+        }
+    }
+
+    @Nested
     @DisplayName("Nested chain elements — a chain element that is itself a proximity chain "
             + "(regression: lexicon_research_1::26 shape)")
     class NestedChainElements {
