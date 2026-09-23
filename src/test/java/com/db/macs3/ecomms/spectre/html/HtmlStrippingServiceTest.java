@@ -63,6 +63,73 @@ class HtmlStrippingServiceTest {
     }
 
     @Nested
+    @DisplayName("clean-text normalisation: newlines, tabs, commas and repeated whitespace -> one space")
+    class CleanTextNormalisation {
+
+        @Test
+        @DisplayName("newlines, tabs, CRLF and runs of spaces each collapse to exactly one space")
+        void whitespaceKindsCollapse() {
+            assertThat(HtmlStrippingService.strip("a\nb\tc\r\nd   e \n\t f").strippedText())
+                    .isEqualTo("a b c d e f");
+        }
+
+        @Test
+        @DisplayName("a comma becomes a space, and merges with adjacent whitespace/commas/tags into ONE space")
+        void commasCollapse() {
+            assertThat(HtmlStrippingService.strip("keep,in,the market").strippedText()).isEqualTo("keep in the market");
+            assertThat(HtmlStrippingService.strip("one,\n  two ,, three").strippedText()).isEqualTo("one two three");
+            assertThat(HtmlStrippingService.strip("<p>Hello</p>, <p>world</p>").strippedText())
+                    .isEqualTo(" Hello world ");
+        }
+
+        @Test
+        @DisplayName("fullwidth (CJK) and Arabic commas are treated as commas too")
+        void nonAsciiCommas() {
+            assertThat(HtmlStrippingService.strip("股票，市场").strippedText())
+                    .isEqualTo("股票 市场");
+            assertThat(HtmlStrippingService.strip("واحد، اثنان").strippedText())
+                    .isEqualTo("واحد اثنان");
+        }
+
+        @Test
+        @DisplayName("a term needing a space between words now matches across a comma or newline")
+        void proximityPatternMatchesAcrossCommaAndNewline() {
+            Pattern pattern = Pattern.compile("keep(?:\\s+\\S+){0,3}\\s+mouth shut");
+            assertThat(pattern.matcher(HtmlStrippingService.strip("keep,\nin the market, mouth\nshut").strippedText())
+                    .find()).isTrue();
+        }
+
+        @Test
+        @DisplayName("offset map still resolves match boundaries to the ORIGINAL text after comma collapsing")
+        void offsetMapStaysCorrect() {
+            String original = "alpha,,  beta\n\ngamma";
+            HtmlStrippingService.StripResult result = HtmlStrippingService.strip(original);
+            assertThat(result.strippedText()).isEqualTo("alpha beta gamma");
+            int betaStart = result.strippedText().indexOf("beta");
+            int betaEnd = betaStart + "beta".length();
+            assertThat(original.substring(result.offsetMap().toOriginal(betaStart),
+                    result.offsetMap().toOriginal(betaEnd))).isEqualTo("beta");
+            int gammaStart = result.strippedText().indexOf("gamma");
+            assertThat(original.substring(result.offsetMap().toOriginal(gammaStart))).isEqualTo("gamma");
+        }
+
+        @Test
+        @DisplayName("CHAT/VOICE path: message_text cells are normalised the same way, offsets map to raw_text")
+        void chatVoiceExtractionPathNormalisesToo() {
+            String raw = "<table><tr><td class=\"message-text-cell message_text\">keep,\n\tin the, market</td></tr></table>";
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(raw);
+            assertThat(extraction.anyCellFound()).isTrue();
+
+            HtmlStrippingService.StripResult result =
+                    HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap());
+            assertThat(result.strippedText()).isEqualTo("keep in the market");
+            int marketStart = result.strippedText().indexOf("market");
+            assertThat(raw.substring(result.offsetMap().toOriginal(marketStart),
+                    result.offsetMap().toOriginal(marketStart + "market".length()))).isEqualTo("market");
+        }
+    }
+
+    @Nested
     @DisplayName("plain text with no HTML")
     class PlainText {
 

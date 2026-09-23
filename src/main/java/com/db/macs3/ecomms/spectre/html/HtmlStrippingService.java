@@ -15,8 +15,8 @@ import java.util.regex.Pattern;
  * between "Enjoy" and "Happy". A message body such as
  * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} would never match that
  * pattern as written, because the two words are separated by HTML markup,
- * not whitespace. This service replaces every contiguous run of HTML tags
- * and/or literal whitespace with exactly ONE space, so
+ * not whitespace. This service replaces every contiguous run of HTML tags,
+ * whitespace (newlines, tabs, repeated spaces) and/or commas with exactly ONE space, so
  * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} becomes
  * {@code " Enjoy Happy Birthday "}, which the pattern matches correctly.
  *
@@ -70,7 +70,7 @@ public final class HtmlStrippingService {
         /**
          * Result of {@link #strip}.
          *
-         * @param strippedText the text with every HTML-tag-or-whitespace run
+         * @param strippedText the text with every HTML-tag/whitespace/comma run
          *                     collapsed to exactly one space — what Hyperscan
          *                     actually scans
          * @param offsetMap    translates a stripped-text position back to its
@@ -247,8 +247,8 @@ public final class HtmlStrippingService {
             char currentChar = originalText.charAt(originalIndex);
             boolean isTagStart = currentChar == '<' && tagMatcher.region(originalIndex, textLength).lookingAt();
 
-            if (isTagStart || Character.isWhitespace(currentChar)) {
-                // Consume this whole contiguous run of tags and/or whitespace as ONE unit.
+            if (isTagStart || isSeparator(currentChar)) {
+                // Consume this whole contiguous run of tags, whitespace and/or commas as ONE unit.
                 int runStart = originalIndex;
                 int scanIndex = consumeTagOrWhitespaceRun(originalText, originalIndex, textLength, tagMatcher);
                 stripped.append(' ');
@@ -272,7 +272,16 @@ public final class HtmlStrippingService {
     }
 
     /**
-     * @return the index one past the end of the contiguous run of HTML tags and/or whitespace
+     * True for a character that is replaced by (and merged into) a single space: any whitespace
+     * (space, tab, newline, carriage return, form feed, ...) or a comma — ASCII {@code ,}, fullwidth
+     * {@code U+FF0C} (CJK text) or Arabic {@code U+060C}.
+     */
+    static boolean isSeparator(char c) {
+        return Character.isWhitespace(c) || c == ',' || c == '\uFF0C' || c == '\u060C';
+    }
+
+    /**
+     * @return the index one past the end of the contiguous run of HTML tags, whitespace and/or commas
      *         starting at {@code start}.
      */
     private static int consumeTagOrWhitespaceRun(String originalText, int start, int textLength, Matcher tagMatcher) {
@@ -281,7 +290,7 @@ public final class HtmlStrippingService {
             char scanChar = originalText.charAt(scanIndex);
             if (scanChar == '<' && tagMatcher.region(scanIndex, textLength).lookingAt()) {
                 scanIndex = tagMatcher.end();
-            } else if (Character.isWhitespace(scanChar)) {
+            } else if (isSeparator(scanChar)) {
                 scanIndex++;
             } else {
                 break;

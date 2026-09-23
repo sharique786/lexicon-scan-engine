@@ -214,22 +214,49 @@ class OutputRowBuilderTest {
     class DetailRow {
 
         @Test
-        @DisplayName("only includes groups with surviving (post-suppression) matches")
-        void onlyIncludesSurvivingGroups() {
+        @DisplayName("includes the disclaimer hit AND the surviving (post-suppression) lexicon group")
+        void includesDisclaimerAndSurvivingLexiconGroups() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             assertThat(row).isNotNull();
-            assertThat(row.getEvaluatedLexicons()).hasSize(1); // disclaimer group excluded entirely
+            assertThat(row.getEvaluatedLexicons()).extracting(LexiconHitDetailRow.EvaluatedLexicon::getId)
+                    .containsExactly(2L, 1L); // disclaimer (id 2) first, then the lexicon (id 1)
         }
 
         @Test
-        @DisplayName("the suppressed term is gone; only the surviving term remains")
-        void suppressedTermIsGone() {
+        @DisplayName("the suppressed lexicon term is gone; the disclaimer term that suppressed it is reported")
+        void suppressedTermIsGoneDisclaimerRemains() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
-            assertThat(row.getEvaluatedLexicons().getFirst().getTermDtls()).hasSize(1);
-            assertThat(row.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getTermId())
-                    .isEqualTo("lexicon_market_cond-1::2");
+            var disclaimer = row.getEvaluatedLexicons().getFirst();
+            assertThat(disclaimer.getTermDtls()).extracting(LexiconHitDetailRow.EvaluatedLexicon.TermDtl::getTermId)
+                    .containsExactly("std_disclaimer-1::1");
+            assertThat(disclaimer.getTermDtls().getFirst().getMatchedText()).contains("confidential information");
+
+            var lexicon = row.getEvaluatedLexicons().get(1);
+            assertThat(lexicon.getTermDtls()).extracting(LexiconHitDetailRow.EvaluatedLexicon.TermDtl::getTermId)
+                    .containsExactly("lexicon_market_cond-1::2"); // ::1 (fully inside the disclaimer span) suppressed
+        }
+
+        @Test
+        @DisplayName("a message whose ONLY hit is a disclaimer still gets a detail row")
+        void disclaimerOnlyMessageGetsDetailRow() {
+            List<FeatureDecisionRow> rows = List.of(
+                    row("2", "disclaimer", "std_disclaimer-1", defJson("std_disclaimer-1", 5, 1)),
+                    row("1", "lexicon", "lexicon_market_cond-1", defJson("lexicon_market_cond-1", 10, 3)));
+            Map<String, List<TermMatchResult>> canned = Map.of("std_disclaimer-1", List.of(
+                    new TermMatchResult("std_disclaimer-1::1", "confidential",
+                            List.of(AreaMatch.messageBody(new MatchSpan(10, 34, "confidential information"))))));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-103",
+                    FeatureGroupingService.groupAndOrder(rows), r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+            assertThat(evaluation.getFinalLexiconMatchesByFeatureId()).isEmpty(); // premise: no lexicon hit at all
+
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-103", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row).isNotNull();
+            assertThat(row.getEvaluatedLexicons()).hasSize(1);
+            assertThat(row.getEvaluatedLexicons().getFirst().getId()).isEqualTo(2L);
         }
 
         @Test
@@ -237,7 +264,7 @@ class OutputRowBuilderTest {
         void matchedTextJsonIsCorrect() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
-            String matchedTextJson = row.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getMatchedText();
+            String matchedTextJson = row.getEvaluatedLexicons().get(1).getTermDtls().getFirst().getMatchedText();
             assertThat(matchedTextJson).contains("hit_details_hs");
             assertThat(matchedTextJson).contains("\"bomb\"");
             assertThat(matchedTextJson).contains("\"start\":50");

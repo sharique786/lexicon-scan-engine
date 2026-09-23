@@ -110,18 +110,20 @@ public final class OutputRowBuilder {
 
     /**
      * Builds the {@code lexicon-hit-restricted}/{@code -unrestricted} row
-     * for one message from two sources: the disclaimer-SUPPRESSED Lexicon
+     * for one message from three sources: the disclaimer-SUPPRESSED Lexicon
      * match set (see {@link MessageEvaluationResult finalLexiconMatchesByFeatureId()}),
-     * plus the matches of any NoiseReduction group that was a hit. The latter is
-     * necessarily the message's LAST evaluated group — a NoiseReduction hit
-     * short-circuits the decision tree, so no Disclaimer or Lexicon group ran and
-     * there is no suppression to apply. A NoiseReduction group that was evaluated
-     * but not a hit (including an AND group with only some members matching) is
-     * not reported here.
+     * plus the matches of any Disclaimer group that was a hit (reported in full —
+     * a disclaimer match is what suppresses an overlapping Lexicon match, so it is
+     * the entry that remains where the two collide), plus the matches of any
+     * NoiseReduction group that was a hit. A NoiseReduction hit is necessarily the
+     * message's LAST evaluated group — it short-circuits the decision tree, so no
+     * Disclaimer or Lexicon group ran and there is no suppression to apply. A
+     * NoiseReduction or Disclaimer group that was evaluated but not a hit (including
+     * an AND group with only some members matching) is not reported here.
      *
-     * @return null when there is nothing to report — no NoiseReduction group was
-     * a hit, and every Lexicon-category group had zero surviving matches after
-     * suppression. This table carries genuine hit detail, not a broad per-message
+     * @return null when there is nothing to report — no NoiseReduction or Disclaimer
+     * group was a hit, and every Lexicon-category group had zero surviving matches
+     * after suppression. This table carries genuine hit detail, not a broad per-message
      * summary the way {@code lexicon-hit-summary} is, so a message with nothing to
      * report simply has no row here — the caller should skip writing
      * when this returns null, not write a row with an empty
@@ -133,11 +135,12 @@ public final class OutputRowBuilder {
                                                      String createdBy, Instant createdTs) {
         Map<Long, List<TermMatchResult>> matchesByFeatureId = new LinkedHashMap<>();
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
-            if (groupResult.getGroup().isNoiseReduction() && groupResult.isHit()) {
-                List<TermMatchResult> noiseMatches = new ArrayList<>();
-                groupResult.getMemberMatches().values().forEach(noiseMatches::addAll);
-                if (!noiseMatches.isEmpty()) {
-                    matchesByFeatureId.put(groupResult.getGroup().getFeatureId(), noiseMatches);
+            boolean reportedAsIs = groupResult.getGroup().isNoiseReduction() || groupResult.getGroup().isDisclaimer();
+            if (reportedAsIs && groupResult.isHit()) {
+                List<TermMatchResult> groupMatches = new ArrayList<>();
+                groupResult.getMemberMatches().values().forEach(groupMatches::addAll);
+                if (!groupMatches.isEmpty()) {
+                    matchesByFeatureId.put(groupResult.getGroup().getFeatureId(), groupMatches);
                 }
             }
         }
