@@ -19,75 +19,47 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Parses and indexes one feature's per-term expression-id metadata — the
- * Lexicon Compile Service's {@code CompileResponse}/{@code TermCompilationResult}
- * JSON shape, read from the {@code <feature>-compile-results.json} entry of
- * that feature's zip bundle (alongside its {@code .hdb}).
+ * Parses and indexes one feature's compile-results JSON — the Lexicon Compile Service's
+ * {@code CompileResponse}/{@code TermCompilationResult} shape, read from the {@code <feature>.json} entry of the
+ * feature's zip bundle (next to its {@code .hdb}). Only PASS terms are indexed; a FAILED term was never compiled.
+ * This metadata is required: the {@code .hdb} alone cannot say which term an expression id belongs to, or evaluate
+ * AND NOT and proximity conditions.
  *
- * <h2>Expression id scheme</h2>
- * <p>For a simple or purely-decomposed (non-AND-NOT) term,
- * {@code hyperscanExpressionId} is populated and is always the term's own
- * number — Hyperscan's native {@code COMBINATION} mechanism resolves
- * "all decomposed leaves present" on its own, so a matched expression id
- * can be turned directly into a {@code term_id} via
- * {@code TermIdBuilder.build(feature, termNumber)}.
- *
- * <p>For an AND NOT term, {@code hyperscanExpressionId} is null; instead
- * {@code requiredExpressionIds}/{@code excludedExpressionIds} are populated
- * with one ALLOCATED id per pattern, none of which is the term's own
- * number — each compiles as its own plain, individually-reportable
- * expression (never a native {@code COMBINATION}), because Hyperscan
- * evaluates a combination eagerly and progressively: a formula mixing a
- * positive requirement with a negation could otherwise fire before the
- * negated pattern has even been reached by the scan. Resolving a matched
- * expression id back to the correct {@code term_id}, and evaluating the
- * AND NOT boolean condition at all, requires this metadata — the
- * {@code .hdb} file alone is not self-sufficient for AND NOT terms.
- *
- * <h2>{@code resolvedPatterns}: decomposed NEAR/FOLLOWEDBY/AND/AND-NOT terms</h2>
- * <p>A term using {@code NEAR{n}}/{@code FOLLOWEDBY{n}} proximity operators
- * (optionally combined with a further plain AND conjunction — see
- * {@link ResolvedPatternTree.And} — and/or, potentially, AND NOT) may be
- * split ("Pattern Too Large") into
- * multiple decomposed {@code regexPattern} leaves (renamed from
- * {@code translatedPattern}), each compiled with the {@code QUIET} Hyperscan
- * flag — meaning Hyperscan's own match callback never reports an individual
- * leaf's matches; only the wrapping native {@code COMBINATION} expression
- * (the term's {@code hyperscanExpressionId}) fires, proving only "every leaf
- * matched somewhere in this scan buffer" — no order/distance information is
- * recoverable from Hyperscan itself for these terms. The
- * {@code resolvedPatterns} field (present iff this decomposition applies)
- * carries the leaves' operator structure as text (e.g.
- * {@code "manipulate NEAR{5} (?:price|spread|stock)"}); see
- * {@link ResolvedPatternTree#build} for how that text's shape is parsed and
- * zipped against the structured {@code regexPattern} leaf list, and
- * {@code ResolvedPatternAreaEvaluator}/{@code FeatureScanOrchestrator} for
- * how the resulting tree is evaluated per scanned area against the message's
- * real original text — the only way to genuinely verify the proximity/
- * AND-NOT condition, since Hyperscan cannot.
- *
- * <p>A term's {@code resolvedPatterns} field (non-blank) is the sole
- * per-term discriminator between this evaluation path and the cross-area,
- * id-presence-only evaluation path above — a term without it (whatever its
- * {@code requiresExclusionCheck} value) uses the id-presence path only.
+ * <h2>The term shapes this class distinguishes</h2>
+ * <ol>
+ *   <li><b>Simple term</b> (no {@code resolvedPatterns}) — {@code hyperscanExpressionId} is the term's own number
+ *       (the {@code ::<n>} suffix of its {@code termId}) and its only reportable id. A pure decomposition without
+ *       negation stays a native Hyperscan {@code COMBINATION} under that same id. A match on the id IS the term match.</li>
+ *   <li><b>AND NOT id-list term</b> (no {@code resolvedPatterns}) — {@code hyperscanExpressionId} is null;
+ *       {@code requiredExpressionIds}/{@code excludedExpressionIds} hold one ALLOCATED id per pattern, none of them the
+ *       term's own number, each a plain individually-reportable expression. AND NOT is deliberately not compiled as a
+ *       native combination: Hyperscan evaluates a combination eagerly, so a formula mixing a positive requirement with a
+ *       negation could fire before the negated pattern was ever reached by the scan. Evaluated in Java across areas.</li>
+ *   <li><b>{@code resolvedPatterns} term</b> — the operator structure (single regex, {@code NEAR{n}}/{@code FOLLOWEDBY{n}}
+ *       chain, plain AND, AND NOT) is kept as text and parsed into a {@link ResolvedPatternTree}
+ *       (see {@link ResolvedPatternTree#build}), zipped against the structured {@code regexPattern} leaves (plus
+ *       {@code exclusionRegex} leaves for AND NOT). Decomposed proximity leaves are compiled {@code QUIET}, so Hyperscan can
+ *       only report the wrapping combination ({@code hyperscanExpressionId}: "every leaf is present somewhere in this
+ *       buffer") and never their order or distance; the real condition is verified in Java, per scanned area, by
+ *       {@code ResolvedPatternAreaEvaluator}.</li>
+ *   <li><b>Inline-compiled proximity term</b> — the proximity is baked into ONE regex (e.g.
+ *       {@code \bkeep\b(?:\s+\S+){0,3}\s+\bmouth shut\b}) while {@code resolvedPatterns} still shows the operator text.
+ *       Hyperscan verified the whole condition, so no tree is built and the term is resolved by id like a simple term
+ *       (see {@link #isInlineCompiledProximity}).</li>
+ * </ol>
+ * A term whose {@code resolvedPatterns} is non-blank (shape 3) is the only kind evaluated per area in Java; that is the
+ * per-term discriminator between the two evaluation paths in {@code FeatureScanOrchestrator}. A single file may mix all
+ * shapes. {@code regexPattern} is the current name of the leaf list; the older {@code translatedPattern} is still accepted.
  *
  * <h2>One TermEntry per term, indexed two ways</h2>
- * <p>{@link #termByAnyExpressionId(int)} maps ANY expression id this
- * feature's {@code .hdb} might report — whether a non-AND-NOT term's own
- * reportable id, or one of an AND NOT term's required/excluded ids — back to
- * the {@link TermEntry} it belongs to. This is the lookup
- * {@code FeatureScanOrchestrator} uses for terms with a matchable expression
- * id. A {@link TermEntry} with {@link TermEntry#requiresPerAreaEvaluation()}
- * true but no expression id at all (a mandatory-per-area AND NOT term the
- * Compile Service gave no id list for) is NOT reachable this way;
- * {@link #mandatoryPerAreaTerms()} is the only way to discover it.
+ * <p>{@link #termByAnyExpressionId(int)} maps ANY expression id the {@code .hdb} may report — a simple term's own id, or
+ * one of an AND NOT term's required/excluded ids — back to its {@link TermEntry}; {@code FeatureScanOrchestrator} uses it to
+ * discover the terms to evaluate. A {@link TermEntry} that needs per-area evaluation but has no expression id at all is not
+ * reachable that way; {@link #mandatoryPerAreaTerms()} is the only way to find it.
  *
- * <p>Safe to cache/share across every message a Spark partition processes
- * for one feature, PROVIDED nothing mutates a shared instance after
- * publishing it to other threads — this class and {@link TermEntry} are
- * mutable POJOs (setters included), not immutable records; callers must not
- * call a setter on an instance already handed to {@code HyperscanBundleLoader}'s
- * cache.
+ * <p>Safe to cache and share across every message a partition processes for one feature, provided nothing mutates a shared
+ * instance after it is handed to {@code HyperscanBundleLoader}'s cache — this class and {@link TermEntry} are mutable POJOs
+ * (setters included), not immutable records.
  */
 public class TermExpressionMetadata implements Serializable {
 
@@ -471,7 +443,7 @@ public class TermExpressionMetadata implements Serializable {
      * {@code requiredExpressionIds}/{@code excludedExpressionIds} — no throw-if-absent check,
      * since such a term may legitimately have none at all (see {@link #mandatoryPerAreaTerms()}).
      * Every other term (with or without a {@code resolvedPatternTree}) resolves its required id
-     * via {@link #resolveRequiredIds}; only a legacy (non-resolvedPatterns) term also carries an
+     * via {@link #resolveRequiredIds}; only a term without {@code resolvedPatterns} also carries an
      * excluded id list — a {@link ResolvedPatternTree.Chain} or plain-AND
      * {@link ResolvedPatternTree.And} tree never has an excluded side, so both get {@code null} here.
      */
@@ -509,14 +481,10 @@ public class TermExpressionMetadata implements Serializable {
     }
 
     /**
-     * For an AND-NOT-shaped {@code resolvedPatterns} term, the Compile Service reports the required
-     * side's leaves in {@code regexPattern}/{@code translatedPattern} and the excluded side's leaf(s)
-     * SEPARATELY in {@code exclusionRegex} — confirmed against a real compile-results.json, not
-     * documented anywhere before this. {@link ResolvedPatternTree#build} zips {@code resolvedPatterns}'
-     * shape against ONE flat leaf list in left-to-right order (required chain first, then the excluded
-     * chain), so the two fields must be concatenated in that order before zipping — passing
-     * {@code regexPattern} alone leaves the zip cursor short exactly by however many leaves
-     * {@code exclusionRegex} was holding.
+     * For an AND-NOT-shaped {@code resolvedPatterns} term, the required side's leaves arrive in
+     * {@code regexPattern}/{@code translatedPattern} and the excluded side's leaf(s) separately in {@code exclusionRegex}.
+     * {@link ResolvedPatternTree#build} zips {@code resolvedPatterns}' shape against ONE flat leaf list in left-to-right
+     * order (required chain first, then the excluded chain), so the two lists are concatenated in that order first.
      */
     private static List<String> withExclusionLeaves(List<String> requiredLeaves, List<String> exclusionLeaves) {
         if (exclusionLeaves == null || exclusionLeaves.isEmpty()) {
@@ -555,20 +523,11 @@ public class TermExpressionMetadata implements Serializable {
     }
 
     /**
-     * An AND NOT term must never carry a native {@code hyperscanExpressionId}
-     * — that would mean the {@code .hdb} used native {@code COMBINATION} for
-     * this term, contradicting the AND NOT id scheme this class relies on.
-     *
-     * <p>{@code patternMapping} is NOT evidence of native COMBINATION by
-     * itself — confirmed against a real compile-results.json, contradicting
-     * this class's own earlier (undocumented-elsewhere) assumption that its
-     * mere presence implied one: a real AND-NOT-shaped {@code resolvedPatterns}
-     * term legitimately carries a {@code patternMapping} such as
-     * {@code "((11&12&13)&!14)"} purely as a human-readable rendering of the
-     * required/excluded id formula, alongside plain, individually-reportable
-     * {@code requiredExpressionIds}/{@code excludedExpressionIds} — not a
-     * native combination. When present it is still validated, just against
-     * this term's own ids rather than rejected outright.
+     * An AND NOT term must never carry a native {@code hyperscanExpressionId} — that would mean the {@code .hdb} used a
+     * native {@code COMBINATION} for it, contradicting the AND NOT id scheme (see class Javadoc). A populated
+     * {@code patternMapping} is NOT evidence of a native combination: an AND NOT term legitimately carries one, e.g.
+     * {@code "((11&12&13)&!14)"}, as a readable rendering of its required/excluded id formula. When present it is
+     * validated against the term's own ids.
      */
     private static void validateAndNotShapeHasNoNativeCombination(String feature, TermResultJson termResult) {
         if (termResult.getHyperscanExpressionId() != null) {

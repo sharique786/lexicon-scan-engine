@@ -6,7 +6,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Strips HTML markup from message text before it is scanned by Hyperscan,
+ * Turns message text into the normalised "clean text" Hyperscan scans — HTML tags removed, whitespace and commas collapsed —
  * while preserving the ability to report a match's position against the
  * ORIGINAL (un-stripped) text.
  *
@@ -43,12 +43,10 @@ import java.util.regex.Pattern;
  * mentally stripped back out, not a literal character-for-character match.
  *
  * <h2>When stripping applies</h2>
- * <p>Applied unconditionally to every message body before scanning —
- * {@link #strip} is cheap and idempotent on HTML-free text (no tags/no
- * multi-character whitespace runs means the "stripped" text is
- * character-for-character identical to the original, and the offset map is
- * simply the identity mapping), so there is no need for a separate
- * HTML-detection pre-check.
+ * <p>{@link #strip} is applied to the subject and to the message body (EMAIL {@code raw_text} directly; CHAT/VOICE
+ * {@code raw_text} through {@code ChatVoiceMessageTextExtractor} first — see {@link #stripExtracted}). It is idempotent on
+ * text that has no tags and only single spaces (identity mapping). Attachment {@code clean_text} is never stripped: it is
+ * already free of markup, so {@link #identity} skips the scan and the offset array.
  */
 public final class HtmlStrippingService {
 

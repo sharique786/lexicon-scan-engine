@@ -4,29 +4,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Spring-bound configuration — everything NOT supplied per-invocation by
- * Airflow ({@link RuntimeArgs}) or the {@link DataprocConfig} YAML it points
- * to via {@code config_file_path} (GCS buckets, BQ table/view identifiers —
- * see that class). Bound from {@code application.yml} in production and
- * {@code application-test.yml} for tests.
- *
- * <p>The GCS bucket fields this class used to carry ({@code live-message-bucket},
- * {@code test-message-bucket}, {@code environment-bucket}) and
- * {@code bq-table-config-path} moved to {@link DataprocConfig} when Composer
- * switched from two GCS JSON file paths to 7 {@code --key=value} arguments
- * plus one YAML config file — see {@link RuntimeArgs} class Javadoc for the
- * full picture. What remains here is genuinely job-infrastructure config,
- * not something a specific pipeline run supplies.
+ * Spring-bound job-infrastructure configuration — everything NOT supplied per invocation by
+ * {@link RuntimeArgs} or the {@link DataprocConfig} YAML. Bound from {@code application.yml} in
+ * production and {@code application-test.yml} for tests.
  *
  * <h2>{@link #maxAttachmentSizeBytes}</h2>
- * <p>Bound via {@code @Value} from the environment variable
- * {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} directly — NOT via this class's
- * own {@code @ConfigurationProperties} relaxed binding, since
- * {@code SPECTRE_...} does not follow the {@code scan-engine.*} prefix's
- * naming convention (relaxed binding would expect
- * {@code SCAN_ENGINE_MAX_ATTACHMENT_SIZE_BYTES}). {@code null} (the default
- * when the env var is absent) means no limit — every attachment is scanned
- * regardless of size.
+ * <p>Bound via {@code @Value} from the environment variable {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES}
+ * directly, because {@code SPECTRE_...} does not follow the {@code scan-engine.*} prefix's relaxed-binding
+ * naming. {@code null} (env var absent) means no limit — every attachment is scanned regardless of size.
  */
 @ConfigurationProperties(prefix = "scan-engine")
 public class ScanEngineProperties {

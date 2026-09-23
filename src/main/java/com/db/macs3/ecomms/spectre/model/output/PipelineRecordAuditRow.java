@@ -27,12 +27,9 @@ import java.util.Objects;
  * verbatim. Both kept as delivered rather than "corrected", same convention
  * as {@code pipeline_exec_id}.
  *
- * <p>Field ORDER note: {@link #getRecordId} now precedes {@link #getStageName} —
- * the delivered schema reordered these relative to an earlier revision of
- * this table (and of {@link PipelineStageAuditRow}, where {@code stageName}
- * still precedes any per-record field). This class's constructor and
- * {@code OutputTableWriter}'s {@code toRow}/schema all follow the new order;
- * do not "fix" it back to match {@code PipelineStageAuditRow}'s ordering.
+ * <p>Field ORDER note: {@link #getRecordId} precedes {@link #getStageName}, unlike {@link PipelineStageAuditRow}
+ * (where {@code stageName} comes first). The constructor, {@code OutputTableWriter}'s schema and {@code toRow}
+ * all follow this table's order; do not reorder to match {@code PipelineStageAuditRow}.
  */
 public class PipelineRecordAuditRow implements Serializable {
 

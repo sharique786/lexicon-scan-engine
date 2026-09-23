@@ -55,9 +55,6 @@ public final class BqColumns {
         public static final String IS_NOISE_REDUCTION = "isNoiseReduction";
         public static final String BODY = "body";
         public static final String BODY_ID = "id";
-        /**
-         * Renamed from {@code "feature"} — see {@code FeatureDefinition} class Javadoc.
-         */
         public static final String BODY_LEXICON_NAME = "lexiconName";
         public static final String BODY_OBJECT_ID = "objectId";
         public static final String BODY_TOTAL_TERMS_COUNT = "totalTermsCount";
@@ -214,7 +211,7 @@ public final class BqColumns {
         public static final String COMPOSER_DAG_NAME = "compsr_dag_name";
         public static final String COMPOSER_DAG_PATH = "compsr_dag_path";
         /**
-         * Renamed from {@code dproc_dag_name} — Dataproc runs a script, not a DAG.
+         * Dataproc script name (Dataproc runs a script; the DAG belongs to Composer).
          */
         public static final String DPROC_SCRIPT_NAME = "dproc_script_name";
         public static final String DPROC_SCRIPT_PATH = "dproc_script_path";
@@ -227,7 +224,7 @@ public final class BqColumns {
         public static final String INPUT_RECORD_COUNT = "input_record_count";
         public static final String OUTPUT_RECORD_COUNT = "output_record_count";
         /**
-         * INTEGER, per the delivered schema (was STRING in an earlier revision).
+         * INTEGER.
          */
         public static final String ERROR_COUNT = "error_count";
         public static final String ERROR_MESSAGE = "error_message";

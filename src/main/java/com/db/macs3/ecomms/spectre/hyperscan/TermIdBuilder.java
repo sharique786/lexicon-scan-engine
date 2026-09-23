@@ -1,19 +1,17 @@
 package com.db.macs3.ecomms.spectre.hyperscan;
 
 /**
- * Builds {@code term_id} values: {@code <body.lexiconName>::<index>}, where
- * {@code body.lexiconName} (renamed from {@code body.feature}) is used
- * VERBATIM (hyphens and all — it is never normalised or re-cased) and
- * {@code index} is the term's position within that feature's compiled
- * Hyperscan database.
+ * Builds {@code term_id} values and the names of a feature's bundle files. A {@code term_id} is
+ * {@code <body.lexiconName>::<termNumber>}: {@code body.lexiconName} is used VERBATIM (hyphens and all —
+ * never normalised or re-cased) and {@code termNumber} is the term's own number, the {@code ::<n>} suffix
+ * of its {@code termId} in the compile-results JSON. It is NOT necessarily the Hyperscan expression id
+ * that matched — see {@code TermExpressionMetadata}.
  *
- * <p>Example: {@code feature = "lexicon_market_cond-1"}, term at index
- * {@code 1} within that database → {@code term_id = "lexicon_market_cond-1::1"}.
+ * <p>Example: {@code feature = "lexicon_market_cond-1"}, term number {@code 1} →
+ * {@code "lexicon_market_cond-1::1"}.
  *
- * <p>The same {@code body.lexiconName} value also names the GCS bundle
- * ({@code <body.lexiconName>.zip}) the Lexicon Compile Service now writes for
- * this feature, and the two entries {@link #hdbFileName}/{@link #termMetadataFileName}
- * expects to find INSIDE that zip — see {@code HyperscanBundleLoader}.
+ * <p>The same {@code body.lexiconName} names the GCS bundle ({@code <lexiconName>.zip}) and the two entries
+ * inside it ({@link #hdbFileName}, {@link #termMetadataFileName}) — see {@code HyperscanBundleLoader}.
  */
 public final class TermIdBuilder {
 
@@ -24,8 +22,8 @@ public final class TermIdBuilder {
 
     /**
      * @param feature   {@code feature_definition.body.lexiconName}, verbatim
-     * @param termIndex the term's position/expression-index within {@code feature}'s
-     *                  compiled Hyperscan database
+     * @param termIndex the term's own number within {@code feature} (the {@code ::<n>} suffix of its
+     *                  {@code termId} in the compile-results JSON)
      * @return {@code <feature>::<termIndex>}
      */
     public static String build(String feature, int termIndex) {
@@ -47,9 +45,8 @@ public final class TermIdBuilder {
 
     /**
      * @return the term-metadata JSON entry name expected INSIDE {@code feature}'s zip bundle —
-     * {@code <feature>.json}, matching the Lexicon Compile Service's
-     * own naming convention (see {@code TermExpressionMetadata} class Javadoc for why
-     * this is now needed, and {@code HyperscanBundleLoader} for how it is loaded).
+     * {@code <feature>.json}, the Lexicon Compile Service's compile-results file (parsed by
+     * {@code TermExpressionMetadata}, loaded by {@code HyperscanBundleLoader}).
      */
     public static String termMetadataFileName(String feature) {
         if (feature == null || feature.isBlank()) {
@@ -59,10 +56,9 @@ public final class TermIdBuilder {
     }
 
     /**
-     * @return the GCS zip bundle filename for {@code feature} — {@code <feature>.zip} — the
-     * single file the Lexicon Compile Service now writes per feature, containing BOTH
-     * {@link #hdbFileName} and {@link #termMetadataFileName} as entries. See
-     * {@code HyperscanPathResolver#buildZipPath}/{@code HyperscanBundleLoader}.
+     * @return the GCS zip bundle filename for {@code feature} — {@code <feature>.zip} — the single
+     * file the Compile Service writes per feature, containing BOTH {@link #hdbFileName} and
+     * {@link #termMetadataFileName}. See {@code HyperscanPathResolver#buildZipPath}.
      */
     public static String zipFileName(String feature) {
         if (feature == null || feature.isBlank()) {

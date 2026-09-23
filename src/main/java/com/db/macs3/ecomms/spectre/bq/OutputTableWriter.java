@@ -27,49 +27,23 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Defines each of the 6 output/audit tables' {@link StructType} schemas and
- * {@code toRow} conversions, and writes a table's {@code Dataset<Row>} to
- * BigQuery via the Spark BigQuery connector ({@code write().format("bigquery")},
- * append mode — every write here adds new rows; this job never updates rows
- * in place).
+ * Defines each of the 6 output/audit tables' {@link StructType} schemas and {@code toRow} conversions, and writes a table's
+ * {@code Dataset<Row>} to BigQuery via the Spark BigQuery connector ({@code write().format("bigquery")}, append mode — this
+ * job only adds rows, it never updates them).
  *
- * <p>For the four message-scale tables (lexicon-hit-summary/-restricted/
- * -unrestricted, feature-hit-summary), the {@code Dataset<Row>} itself is
- * built by the caller — {@link com.db.macs3.ecomms.spectre.spark.ScanEngineJobRunner writeOutputs}
- * calls {@code Dataset<MessageProcessingResult>.mapPartitions(...)} directly,
- * against one of the dedicated {@link org.apache.spark.api.java.function.MapPartitionsFunction}
- * classes in {@code spark/} ({@code SummaryRowMapper}, {@code DetailRowMapper},
- * {@code FeatureHitSummaryRowMapper}, {@code PipelineRecordAuditRowMapper}) —
- * this class's {@code write*} methods for those tables just take the
- * resulting {@code Dataset<Row>} and call {@code .write()} on it; they no
- * longer build it themselves via {@code JavaRDD.map} +
- * {@code spark.createDataFrame(JavaRDD<Row>, StructType)} (an earlier
- * revision's approach — abandoned because a {@code JavaRDD.map} lambda
- * referencing an enclosing instance field, as {@code writeOutputs} did for
- * {@code pipeline_record_audit}, silently captures the enclosing
- * non-serializable class and fails with {@code Task not serializable} at
- * runtime; a dedicated {@code MapPartitionsFunction} class with only
- * genuinely serializable fields avoids that class of bug structurally). The
- * single-row {@code pipeline_stage_audit} write is the one exception — see
- * {@link #writePipelineStageAudit}.
+ * <p>For the message-scale tables the {@code Dataset<Row>} is built by the caller
+ * ({@link com.db.macs3.ecomms.spectre.spark.ScanEngineJobRunner writeOutputs}) via {@code Dataset.mapPartitions} against one
+ * of the mapper classes in {@code spark/}; the {@code write*} methods here just write it. The single-row
+ * {@code pipeline_stage_audit} write is the exception — see {@link #writePipelineStageAudit}.
  *
- * <p>Two write methods are used, split by table scale (see
- * {@code writeAppend}/{@code writeAppendDirect} below): the four
- * message-scale tables (millions of rows) use {@code writeMethod=indirect}
- * (the connector default — stage to GCS, then one BigQuery load job) with
- * {@code intermediateFormat=avro}; the two small audit tables use
- * {@code writeMethod=direct} (Storage Write API, no GCS staging) for lower
- * per-write latency, since their volume is negligible.
+ * <p>Two write methods, split by table scale: the four message-scale tables ({@code lexicon-hit-summary},
+ * {@code -restricted}, {@code -unrestricted}, {@code feature-hit-summary}) use the indirect method (stage as Avro on GCS, then
+ * one BigQuery load job; the staging bucket comes from the connector's {@code temporaryGcsBucket} setting); the two small
+ * audit tables use {@code writeMethod=direct} (Storage Write API) for lower per-write latency.
  *
- * <p>Explicit {@code Row}/{@code StructType} construction is used rather
- * than a bean/reflection-based encoder because these are Java records (no
- * zero-arg constructor + setters for {@code Encoders.bean} to use) — this
- * also keeps the exact BigQuery column names ({@link BqColumns}) decoupled
- * from Java field-naming conventions.
- *
- * <p>Every write here is a normal Spark action on an already-distributed
- * {@code Dataset} — no {@code collect()}, no driver-side row construction at
- * message scale.
+ * <p>Rows are built with explicit {@code Row}/{@code StructType} construction rather than a bean encoder, which also keeps
+ * the exact BigQuery column names ({@link BqColumns}) independent of Java field names. Every write is an ordinary Spark
+ * action on a distributed {@code Dataset}; nothing is collected to the driver.
  */
 public final class OutputTableWriter {
 
@@ -79,33 +53,10 @@ public final class OutputTableWriter {
     }
 
     /**
-     * Converts a {@code List<Row>} bound for ANY ARRAY-typed {@link StructField}
-     * (top-level in the outer row, or nested inside a struct that is itself an
-     * array element, e.g. {@code evaluated_lexicons[].term_dtls[]}) to a
-     * genuine {@code scala.collection.Seq} — every array field, at every
-     * nesting depth, needs this, full stop. Returns {@code null} unchanged
-     * (some array fields here, e.g. {@code evaluated_rules_dtls}, are
-     * legitimately NULLABLE and always null in this engine's own usage).
-     *
-     * <p><b>Revised — an earlier revision of this method got the rule wrong.</b>
-     * It claimed only NESTED array fields needed this conversion, and that a
-     * TOP-level array field could stay a plain {@code java.util.List}. That
-     * was true ONLY for the old {@code spark.createDataFrame(JavaRDD<Row>,
-     * StructType)} write path this project used before switching to {@code
-     * Dataset<T>.mapPartitions(MapPartitionsFunction, Encoders.row(StructType))}
-     * (see {@code ScanEngineJobRunner#writeOutputs} and the {@code spark/}
-     * mapper classes) — under {@code Encoders.row(StructType)}'s
-     * {@code SchemaInference}-generated encoder, a TOP-level array field
-     * fails with the exact same {@code ClassCastException: class
-     * java.util.ArrayList cannot be cast to class scala.collection.Seq} that
-     * nested ones always did, confirmed via a real production stack trace
-     * AFTER that mapPartitions migration. Every array-valued field built by
-     * every {@code toRow(...)} method below now goes through this method,
-     * regardless of nesting depth. {@code writePipelineStageAudit} still uses
-     * the old {@code spark.createDataFrame(List<Row>, StructType)} path (a
-     * single small row, not mapPartitions-built) — moot today since that
-     * table's schema has no array fields, but worth remembering if one is
-     * ever added there.
+     * Converts a {@code List<Row>} bound for ANY ARRAY-typed {@link StructField} — top-level or nested inside an array element
+     * (e.g. {@code evaluated_lexicons[].term_dtls[]}) — to a {@code scala.collection.Seq}, which the row encoder built by
+     * {@code Encoders.row(StructType)} requires at every nesting depth (a {@code java.util.List} fails with a
+     * {@code ClassCastException}). Returns {@code null} unchanged for a NULLABLE array field that is null.
      */
     private static scala.collection.Seq<Row> toArraySeq(List<Row> rows) {
         return rows == null ? null : scala.jdk.CollectionConverters.ListHasAsScala(rows).asScala().toSeq();
@@ -117,12 +68,10 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_REGEX_PATTERN, DataTypes.StringType, true),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.REGEX_MATCH_HIT_COUNT, DataTypes.LongType, true),
-            // New column: the Compile Service's own termDescription (original analyst-authored term
-            // text), verbatim, for auditability — see TermExpressionMetadata.TermEntry#getTermDescription.
+            // The Compile Service's termDescription (original analyst-authored term text), verbatim.
             DataTypes.createStructField(BqColumns.LexiconHitSummary.TermDtl.TERM_DESCRIPTION, DataTypes.StringType, true),
     });
-    // ID is INTEGER per the delivered schema (was STRING in an earlier revision) — matches
-    // LexiconHitSummaryRow.EvaluatedLexicon#getId(), now Long.
+    // ID is INTEGER — matches LexiconHitSummaryRow.EvaluatedLexicon#getId() (Long).
     private static final StructType EVALUATED_LEXICON_SUMMARY_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.ID, DataTypes.LongType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.NAME, DataTypes.StringType, true),
@@ -131,9 +80,8 @@ public final class OutputTableWriter {
             DataTypes.createStructField(BqColumns.LexiconHitSummary.EvaluatedLexicon.TERM_DTLS,
                     DataTypes.createArrayType(TERM_DTL_SUMMARY_TYPE), false),
     });
-    // Field order and NOT NULL/NULLABLE mode rechecked against the live BigQuery table —
-    // evaluated_lexicons precedes dataset_partition_value; total_terms_count/regex_hit_count/
-    // created_by are NULLABLE (not REQUIRED as an earlier revision of this schema had them).
+    // Field order and NOT NULL/NULLABLE mode match the BigQuery table: evaluated_lexicons precedes
+    // dataset_partition_value; total_terms_count/regex_hit_count/created_by are NULLABLE.
     public static final StructType LEXICON_HIT_SUMMARY_SCHEMA = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitSummary.MESSAGE_ID, DataTypes.StringType, false),
             DataTypes.createStructField(BqColumns.LexiconHitSummary.PROCESS_ID, DataTypes.StringType, false),
@@ -158,8 +106,7 @@ public final class OutputTableWriter {
             // destination JSON column on write. NULLABLE per the delivered schema (was REQUIRED).
             DataTypes.createStructField(BqColumns.LexiconHitDetail.TermDtl.MATCHED_TEXT, DataTypes.StringType, true),
     });
-    // ID is INTEGER per the delivered schema (was STRING in an earlier revision) — matches
-    // LexiconHitDetailRow.EvaluatedLexicon#getId(), now Long. Shared by both restricted and
+    // ID is INTEGER — matches LexiconHitDetailRow.EvaluatedLexicon#getId() (Long). Shared by both restricted and
     // unrestricted tables (identical shape).
     private static final StructType EVALUATED_LEXICON_DETAIL_TYPE = DataTypes.createStructType(new StructField[]{
             DataTypes.createStructField(BqColumns.LexiconHitDetail.EvaluatedLexicon.ID, DataTypes.LongType, false),

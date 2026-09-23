@@ -8,38 +8,24 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Resolves the Lexicon Compile Service's per-feature zip bundle GCS path
- * template:
- * {@code gs://<hdb-gcs-bucket>/<hdb-gcs-prefix>/<YYYY-MM-DD_HH-MM-SS_<policy_engine_id>>/lex-hyperscan/<feature>.zip}
+ * Resolves the Lexicon Compile Service's per-feature zip bundle GCS path:
+ * {@code gs://<hdb-gcs-bucket>/<hdb-gcs-prefix>/<YYYY-MM-DD_HH-MM-SS>_<policy_engine_id>/output/lex-hyperscan/<feature>.zip}
  *
- * <p>{@code hdb-gcs-bucket}/{@code hdb-gcs-prefix} come from the
- * {@code DataprocConfig} YAML's {@code spectre.engine.hyperscan} section
- * (see that class) — the {@code policy_test} segment was previously a
- * hardcoded constant here, used regardless of trigger type (live or test);
- * it is now environment-supplied instead, since a folder naming convention
- * baked into this engine's own source was never really a constant, just
- * previously unconfigurable. The timestamp segment is still resolved via a
- * GCS wildcard listing rather than being supplied as a runtime parameter.
+ * <p>{@code hdb-gcs-bucket}/{@code hdb-gcs-prefix} come from the {@link com.db.macs3.ecomms.spectre.config.DataprocConfig}
+ * {@code spectre.engine.hyperscan} section. The timestamp folder is resolved by listing the prefix rather
+ * than being supplied as a runtime parameter.
  *
- * <p>Each feature's zip bundle contains both the compiled {@code .hdb} and
- * its {@code compile-results.json} metadata as entries — see
- * {@code HyperscanBundleLoader} for how that zip is downloaded once and both
- * entries extracted from it.
+ * <p>Each zip contains the compiled {@code .hdb} and its compile-results JSON — see
+ * {@code HyperscanBundleLoader}.
  *
  * <h2>One listing call per job run, not one per feature</h2>
- * <p>The wildcard timestamp segment is the SAME for every feature a given
- * job run needs — only the trailing {@code <feature>.zip} differs. This
- * class therefore resolves the wildcard folder ONCE
- * ({@link #resolveBasePath}, a single lightweight GCS metadata listing call)
- * and hands back a base path every feature's zip path is then built from by
- * simple string concatenation ({@link #buildZipPath}) — avoiding a redundant
- * GCS listing round-trip per feature, which would otherwise scale with the
- * number of distinct features a job run touches rather than staying
- * constant.
+ * <p>The timestamp folder is the SAME for every feature a run needs; only the trailing
+ * {@code <feature>.zip} differs. {@link #resolveBasePath} therefore lists once (a single GCS metadata
+ * call) and {@link #buildZipPath} builds each feature's path by string concatenation, so GCS listing cost
+ * does not grow with the number of features.
  *
- * <p>This resolution happens on the driver, once, before any broadcast — only
- * the small, resolved path strings (never file bytes) are ever broadcast to
- * executors.
+ * <p>Resolution happens on the driver before the broadcast — only the small resolved path strings (never
+ * file bytes) go to the executors.
  */
 public final class HyperscanPathResolver {
 

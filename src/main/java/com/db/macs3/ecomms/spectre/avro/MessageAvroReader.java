@@ -12,21 +12,20 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 
 /**
- * Reads AVRO message files for one dataset from its {@code restricted/} and
- * {@code unrestricted/} GCS subfolders, filters to only the {@code message_id}s
- * the view actually referenced, and tags each row with which subfolder it
- * came from plus its {@code datasetPartitionValue} (the Airflow-supplied
- * {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for this dataset,
- * not anything read from the AVRO itself) — context
- * {@link com.db.macs3.ecomms.spectre.model.message.ScanMessage}
- * needs that is not present in the AVRO itself, and the source of the
- * {@code dataset_partition_value} column all 4 per-message output tables now
- * carry (see {@code OutputRowBuilder}/{@code OutputTableWriter}).
+ * Reads the AVRO message files of one dataset from its {@code restricted/} and {@code unrestricted/} GCS subfolders
+ * ({@code gs://<msg-gcs-bucket>/<msg-gcs-prefix>/<dataset_id>/{restricted,unrestricted}/}), keeps only the
+ * {@code message_id}s the view referenced, and tags each row with:
+ * <ul>
+ *   <li>{@code restricted} — which subfolder it was read from (decides the {@code lexicon-hit-restricted} vs
+ *       {@code -unrestricted} table), and</li>
+ *   <li>{@code dataset_partition_value} — the value {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} gives
+ *       for this dataset, which becomes the output tables' {@code dataset_partition_value} column.</li>
+ * </ul>
+ * Neither tag is present in the AVRO itself.
  *
- * <p>Stays fully distributed: reading is Spark's own {@code avro} format
- * reader (parallelised across the underlying files automatically), and the
- * {@code message_id} filter is a broadcast join against the (driver-collected)
- * set of relevant ids.
+ * <p>Stays fully distributed: Spark's own {@code avro} reader parallelises across the files, and the
+ * {@code message_id} filter is a broadcast join against the view's distinct {@code message_id} {@code Dataset}
+ * (never collected to the driver).
  */
 public final class MessageAvroReader {
 

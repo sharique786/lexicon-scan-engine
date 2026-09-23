@@ -215,17 +215,10 @@ final class ResolvedPatternAreaEvaluator {
      * {@code operator}'s direction rule and {@code maxGap} — see class Javadoc "NEAR
      * bidirectionality" for why {@code NEAR} never checks direction.
      *
-     * <p>Gap is measured between the NEAR boundary of whichever occurrence comes first in the text
-     * and the NEAR boundary of whichever comes second — i.e. the earlier occurrence's END word index
-     * and the later occurrence's START word index — never using an occurrence's END on both sides.
-     * A prior version always compared {@code previous.endWordIndex()} against
-     * {@code candidate.endWordIndex()}: for a multi-word leaf (e.g. "mouth shut", "Off shore",
-     * "caught red handed") positioned as the later-occurring span, that leaf's OWN internal words got
-     * counted as part of the gap (an occurrence's END is {@code (word count - 1)} words to the right
-     * of its START), silently rejecting real NEAR{n}/FOLLOWEDBY{n} matches whose true word-gap was
-     * within {@code maxGap} — confirmed against a real compiled Compile Service lexicon where every
-     * multi-word-leaf proximity term failed to produce a final hit despite Hyperscan's own native
-     * COMBINATION correctly reporting all leaves present.
+     * <p>Gap is the number of whole words strictly between the two occurrences, measured from the END word of whichever
+     * occurrence comes first in the text to the START word of the one that comes second — never an occurrence's far boundary,
+     * so a multi-word leaf's own internal words (e.g. {@code "mouth shut"}, {@code "Off shore"}) are never counted as gap.
+     * Overlapping occurrences are rejected.
      */
     private static boolean canExtend(String operator, int maxGap, LeafOccurrence previous, LeafOccurrence candidate) {
         boolean previousFirst = previous.endWordIndex() < candidate.startWordIndex();

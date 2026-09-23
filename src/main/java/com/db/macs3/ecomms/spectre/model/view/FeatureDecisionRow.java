@@ -8,29 +8,18 @@ import java.time.LocalDate;
 import java.util.Objects;
 
 /**
- * One row of {@code vw_src_msg_lexicon_decision_mapping} — a single
- * (message_id, feature) pairing the decision engine must evaluate. A message
- * with multiple applicable features (composite sub-features, several
- * standalone lexicons, a disclaimer) produces multiple rows sharing the same
+ * One row of {@code vw_src_msg_lexicon_decision_mapping} — a single (message_id, feature) pairing the
+ * decision engine must evaluate. A message with several applicable features (composite sub-features,
+ * standalone lexicons, a disclaimer, NoiseReduction rules) produces several rows sharing one
  * {@code messageId}.
  *
- * <p>{@link Serializable} — this class travels inside Spark's shuffle/join
- * machinery (grouped by {@code messageId} against the AVRO message dataset),
- * so every field must itself be serialisable; all fields here are.
+ * <p>{@link Serializable}: the row travels inside Spark's shuffle/join machinery (grouped by
+ * {@code messageId} against the AVRO message dataset).
  *
- * <p><b>Data types rechecked against the live view (this revision):</b>
- * {@link #getDatasetPartition}/{@link #getFeaturePartitionValue} are DATE
- * columns, and {@link #getFeatureId} is a LONG (INTEGER) column — NOT plain
- * STRING, despite the rest of this row being string-typed.
- * ViewRowConverter previously read every column via {@code row.getString(...)},
- * which throws {@code ClassCastException} for these three at real-query time
- * (never caught by the unit tests, which construct this class directly rather
- * than through a real Spark {@code Row}). {@link #getFeatureId} stays a
- * {@code Long} here — {@code FeatureGroupingService} converts it to the
- * {@code String} {@link com.db.macs3.ecomms.spectre.model.decision.FeatureGroup#getFeatureId()}
- * needs (that field's own delivered schema, confirmed separately, is STRING)
- * at the one point that conversion is needed; every field in this class
- * stays a faithful, unconverted mirror of the view's own column type.
+ * <p>Field types mirror the view's column types: {@link #getDatasetPartition}/{@link #getFeaturePartitionValue}
+ * are DATE, {@link #getFeatureId} is a LONG (INTEGER) and stays a {@code Long} through
+ * {@code FeatureGroup} to the output tables' INTEGER id columns, and {@link #isNoiseReduction} is a BOOLEAN.
+ * Every other column is a STRING.
  */
 public class FeatureDecisionRow implements Serializable {
 
@@ -72,9 +61,8 @@ public class FeatureDecisionRow implements Serializable {
      *                              gets looked up inside {@code feature_definition.body.lexiconName}
      *                              to resolve the {@code .hdb} filename, NOT {@code featureName}
      *                              (which may be a composite parent's display label)
-     * @param isNoiseReduction      the group's {@code is_noise_reduction} flag — BOOLEAN in the
-     *                              view, not the {@code "Y"}/{@code "N"} string an earlier
-     *                              revision of this class assumed
+     * @param isNoiseReduction      the group's {@code is_noise_reduction} flag — a BOOLEAN column
+     *                              in the view
      * @param operator              {@code "OR"} / {@code "AND"} / null — combines sibling rows
      *                              sharing the same {@code featureId} (composite/NoiseReduction only)
      * @param featureDefinitionJson raw JSON string — parsed on demand via

@@ -75,6 +75,19 @@ import java.util.stream.Collectors;
  * COMBINATION match the expression text is the unreadable boolean formula
  * itself (e.g. {@code "(2&3&4)"}), not the term's actual pattern.
  *
+ * <h2>Two evaluation paths, chosen per term</h2>
+ * <ul>
+ *   <li><b>Id presence, merged across areas</b> ({@link #resolveAndEvaluateCrossArea}) — a term without a
+ *       {@code resolvedPatternTree}: a simple term or an inline-compiled proximity term (one id; Hyperscan already verified
+ *       the whole condition), or an id-list AND NOT term. Required ids must all be present and, for AND NOT, the excluded
+ *       ids must not all be present, judged over the matches of EVERY scanned area.</li>
+ *   <li><b>Per-area Java evaluation</b> ({@link #resolveAndEvaluatePerArea}) — a term with a {@code resolvedPatternTree}
+ *       ({@code NEAR}/{@code FOLLOWEDBY}, plain AND, AND NOT, or a single {@code resolvedPatterns} regex). The term's
+ *       {@code hyperscanExpressionId}, when present, is only a cheap pre-filter (globally and per area); the real condition
+ *       is checked by {@link ResolvedPatternAreaEvaluator} against that ONE area's original text and is never merged
+ *       across areas, because word distance is meaningless across two different texts.</li>
+ * </ul>
+ *
  * <h2>Performance: one {@link Scanner}, and one HTML-strip pass, per message — never per feature</h2>
  * <p>A message can legitimately be evaluated against dozens of applicable
  * lexicon features (one {@link #scanRow} call each, all via the SAME
@@ -320,7 +333,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * meaningful within one contiguous text. Do not "simplify" by folding
      * that branch into this merge; a required word in the subject and an
      * excluded word in the body legitimately share this cross-area boolean
-     * check for the OLD id-list AND NOT scheme, but do NOT share a
+     * check for the id-list AND NOT scheme, but do NOT share a
      * coordinate space for a proximity/AND-NOT condition evaluated via
      * {@link ResolvedPatternAreaEvaluator} — conflating the two would
      * silently reintroduce a false-positive class of bug.

@@ -39,56 +39,41 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Spring-managed driver-side orchestrator for the whole scan job — the
- * injectable counterpart of what used to be a fully static {@code main}
- * method. See {@link LexiconScanEngineApplication} class Javadoc for why this
- * class (constructed and run entirely on the DRIVER) is the appropriate
- * place for Spring dependency injection, while the executor-side classes it
- * calls into ({@link PartitionProcessor} and everything inside it) remain
- * plain, Spring-independent Java.
+ * Driver-side orchestrator for one scan job run. Spring-managed and constructed only on
+ * the driver — see {@link LexiconScanEngineApplication} for why the executor-side classes it
+ * calls into ({@link PartitionProcessor} and everything inside it) are plain, Spring-independent Java.
  *
- * <h2>Wiring order</h2>
+ * <h2>Pipeline, in order ({@link #runPipeline})</h2>
  * <ol>
- *   <li>Parse {@link RuntimeArgs} from the 7 {@code --key=value} Dataproc submit
- *       arguments, then read the {@link DataprocConfig} YAML its
- *       {@code --config_file_path} points to for {@link BqTableConfig} and the
- *       Hyperscan/message GCS bucket locations — see {@link RuntimeArgs} class
- *       Javadoc for the full argument list</li>
+ *   <li>Parse {@link RuntimeArgs} from the 7 {@code --key=value} Dataproc arguments, then read the
+ *       {@link DataprocConfig} YAML that {@code --config_file_path} points to (BigQuery identifiers and
+ *       the Hyperscan/message GCS locations)</li>
  *   <li>Write the {@code IN_PROGRESS} {@code pipeline_stage_audit} row</li>
- *   <li>Resolve the Hyperscan base path — ONE GCS listing call (see {@code HyperscanPathResolver})</li>
- *   <li>Read + union the view across every {@code dataset_details} entry, filtered —
- *       stays a distributed {@code Dataset}</li>
- *   <li>Collect the (small) set of DISTINCT features referenced, resolve each to its
- *       {@code .zip} bundle path, and broadcast that small map — see class Javadoc "Driver load"</li>
- *   <li>Read + union AVRO messages across every {@code dataset_details} entry,
- *       restricted by the view's own {@code message_id} set</li>
- *   <li>Aggregate the view by {@code message_id}, join against messages, attach the
- *       few extra columns {@code PartitionProcessor} needs that are not in either
- *       source (pipeline_exec_id, created_by, output-facing dataset_partition_value)</li>
- *   <li>{@code mapPartitions} via {@link PartitionProcessor} — the only place Hyperscan
- *       databases are loaded, one {@link com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader}
- *       per partition</li>
- *   <li>Split the per-message results into per-table {@code Dataset}s and write each;
- *       write the {@code lexicon-hit-restricted} CSV mirror; write
- *       {@code pipeline_record_audit} for any per-message failures</li>
+ *   <li>Resolve the Hyperscan base path — one GCS listing call ({@link HyperscanPathResolver})</li>
+ *   <li>Read the BigQuery view in one filtered query covering every {@code dataset_details} entry
+ *       ({@link FeatureDecisionViewReader}); it stays a distributed {@code Dataset}</li>
+ *   <li>Collect the (small) set of DISTINCT lexicon features referenced, resolve each to its
+ *       {@code .zip} bundle path, and broadcast that one feature → path map</li>
+ *   <li>Read the AVRO messages of every {@code dataset_details} entry, restricted to the view's
+ *       {@code message_id} set ({@link MessageAvroReader}), and union them</li>
+ *   <li>Aggregate the view to one row per message, join it to the messages, and add the columns
+ *       {@code PartitionProcessor} needs that neither source has ({@code pipeline_exec_id},
+ *       {@code created_by}, the output-facing dataset partition value)</li>
+ *   <li>{@code mapPartitions} via {@link PartitionProcessor} — the only place Hyperscan bundles are
+ *       loaded, one {@link com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader} per partition</li>
+ *   <li>Split the per-message results into per-table {@code Dataset}s and write each, write the
+ *       restricted-detail CSV mirror, and write {@code pipeline_record_audit}</li>
  *   <li>Write the {@code SUCCESS}/{@code FAILED} {@code pipeline_stage_audit} row</li>
  * </ol>
  *
- * <h2>Driver-load discipline</h2>
- * <p>The ONLY things this driver holds/collects at more-than-trivial size are:
- * the small, string-only feature→path map (broadcast, not held per-executor);
- * and the distinct-feature-name list used to build it (bounded by the number
- * of distinct lexicon features a run references, not by message count).
- * Every message-scale dataset (the joined message+view Dataset, the
- * per-message results, every output table) stays a Spark {@code Dataset}
- * from creation to write — this driver never calls {@code .collect()} on any
- * of them.
+ * <h2>Driver load</h2>
+ * <p>The driver only ever holds the small string-only feature → path map and the distinct
+ * feature-name list used to build it (bounded by the number of distinct lexicon features, not by
+ * message count). Every message-scale dataset stays a Spark {@code Dataset} from creation to write;
+ * the driver never calls {@code .collect()} on any of them.
  *
- * <p>The {@code SparkSession}/{@code JavaSparkContext} this class runs
- * against are built and configured by {@link SparkSessionConfig}, not here —
- * see that class for the job-specific Spark runtime config (AQE/skew-join
- * thresholds, shuffle partitions, max partition bytes) previously applied
- * inline in this class.
+ * <p>The {@code SparkSession}/{@code JavaSparkContext} are injected; {@link SparkSessionConfig} builds
+ * them and applies the job-specific Spark runtime configuration.
  */
 @Service
 public class ScanEngineJobRunner {
@@ -116,13 +101,10 @@ public class ScanEngineJobRunner {
     }
 
     /**
-     * @param args the 7 {@code --key=value} Dataproc submit arguments Composer
-     *             now supplies — see {@link RuntimeArgs} class Javadoc for the
-     *             full list and a sample invocation. {@code --config_file_path}
-     *             is a GCS path to a {@link DataprocConfig} YAML file, read
-     *             here to obtain the {@link BqTableConfig} (its
-     *             {@code spectre.engine.bigquery} section) plus the Hyperscan/
-     *             message GCS bucket locations {@link #runPipeline} needs.
+     * @param args the 7 {@code --key=value} Dataproc arguments Composer supplies — see
+     *             {@link RuntimeArgs}. {@code --config_file_path} is a GCS path to a
+     *             {@link DataprocConfig} YAML file, read here to obtain the {@link BqTableConfig}
+     *             plus the Hyperscan/message GCS locations.
      */
     public void run(String[] args) throws Exception {
         log.info("Stage [parse arguments/config]: starting");
@@ -130,10 +112,8 @@ public class ScanEngineJobRunner {
         RuntimeArgs runtimeArgs;
         DataprocConfig dataprocConfig;
         try {
-            // Nothing has been written to pipeline_stage_audit yet at this point (that requires
-            // tableConfig, which comes FROM the config file this stage reads) — a failure here
-            // would otherwise surface as a raw, context-free stack trace with no indication of
-            // which argument or config file was the problem.
+            // Nothing can be written to pipeline_stage_audit yet (that needs tableConfig, which
+            // comes from the config file read here), so a failure is logged with stage context and rethrown.
             runtimeArgs = RuntimeArgs.parseCliArgs(args);
             dataprocConfig = DataprocConfig.parseYaml(
                     new ByteArrayInputStream(gcsClient.readTextFile(runtimeArgs.configFilePath())
@@ -178,11 +158,9 @@ public class ScanEngineJobRunner {
         log.info("Hyperscan base path for this run: {}", hyperscanBasePath);
 
         // 2 + 3. Read the view (one query covering every dataset_details entry), then resolve every
-        // DISTINCT feature referenced to its .zip bundle path and broadcast the resulting small
-        // (feature -> path) map — see class Javadoc "Driver load". collectAsList below is the
-        // stage's real Spark action (the .cache() alone does not force materialisation); the
-        // distinct-feature list itself is bounded by feature count, not message count, so
-        // collecting it to the driver is safe.
+        // DISTINCT feature referenced to its .zip bundle path. collectAsList is the stage's real Spark
+        // action (.cache() alone does not materialise); the list is bounded by feature count, not
+        // message count, so collecting it to the driver is safe.
         Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(spark, tableConfig, runtimeArgs).cache();
         Map<String, String> featureToZipPath = runStage("read view + resolve distinct features", () -> {
             List<String> distinctFeatureDefJson = viewRows.select(BqColumns.View.FEATURE_DEFINITION)
@@ -200,18 +178,14 @@ public class ScanEngineJobRunner {
             log.info("Resolved Hyperscan zip bundle path(s) for this run: {}", zipPaths);
             return zipPaths;
         });
-        // Broadcast via the injected JavaSparkContext (see SparkSessionConfig; not the raw Scala
-        // SparkContext, which requires an implicit ClassTag that Java code cannot supply
-        // naturally) — the standard Java-side way to create a Broadcast. ONE broadcast now — the
-        // Compile Service writes one zip bundle per feature (containing both the .hdb and the
-        // term-metadata JSON), so HyperscanBundleLoader needs only one feature -> path map — see
-        // that class Javadoc.
+        // One broadcast: the Compile Service writes one zip per feature (the .hdb and the term-metadata
+        // JSON together), so HyperscanBundleLoader needs a single feature -> path map. Broadcast via
+        // JavaSparkContext (the raw Scala SparkContext needs an implicit ClassTag Java cannot supply).
         Broadcast<Map<String, String>> broadcastFeatureToZipPath = javaSparkContext.broadcast(featureToZipPath);
 
-        // 4 + 5. Read + union AVRO messages (restricted to the view's own message_id set), then
-        // aggregate the view by message_id, join, and attach output-facing columns. Both steps stay
-        // lazy transformations here — no Spark action runs until mapPartitions/writeOutputs below —
-        // so this stage's logged duration reflects DAG construction, not actual read/join execution.
+        // 4 + 5. Read + union AVRO messages (restricted to the view's message_id set), then aggregate
+        // the view by message_id, join, and attach output-facing columns. These are lazy
+        // transformations: the logged duration reflects DAG construction, not execution.
         DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
         Dataset<Row> joined = runStage("read AVRO messages + join with view", () -> {
             Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
@@ -234,26 +208,23 @@ public class ScanEngineJobRunner {
                             functions.col(JoinedRowColumns.DATASET_PARTITION_VALUE));
         });
 
-        // 6. mapPartitions — the only place Hyperscan databases are loaded. Still lazy: the actual
-        // scan work happens once the writes in step 7 trigger it.
+        // 6. mapPartitions — the only place Hyperscan bundles are loaded. Still lazy: scanning happens
+        // when the writes in step 7 trigger it.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         properties.getMaxAttachmentSizeBytes(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).cache();
 
-        // 7. Split and write — this is where steps 4-6's lazy DAG actually executes, as each write
-        // below triggers its own Spark action.
+        // 7. Split and write — each write triggers its own Spark action, executing steps 4-6.
         runStageVoid("scan messages + write outputs",
                 () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, results));
     }
 
     /**
-     * Runs one named pipeline stage, logging its start, completion (with elapsed wall-clock
-     * time), and — on failure — the elapsed time up to that failure plus the stage name, before
-     * rethrowing unchanged (the outer {@link #run} still owns deciding overall job
-     * success/failure and writing {@code pipeline_stage_audit}; this only adds stage-level
-     * context to what would otherwise be an undifferentiated exception from deep in the DAG).
+     * Runs one named pipeline stage, logging start, completion (with elapsed time) and, on failure,
+     * the stage name and elapsed time before rethrowing unchanged. {@link #run} still owns overall
+     * job success/failure and the {@code pipeline_stage_audit} rows.
      */
     private <T> T runStage(String stageName, java.util.function.Supplier<T> stage) {
         log.info("Stage [{}]: starting", stageName);
@@ -276,18 +247,11 @@ public class ScanEngineJobRunner {
         });
     }
 
-    // writeOutputs builds each output table's Dataset<Row> via Dataset<MessageProcessingResult>.
-    // mapPartitions(MapPartitionsFunction, Encoder<Row>) directly, against a dedicated mapper
-    // class in this package — NOT via JavaRDD.map(Function) + spark.createDataFrame(JavaRDD<Row>,
-    // StructType), an earlier revision's approach. See OutputTableWriter class Javadoc for why:
-    // a JavaRDD.map lambda that references an enclosing instance field (as this method's
-    // pipeline_record_audit row-building used to, via `properties.getStageName()`) silently
-    // captures the enclosing ScanEngineJobRunner itself, which is not serializable, and fails
-    // with "Task not serializable" only once actually run on a cluster — confirmed via a real
-    // Dataproc run. A standalone MapPartitionsFunction class holding only genuinely serializable
-    // fields (SummaryRowMapper, DetailRowMapper, FeatureHitSummaryRowMapper,
-    // PipelineRecordAuditRowMapper — all in this package) avoids that failure mode structurally,
-    // not just by careful lambda-capture discipline.
+    // Each output table's Dataset<Row> is built with Dataset<MessageProcessingResult>.mapPartitions(
+    // MapPartitionsFunction, Encoders.row(schema)) against a dedicated mapper class in this package
+    // (SummaryRowMapper, DetailRowMapper, FeatureHitSummaryRowMapper, PipelineRecordAuditRowMapper).
+    // A mapper class holds only serializable fields, so it cannot accidentally capture this
+    // (non-serializable) runner the way a lambda referencing an instance field would.
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                               DataprocConfig.MessagesGcsConfig messagesConfig, Dataset<MessageProcessingResult> results) {
         Dataset<Row> summaryRows = results.mapPartitions(
@@ -308,21 +272,16 @@ public class ScanEngineJobRunner {
         OutputTableWriter.writeFeatureHitSummary(tableConfig, featureHitRows);
 
         // Every record — success and failure alike — gets a row here, each with its own SUCCESS/FAILED
-        // status. Only processId/triggerType/pipelineExecId/recordId/stageName/status/returnCode/
-        // errorMessage/executionDate/createdBy/createdTs, plus sentDate/runDate/sourceName copied from
-        // the AVRO message, are populated here — every other field (rule
-        // evaluation details, token counts, Gemini request timing, rerun/eval-test linkage) belongs to
-        // stages this job doesn't run and has no source data for — see PipelineRecordAuditRowMapper
-        // class Javadoc.
+        // status. Only the identity/status/error columns plus sentDate/runDate/sourceName (copied from the
+        // AVRO message) are populated; every other column belongs to stages this job does not run — see
+        // PipelineRecordAuditRowMapper.
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         Dataset<Row> recordAuditRows = results.mapPartitions(
                 new PipelineRecordAuditRowMapper(runtimeArgs, properties.getStageName(), properties.getCreatedBy(), today),
                 Encoders.row(OutputTableWriter.PIPELINE_RECORD_AUDIT_SCHEMA));
-        // De-duplicated on the table's own natural key — record_id/stage_name/execution_date/
-        // pipeline_exec_id — rather than trusted to be unique by construction: the same message_id
-        // can legitimately appear more than once in `results` (e.g. the upstream view/message join
-        // producing more than one row for it), and PipelineRecordAuditRowMapper would otherwise emit
-        // one pipeline_record_audit row per occurrence instead of one per actual record.
+        // De-duplicated on the table's natural key (record_id/stage_name/execution_date/pipeline_exec_id):
+        // the same message_id can appear more than once in `results`, and the mapper would otherwise
+        // emit one audit row per occurrence.
         Dataset<Row> dedupedRecordAuditRows = recordAuditRows.dropDuplicates(
                 BqColumns.PipelineRecordAudit.RECORD_ID, BqColumns.PipelineRecordAudit.STAGE_NAME,
                 BqColumns.PipelineRecordAudit.EXECUTION_DATE, BqColumns.PipelineRecordAudit.PIPELINE_EXEC_ID);
@@ -342,9 +301,7 @@ public class ScanEngineJobRunner {
         String datasetId = runtimeArgs.datasetDetails().getFirst().datasetId();
         String csvPath = MessageAvroReader.restrictedPath(
                 messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(), datasetId) + "csv";
-        // Spark's own CSV writer cannot represent nested array/struct columns directly — the
-        // evaluated_lexicons column is flattened to its JSON string form specifically for this
-        // CSV mirror, since CSV has no native nested-value representation.
+        // CSV cannot hold nested array/struct columns, so evaluated_lexicons is written as a JSON string.
         restrictedDetailRows
                 .withColumn(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS,
                         functions.to_json(functions.col(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS)))
@@ -356,21 +313,19 @@ public class ScanEngineJobRunner {
     }
 
     /**
-     * Placeholder for the NOT NULL Composer DAG / Dataproc script columns until real values are wired through.
+     * Placeholder for the NOT NULL Composer DAG / Dataproc script columns of {@code pipeline_stage_audit}.
      */
     private static final String STAGE_AUDIT_UNKNOWN_STRING = "N/A";
 
     /**
-     * @param errorCount INTEGER, per the delivered schema (was STRING in an earlier revision)
+     * @param errorCount written to the INTEGER {@code error_count} column (0 when null)
      */
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                                  Instant startTime, Instant endTime, String status,
                                  Integer errorCount, String errorMessage) {
-        // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath: neither RuntimeArgs nor
-        // DataprocConfig currently carries Composer DAG or Dataproc script name/path values, but the
-        // delivered schema marks all four NOT NULL (see PipelineStageAuditRow class Javadoc) — a real
-        // BigQuery table enforcing that constraint would reject a null write, so a placeholder is used
-        // until real values are wired through.
+        // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath are NOT NULL in the table
+        // (see PipelineStageAuditRow) but neither RuntimeArgs nor DataprocConfig carries them, so a
+        // placeholder is written.
         PipelineStageAuditRow row = new PipelineStageAuditRow(
                 runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
                 properties.getStageName(), STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING,

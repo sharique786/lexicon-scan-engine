@@ -22,8 +22,8 @@ import java.time.format.DateTimeParseException;
  * separately in every converter.
  *
  * <p>{@link #hasNonNullField} tolerates a field that is entirely absent from
- * {@code row}'s schema (e.g. an optional nested AVRO struct, or a column a
- * BQ view no longer selects), rather than throwing — every other method here
+ * {@code row}'s schema (e.g. an optional nested AVRO struct, or a column the
+ * BQ view does not select), rather than throwing — every other method here
  * builds on it, so the same tolerance applies uniformly.
  */
 public final class RowReaders {

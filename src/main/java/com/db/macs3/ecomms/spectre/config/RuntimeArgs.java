@@ -12,16 +12,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * The Airflow (Google Composer) DAG's runtime parameters for one job
- * invocation.
- *
- * <h2>Supplied as 7 {@code --key=value} Dataproc submit arguments, not a
- * JSON file</h2>
- * <p>An earlier revision of this job took two positional GCS paths (a
- * {@code RuntimeArgs} JSON file and a {@code BqTableConfig} JSON file — see
- * {@link BqTableConfig} class Javadoc, since superseded). Composer now
- * submits 7 named arguments directly on the {@code spark-submit} command
- * line instead:
+ * The Airflow (Google Composer) DAG's runtime parameters for one job invocation, supplied as
+ * 7 {@code --key=value} Dataproc job arguments:
  *
  * <pre>
  * --process_id=913b68f9-0f62-4f51-a9c1-c9aa0d84c01c
@@ -33,32 +25,21 @@ import java.util.Objects;
  * --config_file_path=gs://.../dataproc-config-....yml
  * </pre>
  *
- * <p>The first 6 map directly onto this class's fields ({@code dataset_details}
- * is a JSON array *inline* in its argument's value, parsed the same way it
- * always was — never a separate file). {@code config_file_path} is new: it
- * points to a YAML file on GCS (not JSON) carrying the BigQuery table/view
- * identifiers and the Hyperscan/message GCS bucket locations this run needs
- * — see {@link DataprocConfig} for that file's shape and
- * {@code ScanEngineJobRunner} for how it's read and applied. This class
- * stores that path but does not itself read the file — {@code RuntimeArgs}
- * stays a plain, GCS-independent data holder, same as every other field
- * here.
+ * <p>The first 6 map directly onto this class's fields ({@code dataset_details} is a JSON array
+ * given inline in the argument's value, not a file). {@code config_file_path} points to a YAML file
+ * on GCS carrying the BigQuery table/view identifiers and the Hyperscan/message GCS locations for this
+ * run — see {@link DataprocConfig}. This class stores that path but does not read the file, so it stays
+ * a plain, GCS-independent data holder.
  *
- * <p>Use {@link #parseCliArgs(String[])} to build an instance from the raw
- * {@code String[] args} Dataproc/Spring hands {@code main}; the
- * {@link JsonCreator} constructor below remains for the (still exercised by
- * tests) case of constructing/parsing one directly from an equivalent JSON
- * body.
+ * <p>Use {@link #parseCliArgs(String[])} to build an instance from the raw {@code String[] args};
+ * the {@link JsonCreator} constructor builds one from an equivalent JSON body.
  *
  * <h2>{@code dataset_details} cardinality by trigger type</h2>
- * <p>For {@code policy-alert-live}, this list always has exactly one entry.
- * For {@code policy-alert-test}, it can have several — the engine reads/
- * queries once per entry and unions the results (see
- * {@code FeatureScanOrchestrator}). This class does not itself enforce
- * either cardinality; it is a plain, uniform data holder for both cases.
+ * <p>For {@code policy-alert-live} the list has exactly one entry; for {@code policy-alert-test} it can
+ * have several. The engine queries the view once for all entries and reads AVRO once per entry, then
+ * unions the AVRO datasets. This class enforces neither cardinality.
  *
- * <p>A plain class rather than a record, matching this project's other
- * pre-existing model classes.
+ * <p>A plain class rather than a record, matching this project's other model classes.
  */
 public final class RuntimeArgs implements Serializable {
 

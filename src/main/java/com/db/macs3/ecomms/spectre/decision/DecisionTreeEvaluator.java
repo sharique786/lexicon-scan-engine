@@ -30,15 +30,11 @@ import java.util.Map;
  * evaluated, not evaluated-and-ignored.
  *
  * <h2>Disclaimer: a precedence lexicon</h2>
- * <p>Disclaimer is a Hyperscan-scanned feature like any other lexicon
- * (ordinary {@code .hdb}, ordinary scan pass), processed before standard
- * Lexicon groups. Its matches are used afterward to suppress overlapping
- * Lexicon matches — full containment only (a Lexicon match is suppressed
- * only when ENTIRELY inside a disclaimer match's span, never on partial
- * overlap), and only within the SAME area (subject-vs-subject, body-vs-body,
- * or the SAME attachment's content — comparing raw indices across different
- * areas would be meaningless, since each area is its own independent
- * coordinate space).
+ * <p>Disclaimer is a Hyperscan-scanned feature like any other lexicon (ordinary bundle, ordinary scan), processed before
+ * the standard Lexicon groups. Its matches suppress overlapping Lexicon matches — full containment only (a Lexicon match is
+ * suppressed only when ENTIRELY inside a disclaimer match's span, never on partial overlap), and only within the SAME area
+ * (subject-vs-subject, body-vs-body, or the SAME attachment's content; indices from different areas are unrelated coordinate
+ * spaces). The disclaimer hit itself is not suppressed and is reported in the detail tables by {@code OutputRowBuilder}.
  */
 public final class DecisionTreeEvaluator {
 

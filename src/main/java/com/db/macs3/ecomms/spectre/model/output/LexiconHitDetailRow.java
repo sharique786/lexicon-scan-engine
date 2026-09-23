@@ -8,28 +8,19 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Shared row shape for {@code lexicon-hit-restricted} and
- * {@code lexicon-hit-unrestricted} — identical schema, split purely by
- * source GCS path: a message read from a {@code restricted/} subfolder
- * writes here; one from {@code unrestricted/} writes to the unrestricted
- * table. Which table a given row is destined for is a WRITE-TIME decision
- * (see {@code OutputTableWriter}), not encoded in this class itself.
+ * Shared row shape for {@code lexicon-hit-restricted} and {@code lexicon-hit-unrestricted} — identical schema,
+ * split purely by source GCS subfolder: a message read from {@code restricted/} writes to the restricted table,
+ * one from {@code unrestricted/} to the unrestricted table. The target table is a write-time decision (see
+ * {@code OutputTableWriter}), not encoded in this class.
  *
- * <p>Unlike {@link LexiconHitSummaryRow}, only genuine hits are represented
- * here — Lexicon-category matches (post disclaimer-suppression) and the
- * matches of a NoiseReduction group that was a hit (see
- * {@code OutputRowBuilder}) — since this table exists specifically to carry
- * {@link EvaluatedLexicon.TermDtl#getMatchedText} detail for those, not
- * a broad per-group summary.
+ * <p>Unlike {@link LexiconHitSummaryRow}, only genuine hits are represented: the matches of a hit NoiseReduction
+ * group, of a hit Disclaimer group, and the Lexicon-category matches that survive disclaimer suppression (see
+ * {@code OutputRowBuilder#buildDetailRow}). This table carries {@link EvaluatedLexicon.TermDtl#getMatchedText}
+ * detail, not a per-group summary.
  *
- * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
- * schema verbatim (rechecked against the live table, both restricted and
- * unrestricted — identical shape): {@code evaluated_lexicons} precedes
- * {@code dataset_partition_value}; {@link EvaluatedLexicon.TermDtl#getMatchedText}
- * is NULLABLE (the BigQuery column's declared type is JSON — Spark carries it
- * as a {@code StringType} holding valid JSON text, since Spark has no
- * first-class JSON type the BigQuery connector maps this to; BigQuery itself
- * coerces the JSON-text string into the destination JSON column on write).
+ * <p>Field order and NOT NULL/NULLABLE mode match the BigQuery tables: {@code evaluated_lexicons} precedes
+ * {@code dataset_partition_value}; {@link EvaluatedLexicon.TermDtl#getMatchedText} is NULLABLE — the column type is
+ * JSON, and Spark carries it as a {@code StringType} holding valid JSON text, which BigQuery coerces on write.
  */
 public class LexiconHitDetailRow implements Serializable {
 
@@ -166,7 +157,6 @@ public class LexiconHitDetailRow implements Serializable {
 
         /**
          * @param id       the group's {@code feature_id} — INTEGER per the delivered schema
-         *                 (was STRING in an earlier revision)
          * @param termDtls one entry per distinct term with a surviving match
          */
         public EvaluatedLexicon(Long id, List<TermDtl> termDtls) {

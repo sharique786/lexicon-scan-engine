@@ -62,15 +62,11 @@ import java.util.Objects;
  * unrecognised properties rather than modelling every field an external,
  * ops-owned YAML file happens to carry.
  *
- * <p>{@code hdb-gcs-prefix}/{@code msg-gcs-prefix} replace what used to be
- * hardcoded path-segment constants ({@code HyperscanPathResolver}'s
- * {@code policy_test}, {@code AvroConstants}' {@code coreapp-trans/}) — both
- * are now environment-supplied, since a folder naming convention baked into
- * this engine's own source was never really a constant, just previously
- * unconfigurable.
+ * <p>{@code hdb-gcs-prefix} (e.g. {@code policy_test}) and {@code msg-gcs-prefix} (e.g.
+ * {@code coreapp-trans}) are the environment-specific folder prefixes under the two buckets.
  *
  * <p>A plain class rather than a record, matching this project's other
- * pre-existing model classes.
+ * model classes.
  */
 public final class DataprocConfig implements Serializable {
 

@@ -20,8 +20,8 @@ import java.util.Objects;
  * <p>Exactly one of ({@link #getSummaryRow()}, {@link #getFeatureHitSummaryRow()}) vs
  * {@link #getErrorMessage()} is meaningful for a given instance — see
  * {@link #isError()}. {@link #getDetailRow()} may be null even on success (a
- * message with nothing surviving disclaimer suppression and no NoiseReduction
- * hit — see {@code OutputRowBuilder#buildDetailRow}).
+ * message with no NoiseReduction or Disclaimer hit and nothing left after
+ * disclaimer suppression — see {@code OutputRowBuilder#buildDetailRow}).
  *
  * <p>Serializable: this is the element type Spark's {@code mapPartitions}
  * output {@code Dataset} carries via {@code Encoders.kryo}.

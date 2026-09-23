@@ -38,9 +38,8 @@ public class FeatureGroup implements Serializable {
      *                         output schema (INTEGER)
      * @param featureName      the (possibly composite/parent) display name
      * @param featureType      {@link BqColumns.FeatureType} value
-     * @param isNoiseReduction true iff ANY member row is flagged {@code is_noise_reduction=Y} —
-     *                         in practice all members of one group share the same flag,
-     *                         but this does not assume that
+     * @param isNoiseReduction the group's {@code is_noise_reduction} flag —
+     *                         {@code FeatureGroupingService} rejects a group whose members disagree
      * @param operator         {@code OR}/{@code AND}, combining {@link #getMembers} when there is
      *                         more than one — null for a single-member group, where it is
      *                         meaningless (that one member's own hit status IS the group's)

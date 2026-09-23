@@ -33,15 +33,9 @@ import java.util.List;
  * rather than null since they have no real value to report here.
  * {@code returnCode}/{@code errorMessage} are null on a successful result.
  *
- * <p>{@code runtimeArgs}/{@code stageName}/{@code createdBy}/{@code executionDate}
- * are held as fields here (all genuinely {@link java.io.Serializable}) rather
- * than being read from {@code ScanEngineJobRunner}'s own fields inside a
- * lambda — referencing an instance field like {@code properties.getStageName()}
- * directly inside a closure passed to Spark would implicitly capture the
- * enclosing {@code ScanEngineJobRunner} itself (a driver-only Spring
- * {@code @Service}, not serializable), which previously caused a real
- * {@code Task not serializable} failure on a live Dataproc run. A standalone
- * class with only serializable fields avoids that class of bug entirely.
+ * <p>{@code runtimeArgs}/{@code stageName}/{@code createdBy}/{@code executionDate} are held as serializable fields
+ * rather than read from {@code ScanEngineJobRunner} inside a lambda: referencing a runner instance field in a Spark
+ * closure would capture the (non-serializable, driver-only) runner and fail with {@code Task not serializable}.
  */
 public final class PipelineRecordAuditRowMapper implements MapPartitionsFunction<MessageProcessingResult, Row> {
 

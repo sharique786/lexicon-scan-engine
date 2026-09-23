@@ -51,9 +51,8 @@ public class ScanMessage implements Serializable {
      * @param metadata              {@code message.metadata} — currently just {@code start_time_utc}
      * @param content               the message body — header, subject, raw/clean text
      * @param attachments           zero or more attached files' extracted text
-     * @param processing            {@code run_date} (AVRO {@code date} logical type)/
-     *                              {@code run_hour} — used to resolve which AVRO partition
-     *                              this message was read from
+     * @param processing            {@code run_date} (AVRO {@code date} logical type)/{@code run_hour};
+     *                              {@code run_date} is copied to {@code pipeline_record_audit.run_date}
      * @param datasetPartitionValue {@code RuntimeArgs.DatasetDetail#datasetPartitionValue()} for
      *                              the dataset this message came from — populated by the reader
      *                              ({@code MessageAvroReader}), not present in the AVRO itself;

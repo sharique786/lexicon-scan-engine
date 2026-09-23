@@ -1,7 +1,7 @@
 package com.db.macs3.ecomms.spectre.spark;
 
 /**
- * Spark runtime/static config keys this job sets explicitly — see {@link ScanEngineJobRunner}.
+ * Spark runtime/static config keys this job sets explicitly — see {@link SparkSessionConfig}.
  */
 final class SparkConfigKeys {
 

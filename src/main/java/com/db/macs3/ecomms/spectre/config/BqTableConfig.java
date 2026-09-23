@@ -10,32 +10,19 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * The {@code spectre.engine.bigquery} section of the {@link DataprocConfig}
- * YAML file — the view this job reads plus every output/audit table it
- * writes.
+ * The {@code spectre.engine.bigquery} section of the {@link DataprocConfig} YAML file — the view this
+ * job reads plus every output/audit table it writes.
  *
- * <p><strong>Every {@code bq-output-*}/{@code bq-feature-master}/
- * {@code bq-language-feature-dec} field below is already the FULLY QUALIFIED
- * {@code <project>.<dataset>.<table>} identifier</strong> — unlike this
- * class's previous shape (a separate {@code project_id}/{@code output_dataset}
- * plus bare table names, concatenated at call time via a since-removed
- * {@code fullyQualifiedTable(String)} method). The upstream YAML now supplies
- * the complete identifier for each output table directly (see the sample in
- * {@code RuntimeArgs}/{@code DataprocConfig} class Javadoc), so callers
- * ({@code OutputTableWriter}) use these accessors verbatim as the Spark
- * BigQuery connector's {@code "table"} option — no further concatenation.
+ * <p>Every {@code bq-output-*} field is already the FULLY QUALIFIED {@code <project>.<dataset>.<table>}
+ * identifier, used verbatim as the Spark BigQuery connector's {@code "table"} option by
+ * {@code OutputTableWriter}. The VIEW is the exception: {@code bq-project}/{@code bq-dataset}/
+ * {@code bq-view-name} are three separate fields, and {@link #fullyQualifiedViewName()} builds the
+ * identifier.
  *
- * <p>The VIEW is the one exception: {@code bq-project}/{@code bq-dataset}/
- * {@code bq-view-name} remain three separate fields (matching the YAML), so
- * {@link #fullyQualifiedViewName()} still builds the identifier itself.
+ * <p>{@code bq-feature-master} and {@code bq-language-feature-dec} are carried so the config's full shape
+ * round-trips, but no class in this engine reads them.
  *
- * <p>{@code bq-feature-master} and {@code bq-language-feature-dec} are new
- * fields this YAML shape introduces that no class in this engine currently
- * reads — carried here so the config's full shape round-trips faithfully;
- * wiring them into an actual read path is out of scope for this change.
- *
- * <p>A plain class rather than a record, matching this project's other
- * pre-existing model classes.
+ * <p>A plain class rather than a record, matching this project's other model classes.
  */
 public final class BqTableConfig implements Serializable {
 

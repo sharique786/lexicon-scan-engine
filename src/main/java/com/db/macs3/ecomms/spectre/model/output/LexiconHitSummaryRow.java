@@ -8,40 +8,27 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * One row of {@code lexicon-hit-summary} — per-message summary of every
- * evaluated feature (regardless of type: standard Lexicon, Disclaimer, or
- * NoiseReduction) and which of its terms matched.
+ * One row of {@code lexicon-hit-summary} — per-message summary of every evaluated feature (standard Lexicon,
+ * Disclaimer or NoiseReduction) and which of its terms matched.
  *
  * <h2>One entry per evaluated FEATURE GROUP, not per sub-feature member</h2>
- * <p>{@link EvaluatedLexicon#getId}/{@link EvaluatedLexicon#getName} are the
- * view's {@code feature_id}/{@code feature_name} (confirmed) — which are
- * shared across every sub-feature member of a composite/NoiseReduction
- * group. {@link EvaluatedLexicon#getId} is a {@code Long} (INTEGER in the
- * delivered schema — was STRING in an earlier revision). One
- * {@link EvaluatedLexicon} entry is therefore built per
- * EVALUATED GROUP (see {@code DecisionTreeEvaluator}'s
- * {@code GroupEvaluationResult}), aggregating every member's own matched
- * terms into its {@link EvaluatedLexicon#getTermDtls} — each {@code term_id}
- * still identifies exactly which underlying lexicon (which member's
- * {@code body.lexiconName}) it came from, since {@code term_id} is
- * {@code <feature>::<index>}.
+ * <p>{@link EvaluatedLexicon#getId}/{@link EvaluatedLexicon#getName} are the view's {@code feature_id}/
+ * {@code feature_name}, shared by every sub-feature member of a composite/NoiseReduction group;
+ * {@link EvaluatedLexicon#getId} is a {@code Long} (INTEGER column). One {@link EvaluatedLexicon} entry is built
+ * per EVALUATED GROUP, aggregating every member's matched terms into {@link EvaluatedLexicon#getTermDtls}; each
+ * {@code term_id} ({@code <lexiconName>::<termNumber>}) still identifies which underlying lexicon it came from.
  *
- * <p>Only groups that were ACTUALLY evaluated appear — a NoiseReduction group
- * short-circuit means every later group (further NoiseReduction, the
- * Disclaimer group, all Lexicon groups) simply has no entry at all here,
- * since {@code DecisionTreeEvaluator} never evaluated them. A group that WAS
- * evaluated but matched nothing still appears, with
- * {@link EvaluatedLexicon#getRegexHitCount} {@code 0} and one placeholder
- * {@link TermDtl} ({@code term_id}/{@code term_regex_pattern}/{@code term_description}
- * {@code "N/A"}, {@link TermDtl#getRegexMatchHitCount} {@code 0}) — see
- * {@code OutputRowBuilder#buildSummaryRow}.
+ * <p>Only groups that were ACTUALLY evaluated appear — after a NoiseReduction short-circuit, every later group has
+ * no entry. A group that was evaluated but matched nothing still appears, with
+ * {@link EvaluatedLexicon#getRegexHitCount} {@code 0} and one placeholder {@link TermDtl}
+ * ({@code term_id}/{@code term_regex_pattern}/{@code term_description} {@code "N/A"},
+ * {@link TermDtl#getRegexMatchHitCount} {@code 0}) — see {@code OutputRowBuilder#buildSummaryRow}. Match counts
+ * are RAW (before disclaimer suppression).
  *
- * <p>Field order and NOT NULL/NULLABLE mode match the delivered BigQuery
- * schema verbatim (rechecked against the live table): {@code evaluated_lexicons}
- * precedes {@code dataset_partition_value}; {@link EvaluatedLexicon#getTotalTermsCount}/
- * {@link EvaluatedLexicon#getRegexHitCount}/{@link EvaluatedLexicon TermDtl#getRegexMatchHitCount}
- * are NULLABLE (hence boxed {@link Long}, not primitive {@code long}) even
- * though this engine always computes a real value for them today.
+ * <p>Field order and NOT NULL/NULLABLE mode match the BigQuery table: {@code evaluated_lexicons} precedes
+ * {@code dataset_partition_value}; {@link EvaluatedLexicon#getTotalTermsCount}/{@link EvaluatedLexicon#getRegexHitCount}/
+ * {@link TermDtl#getRegexMatchHitCount} are NULLABLE (hence boxed {@link Long}) though this engine always
+ * computes them.
  */
 public class LexiconHitSummaryRow implements Serializable {
 
@@ -179,7 +166,6 @@ public class LexiconHitSummaryRow implements Serializable {
 
         /**
          * @param id              the group's {@code feature_id} — INTEGER per the delivered schema
-         *                        (was STRING in an earlier revision)
          * @param name            the group's {@code feature_name}
          * @param totalTermsCount sum of every member's {@code feature_definition.body.totalTermsCount} —
          *                        NULLABLE per the delivered schema

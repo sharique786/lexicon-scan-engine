@@ -12,9 +12,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Parsed shape of {@code FeatureDecisionRow.getFeatureDefinitionJson} — the
- * {@code feature_definition} JSON column from
- * {@code vw_src_msg_lexicon_decision_mapping}.
+ * Parsed shape of {@code FeatureDecisionRow.getFeatureDefinitionJson} — the {@code feature_definition}
+ * JSON column of {@code vw_src_msg_lexicon_decision_mapping}.
  *
  * <pre>
  * {
@@ -33,31 +32,17 @@ import java.util.Objects;
  * }
  * </pre>
  *
- * <p>{@code body.lexiconName} (renamed from {@code body.feature} — a schema
- * change, not a rename this project chose) is the value that resolves BOTH
- * the {@code .hdb} filename to load AND the prefix of every {@code term_id}
- * this feature produces ({@code <body.lexiconName>::<index>}) — verbatim,
- * hyphens and all; it is never re-derived from {@code featureName}/
- * {@code featureId} or the view's own {@code feature_name}/
- * {@code features_to_apply} columns, which are independent, human-readable
- * labels only. {@code featureId} (root-level) and {@code body.id}/
- * {@code body.objectId} are carried through for completeness but are not
- * (yet) consumed by any scanning/output logic in this engine.
+ * <p>{@code body.lexiconName} resolves BOTH the {@code .zip} bundle to load AND the prefix of every
+ * {@code term_id} the feature produces ({@code <lexiconName>::<n>}), verbatim, hyphens and all. It is never
+ * re-derived from {@code featureName}/{@code featureId} or the view's {@code feature_name}/
+ * {@code lexicon_features_to_apply_name} columns, which are human-readable labels only. Root-level
+ * {@code featureId} and {@code body.id}/{@code body.objectId} are parsed but not used by any scanning or
+ * output logic.
  *
- * <h2>Schema change: {@code featureType} casing, {@code body.objectId} and {@code isNoiseReduction} types</h2>
- * <p>Three further, independent value/type changes on top of the ones above:
- * {@code featureType} now arrives lowercase ({@code "lexicon"}, was
- * {@code "Lexicon"} — a plain value change, the field stays {@code String});
- * {@code body.objectId} now arrives as a JSON string (was a JSON number —
- * this class's {@link Body#getObjectId()} is therefore {@code String}, not
- * {@code Integer}); and root-level {@code isNoiseReduction} now arrives as
- * the {@code "Y"}/{@code "N"} string convention used elsewhere in this
- * platform (was a JSON boolean — see {@link #getIsNoiseReduction()}).
- * {@code body.scope}'s values ({@code "Message Body"}/{@code "Attachment"}/
- * {@code "Subject"}) are unchanged in shape (still a {@code List<String>})
- * but are — and, per {@link Body#hasScope}, always have been — matched
- * case-insensitively against a scanned area, since upstream data is known to
- * mix casing (e.g. {@code "subject"} vs {@code "Message Body"}).
+ * <p>Value conventions: {@code featureType} is lowercase ({@code "lexicon"}), {@code body.objectId} is a JSON
+ * string, and {@code isNoiseReduction} is the {@code "Y"}/{@code "N"} string (see {@link #isNoiseReductionFlagSet()}).
+ * {@code body.scope} entries ({@code "Message Body"}/{@code "Attachment"}/{@code "Subject"}) are matched
+ * case-insensitively against a scanned area by {@link Body#hasScope}, since upstream casing is mixed.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeatureDefinition implements Serializable {

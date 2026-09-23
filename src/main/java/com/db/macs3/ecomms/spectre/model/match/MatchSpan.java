@@ -5,12 +5,10 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * One Hyperscan match, reported at ORIGINAL-text character coordinates —
- * never at HTML-stripped-text coordinates. See
- * {@code HtmlStrippingService} for the offset map that makes this possible:
- * Hyperscan scans the stripped text, but every match reported here has
- * already been translated back to where that text actually sits in the
- * message as it was originally written.
+ * One match, reported at ORIGINAL-text character coordinates — never at HTML-stripped-text coordinates. Hyperscan
+ * scans the stripped text and {@code HtmlStrippingService}'s offset map translates each match back to where it sits
+ * in the message as written; matches verified in Java ({@code ResolvedPatternAreaEvaluator}) are found directly in the
+ * original text.
  */
 public class MatchSpan implements Serializable {
 

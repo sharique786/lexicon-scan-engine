@@ -6,10 +6,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Every match found for ONE term (one Hyperscan expression within one
- * feature's {@code .hdb} database) across a single message — potentially
- * spanning subject, message body, and/or multiple attachments, and
- * potentially more than one occurrence within any of those.
+ * Every match found for ONE lexicon term across a single message — potentially spanning the subject, the message
+ * body and several attachments, and more than one occurrence within any of them. A term is one entry of a feature's
+ * compile-results JSON; it can be backed by one or several Hyperscan expressions, or verified in Java (see
+ * {@code FeatureScanOrchestrator}).
  */
 public class TermMatchResult implements Serializable {
 
@@ -22,9 +22,9 @@ public class TermMatchResult implements Serializable {
     private List<AreaMatch> matches;
 
     /**
-     * @param termId           {@code <body.lexiconName>::<index>} — see
+     * @param termId           {@code <body.lexiconName>::<termNumber>} — see
      *                         {@code TermIdBuilder}
-     * @param termRegexPattern the compiled Hyperscan pattern text for this term,
+     * @param termRegexPattern the term's readable pattern text (its {@code resolvedPatterns}, else its regex(es) joined),
      *                         for {@code lexicon-hit-summary.term_dtls.term_regex_pattern}
      * @param matches          every occurrence found, tagged by area — non-empty
      *                         (a term with zero matches is simply absent from a
@@ -35,9 +35,9 @@ public class TermMatchResult implements Serializable {
     }
 
     /**
-     * @param termId           {@code <body.lexiconName>::<index>} — see
+     * @param termId           {@code <body.lexiconName>::<termNumber>} — see
      *                         {@code TermIdBuilder}
-     * @param termRegexPattern the compiled Hyperscan pattern text for this term,
+     * @param termRegexPattern the term's readable pattern text (its {@code resolvedPatterns}, else its regex(es) joined),
      *                         for {@code lexicon-hit-summary.term_dtls.term_regex_pattern}
      * @param termDescription  the Compile Service's own {@code termDescription} — the original,
      *                         analyst-authored lexicon term text, verbatim, for

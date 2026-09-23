@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  * {@link HtmlStrippingService.OffsetMap} that maps every position in that
  * concatenated text back to its real position in {@code raw_text}. The
  * caller then runs {@link HtmlStrippingService#stripExtracted} over the
- * result, which performs the SAME tag/whitespace stripping {@link HtmlStrippingService#strip}
+ * result, which performs the SAME tag/whitespace/comma normalisation {@link HtmlStrippingService#strip}
  * always has, but composes this extraction's own offset map with the
  * stripping pass's own, so a Hyperscan match's position resolves straight
  * back to {@code raw_text} — never to this class's own intermediate,
