@@ -367,8 +367,12 @@ public class TermExpressionMetadata implements Serializable {
         boolean requiresExclusion = Boolean.TRUE.equals(termResult.getRequiresExclusionCheck());
 
         ResolvedPatternTree tree = null;
-        boolean inlineProximity = isInlineCompiledProximity(termResult, leaves, requiresExclusion);
-        if (!inlineProximity && termResult.getResolvedPatterns() != null && !termResult.getResolvedPatterns().isBlank()) {
+        boolean inlineAndNot = isInlineCompiledAndNot(feature, termResult, leaves, requiresExclusion);
+        boolean inlineProximity = inlineAndNot || isInlineCompiledProximity(termResult, leaves, requiresExclusion);
+        if (inlineAndNot) {
+            validateAndNotShapeHasNoNativeCombination(feature, termResult);
+        } else if (!inlineProximity && termResult.getResolvedPatterns() != null
+                && !termResult.getResolvedPatterns().isBlank()) {
             List<String> treeLeaves = withExclusionLeaves(leaves, termResult.getExclusionRegex());
             tree = ResolvedPatternTree.build(feature, termResult.getTermId(), termResult.getResolvedPatterns(), treeLeaves);
             validateShapeAgreement(feature, termResult, tree, requiresExclusion);
@@ -406,6 +410,37 @@ public class TermExpressionMetadata implements Serializable {
                 && (termResult.getExclusionRegex() == null || termResult.getExclusionRegex().isEmpty())
                 && termResult.getHyperscanExpressionId() != null
                 && PROXIMITY_MARKER.matcher(resolved).find();
+    }
+
+    /**
+     * True for an AND NOT term whose required side and excluded side were EACH compiled into ONE
+     * Hyperscan regex — the {@code NEAR}/{@code FOLLOWEDBY} proximity (and any OR groups) baked inline,
+     * exactly as {@link #isInlineCompiledProximity} describes for a plain term — while
+     * {@code resolvedPatterns} still renders the readable operator text. Recognised by
+     * {@code resolvedPatterns}' AND NOT shape implying MORE leaves than the term provides, with exactly one
+     * {@code regexPattern} entry + one {@code requiredExpressionIds} entry and exactly one
+     * {@code exclusionRegex} entry + one {@code excludedExpressionIds} entry. Hyperscan verifies each side
+     * itself, so no {@link ResolvedPatternTree} is built (it could never be zipped — its shape wants more
+     * leaves than exist) and the term resolves through the ordinary cross-area id-presence AND NOT path.
+     * A mixed term (one side decomposed into several leaves, the other inline) is NOT recognised and still
+     * fails loudly in {@link ResolvedPatternTree#build}.
+     */
+    private static boolean isInlineCompiledAndNot(String feature, TermResultJson termResult, List<String> leaves,
+                                                  boolean requiresExclusion) {
+        String resolved = termResult.getResolvedPatterns();
+        if (!requiresExclusion || resolved == null || resolved.isBlank()
+                || ResolvedPatternTree.findTopLevel(resolved.trim(), ResolvedPatternTree.AND_NOT_MARKER) < 0) {
+            return false;
+        }
+        if (leaves == null || leaves.size() != 1
+                || termResult.getExclusionRegex() == null || termResult.getExclusionRegex().size() != 1
+                || termResult.getRequiredExpressionIds() == null || termResult.getRequiredExpressionIds().size() != 1
+                || termResult.getExcludedExpressionIds() == null || termResult.getExcludedExpressionIds().size() != 1) {
+            return false;
+        }
+        ResolvedPatternTree.ShapeNode shape =
+                ResolvedPatternTree.parseShape(feature, termResult.getTermId(), resolved.trim());
+        return ResolvedPatternTree.countShapeLeaves(shape) > 2;
     }
 
     private static class RequiredExcludedIds implements Serializable {

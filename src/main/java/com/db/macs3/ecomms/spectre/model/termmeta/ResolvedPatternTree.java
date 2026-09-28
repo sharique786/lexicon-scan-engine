@@ -680,6 +680,28 @@ public sealed interface ResolvedPatternTree {
     }
 
     /**
+     * Number of {@code regexPattern} entries {@code shape} would consume during {@link #zip} — i.e.
+     * the leaf count {@code resolvedPatterns}' text implies, before any zipping is attempted.
+     */
+    static int countShapeLeaves(ShapeNode shape) {
+        if (shape instanceof ShapeNode.LeafShape) {
+            return 1;
+        }
+        if (shape instanceof ShapeNode.ChainShape chain) {
+            int total = 0;
+            for (ShapeNode element : chain.getElementShapes()) {
+                total += countShapeLeaves(element);
+            }
+            return total;
+        }
+        if (shape instanceof ShapeNode.AndNotShape andNot) {
+            return countShapeLeaves(andNot.getRequired()) + countShapeLeaves(andNot.getExcluded());
+        }
+        ShapeNode.AndShape and = (ShapeNode.AndShape) shape;
+        return countShapeLeaves(and.getLeft()) + countShapeLeaves(and.getRight());
+    }
+
+    /**
      * Total leaf count across a whole tree, recursively — used to validate {@code patternMapping}'s
      * id count against a tree that may be a plain {@link Chain} (whose own elements may themselves be
      * nested {@link Chain}s — see that class's Javadoc "Nested chain elements"), an {@link AndNot}, or

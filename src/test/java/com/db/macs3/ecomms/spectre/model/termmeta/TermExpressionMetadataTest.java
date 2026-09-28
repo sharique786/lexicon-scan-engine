@@ -599,6 +599,117 @@ class TermExpressionMetadataTest {
     }
 
     @Nested
+    @DisplayName("Inline-compiled AND NOT terms — each side compiled into ONE regex, resolvedPatterns still in operator form")
+    class InlineCompiledAndNotTerms {
+
+        private String realTermsJson() throws java.io.IOException {
+            try (java.io.InputStream in = getClass().getResourceAsStream("/inline-and-not-terms.json")) {
+                assertThat(in).as("test resource inline-and-not-terms.json").isNotNull();
+                return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+        }
+
+        /**
+         * REGRESSION — the three production failures: {@code lexicon_research_dws_1::2},
+         * {@code lexicon_portuguese_top30_S2T::13} and {@code lexicon_research_4::18}. Each side of the AND NOT
+         * arrives as ONE inline regex (one {@code regexPattern} + one {@code exclusionRegex} entry) while
+         * {@code resolvedPatterns} still names 3-5 leaves, so zipping threw "resolvedPatterns' shape implies
+         * more leaves than regexPattern/translatedPattern provides" and failed the whole feature's load.
+         */
+        @Test
+        @DisplayName("REGRESSION: the three real terms parse without throwing; no tree, resolved by required/excluded ids")
+        void realInlineAndNotTermsParseWithoutTree() throws Exception {
+            TermExpressionMetadata metadata = TermExpressionMetadata.parse(FEATURE, realTermsJson());
+
+            for (int[] expected : new int[][]{{2, 7, 8}, {13, 54, 55}, {18, 20, 21}}) {
+                TermEntry entry = metadata.termByAnyExpressionId(expected[1]);
+                assertThat(entry).isNotNull();
+                assertThat(entry.getTermNumber()).isEqualTo(expected[0]);
+                assertThat(entry.getResolvedPatternTree()).isNull();
+                assertThat(entry.requiresPerAreaEvaluation()).isFalse();
+                assertThat(entry.isRequiresExclusionCheck()).isTrue();
+                assertThat(entry.getRequiredExpressionIds()).containsExactly(expected[1]);
+                assertThat(entry.getExcludedExpressionIds()).containsExactly(expected[2]);
+                assertThat(metadata.termByAnyExpressionId(expected[2])).isSameAs(entry);
+                assertThat(entry.getTermRegexPattern()).contains(" AND NOT (");
+                assertThat(entry.getTermDescription()).isNotBlank();
+            }
+        }
+
+        @Test
+        @DisplayName("Only the required side inline (shape wants 3 leaves, term provides 1 + 1): parses, no tree")
+        void oneSideInlineParses() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::5", "compilationStatus": "PASS",
+                   "regexPattern": ["req(?:\\\\s+\\\\S+){0,3}\\\\s+leaf"], "exclusionRegex": ["excl"],
+                   "requiresExclusionCheck": true,
+                   "resolvedPatterns": "req NEAR{3} leaf AND NOT (excl)",
+                   "requiredExpressionIds": [1], "excludedExpressionIds": [2], "patternMapping": "(1&!2)"}
+                ]}
+                """.formatted(FEATURE);
+
+            TermEntry entry = TermExpressionMetadata.parse(FEATURE, json).termByAnyExpressionId(1);
+
+            assertThat(entry.getResolvedPatternTree()).isNull();
+            assertThat(entry.getExcludedExpressionIds()).containsExactly(2);
+        }
+
+        @Test
+        @DisplayName("An inline AND NOT term carrying a native hyperscanExpressionId still throws")
+        void inlineAndNotWithNativeCombinationIdThrows() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::5", "compilationStatus": "PASS",
+                   "regexPattern": ["a(?:\\\\s+\\\\S+){0,3}\\\\s+b"], "exclusionRegex": ["c"],
+                   "requiresExclusionCheck": true, "resolvedPatterns": "a NEAR{3} b AND NOT (c)",
+                   "requiredExpressionIds": [1], "excludedExpressionIds": [2], "hyperscanExpressionId": 9}
+                ]}
+                """.formatted(FEATURE);
+
+            assertThatThrownBy(() -> TermExpressionMetadata.parse(FEATURE, json))
+                    .isInstanceOf(TermExpressionMetadata.TermMetadataParseException.class)
+                    .hasMessageContaining("hyperscanExpressionId");
+        }
+
+        @Test
+        @DisplayName("An inline AND NOT term whose patternMapping references the wrong ids still throws")
+        void inlineAndNotWithMismatchedPatternMappingThrows() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::5", "compilationStatus": "PASS",
+                   "regexPattern": ["a(?:\\\\s+\\\\S+){0,3}\\\\s+b"], "exclusionRegex": ["c"],
+                   "requiresExclusionCheck": true, "resolvedPatterns": "a NEAR{3} b AND NOT (c)",
+                   "requiredExpressionIds": [1], "excludedExpressionIds": [2], "patternMapping": "(1&!99)"}
+                ]}
+                """.formatted(FEATURE);
+
+            assertThatThrownBy(() -> TermExpressionMetadata.parse(FEATURE, json))
+                    .isInstanceOf(TermExpressionMetadata.TermMetadataParseException.class)
+                    .hasMessageContaining("patternMapping");
+        }
+
+        @Test
+        @DisplayName("A mixed term (required side decomposed into 3 leaves, excluded side inline) is NOT treated as "
+                + "inline — still fails loudly rather than silently dropping the proximity check")
+        void mixedDecomposedAndInlineStillThrows() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::5", "compilationStatus": "PASS",
+                   "regexPattern": ["a", "b", "c"], "exclusionRegex": ["d(?:\\\\s+\\\\S+){0,2}\\\\s+e"],
+                   "requiresExclusionCheck": true,
+                   "resolvedPatterns": "a NEAR{2} b NEAR{2} c AND NOT (d NEAR{2} e)",
+                   "requiredExpressionIds": [1, 2, 3], "excludedExpressionIds": [4]}
+                ]}
+                """.formatted(FEATURE);
+
+            assertThatThrownBy(() -> TermExpressionMetadata.parse(FEATURE, json))
+                    .isInstanceOf(TermExpressionMetadata.TermMetadataParseException.class)
+                    .hasMessageContaining("shape implies more leaves");
+        }
+    }
+
+    @Nested
     @DisplayName("Plain AND terms — a NEAR/FOLLOWEDBY chain plainly ANDed with a further leaf, not AND NOT")
     class PlainAndTerms {
 

@@ -1502,6 +1502,75 @@ class FeatureScanOrchestratorTest {
         }
     }
 
+    /**
+     * REGRESSION — the three real inline-compiled AND NOT terms (see {@code inline-and-not-terms.json}): each
+     * side is ONE regex compiled to its own plain, reportable Hyperscan id; a hit needs the required id
+     * present and the excluded id absent. Real Hyperscan, real regexes from the Compile Service's JSON.
+     */
+    @Test
+    @DisplayName("REGRESSION inline-compiled AND NOT terms (dws_1::2, portuguese::13, research_4::18): load, "
+                 + "hit when only the required side matches, suppressed when the excluded side matches too")
+    void inlineCompiledAndNotTerms_hitOnlyWhenExcludedSideAbsent() throws Exception {
+        String feature = "lex_inline-andnot-1";
+        String json;
+        try (var in = getClass().getResourceAsStream("/inline-and-not-terms.json")) {
+            json = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        EnumSet<ExpressionFlag> flags = EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS);
+        List<Expression> expressions = new java.util.ArrayList<>();
+        for (var term : new com.fasterxml.jackson.databind.ObjectMapper().readTree(json).get("results")) {
+            expressions.add(new Expression(term.get("regexPattern").get(0).asText(), flags,
+                    term.get("requiredExpressionIds").get(0).asInt()));
+            expressions.add(new Expression(term.get("exclusionRegex").get(0).asText(), flags,
+                    term.get("excludedExpressionIds").get(0).asInt()));
+        }
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_inline-andnot-1.zip",
+                compileAndSerialize(expressions.toArray(new Expression[0])), json);
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
+            java.util.function.Function<String, Set<String>> termIdsFor = text -> {
+                ScanMessage message = new ScanMessage("msg", new MessageSource("chat", "src", "sys", "conv-1"),
+                        new MessageContent(null, text, null, null), List.of(),
+                        new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+                Set<String> ids = new HashSet<>();
+                orchestrator.scannerFor(message).scan(decisionRow).forEach(r -> ids.add(r.getTermId()));
+                return ids;
+            };
+
+            // lexicon_research_dws_1::2 — "will change … rating" AND NOT the same NEAR{1} "date"
+            assertThat(termIdsFor.apply("The analyst will change the rating next week"))
+                    .containsExactly(feature + "::2");
+            assertThat(termIdsFor.apply("The analyst will change the rating date next week"))
+                    .as("excluded: rating followed by 'date' within 1 word").isEmpty();
+            assertThat(termIdsFor.apply("Update: date will change the rating"))
+                    .as("excluded: 'date' before the required chain").isEmpty();
+            assertThat(termIdsFor.apply("The analyst will change one two three four rating"))
+                    .as("required gap of 4 words exceeds FOLLOWEDBY{2}").isEmpty();
+            assertThat(termIdsFor.apply("Please update the date")).isEmpty();
+
+            // lexicon_portuguese_top30_S2T::13 — "entre nos / entre voce e eu" AND NOT (… FOLLOWEDBY{2} falar …)
+            assertThat(termIdsFor.apply("isto fica entre nos"))
+                    .containsExactly(feature + "::13");
+            assertThat(termIdsFor.apply("entre nos vamos falar disso"))
+                    .as("excluded: 'entre nos' followed by 'falar' within 2 words").isEmpty();
+            assertThat(termIdsFor.apply("entre nos um, dois, tres, quatro falar"))
+                    .as("gap over FOLLOWEDBY{2}: not excluded, so still a hit").containsExactly(feature + "::13");
+            assertThat(termIdsFor.apply("entre voce e eu vamos falar disso"))
+                    .as("excluded: 'entre voce e eu' followed by 'falar' within 2 words").isEmpty();
+            assertThat(termIdsFor.apply("vamos falar disso")).isEmpty();
+
+            // lexicon_research_4::18 — (Against|Contrary to|In opposition to) NEAR{3} Opinion AND NOT "contrary to popular opinion"
+            assertThat(termIdsFor.apply("He voted against the majority opinion"))
+                    .containsExactly(feature + "::18");
+            assertThat(termIdsFor.apply("The opinion in opposition to the plan"))
+                    .as("NEAR is bidirectional").containsExactly(feature + "::18");
+            assertThat(termIdsFor.apply("Contrary to popular opinion, prices will rise"))
+                    .as("excluded phrase present").isEmpty();
+            assertThat(termIdsFor.apply("against one two three four opinion")).isEmpty();
+        }
+    }
+
     @Test
     @DisplayName("scope=[SUBJECT] (uppercase) does NOT select MESSAGE_BODY or ATTACHMENT — case-insensitivity "
                  + "only widens matching for the scope's own listed values, it doesn't select every area")
