@@ -3,7 +3,9 @@ package com.db.macs3.ecomms.spectre.model.feature;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.io.Serial;
@@ -17,20 +19,19 @@ import java.util.Objects;
  *
  * <pre>
  * {
- *   "body": {
- *     "id": 1,
- *     "lexiconName": "lexicon_market_cond_4",
- *     "objectId": "2",
- *     "scope": ["Message Body", "Attachment", "Subject"],
- *     "totalTermsCount": 17,
- *     "minimumHits": 2
- *   },
+ *   "body": "{\"id\": 1, \"lexiconName\": \"lexicon_market_cond_4\", \"objectId\": \"2\",
+ *            \"scope\": [\"Message Body\", \"Attachment\", \"Subject\"], \"totalTermsCount\": 17, \"minimumHits\": 2}",
  *   "featureId": "2",
  *   "featureName": "lexicon_market_cond_4",
  *   "featureType": "lexicon",
  *   "isNoiseReduction": "N"
  * }
  * </pre>
+ *
+ * <p>{@code body} is a JSON-encoded STRING whose content is the {@link Body} object ({@code id},
+ * {@code lexiconName}, {@code objectId}, {@code scope}, {@code totalTermsCount}, {@code minimumHits}).
+ * {@link #parse} unwraps it; a {@code body} that is already a nested JSON object (the previous shape) is
+ * still accepted unchanged.
  *
  * <p>{@code body.lexiconName} resolves BOTH the {@code .zip} bundle to load AND the prefix of every
  * {@code term_id} the feature produces ({@code <lexiconName>::<n>}), verbatim, hyphens and all. It is never
@@ -287,7 +288,14 @@ public class FeatureDefinition implements Serializable {
         }
         FeatureDefinition parsed;
         try {
-            parsed = MAPPER.readValue(rawJson, FeatureDefinition.class);
+            JsonNode root = MAPPER.readTree(rawJson);
+            // "body" is delivered as a JSON-encoded STRING (see class Javadoc); unwrap it into a real
+            // object node first. An already-nested object "body" passes through untouched.
+            if (root instanceof ObjectNode rootObject && rootObject.get("body") != null
+                    && rootObject.get("body").isTextual()) {
+                rootObject.set("body", MAPPER.readTree(rootObject.get("body").asText()));
+            }
+            parsed = MAPPER.treeToValue(root, FeatureDefinition.class);
         } catch (IOException e) {
             throw new FeatureDefinitionParseException(
                     "Could not parse feature_definition JSON: " + e.getMessage(), e);

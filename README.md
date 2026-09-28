@@ -160,9 +160,10 @@ process_id = '<process_id>' AND feature_partition_value = '<feature_partition_va
 
 ```json
 { "featureId": "2", "featureName": "lexicon_market_cond_4", "featureType": "lexicon", "isNoiseReduction": "N",
-  "body": { "id": 1, "lexiconName": "lexicon_market_cond_4", "objectId": "2",
-            "scope": ["Message Body", "Attachment", "Subject"], "totalTermsCount": 17, "minimumHits": 2 } }
+  "body": "{\"id\": 1, \"lexiconName\": \"lexicon_market_cond_4\", \"objectId\": \"2\", \"scope\": [\"Message Body\", \"Attachment\", \"Subject\"], \"totalTermsCount\": 17, \"minimumHits\": 2}" }
 ```
+
+`body` is a JSON-encoded **string**; `FeatureDefinition.parse` unwraps it into `FeatureDefinition.Body` (a nested-object `body` is still accepted).
 
 `body.lexiconName` names the zip bundle to load **and** prefixes every `term_id` (`<lexiconName>::<n>`), verbatim, hyphens included. `body.scope` selects the areas to scan (§7). `body.totalTermsCount` fills `total_terms_count` in `lexicon-hit-summary`. `minimumHits` is parsed but not used for the decision.
 

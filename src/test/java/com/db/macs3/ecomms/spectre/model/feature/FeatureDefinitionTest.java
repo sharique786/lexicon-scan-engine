@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.model.feature;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,37 +20,50 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("FeatureDefinition")
 class FeatureDefinitionTest {
 
-    private static final String SAMPLE_JSON =
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private static final String SAMPLE_BODY =
             "{"
-            + "  \"body\": {"
             + "    \"id\": 1,"
             + "    \"lexiconName\": \"lexicon_market_cond-1\","
             + "    \"objectId\": \"2\","
             + "    \"totalTermsCount\": 10,"
             + "    \"minimumHits\": 3,"
             + "    \"scope\": [\"Message Body\", \"Attachment\"]"
-            + "  },"
-            + "  \"featureId\": \"1\","
-            + "  \"featureName\": \"lexicon_market_cond_1\","
-            + "  \"featureType\": \"lexicon\","
-            + "  \"isNoiseReduction\": \"N\""
-            + "}";
+            + "  }";
 
-    private static final String MIXED_CASE_SCOPE_JSON =
+    private static final String MIXED_CASE_SCOPE_BODY =
             "{"
-            + "  \"body\": {"
             + "    \"id\": 2,"
             + "    \"lexiconName\": \"lexicon_market_cond-2\","
             + "    \"objectId\": \"3\","
             + "    \"totalTermsCount\": 20,"
             + "    \"minimumHits\": 5,"
             + "    \"scope\": [\"subject\", \"Message Body\"]"
-            + "  },"
-            + "  \"featureId\": \"2\","
-            + "  \"featureName\": \"lexicon_market_cond_2\","
-            + "  \"featureType\": \"lexicon\","
-            + "  \"isNoiseReduction\": \"Y\""
-            + "}";
+            + "  }";
+
+    /** The current view shape: {@code body} is a JSON-encoded STRING holding the body object. */
+    private static String withStringBody(String bodyJson, String featureId, String featureName, String isNoiseReduction) {
+        try {
+            return "{\"body\": " + MAPPER.writeValueAsString(bodyJson)
+                    + ", \"featureId\": \"" + featureId + "\", \"featureName\": \"" + featureName + "\","
+                    + " \"featureType\": \"lexicon\", \"isNoiseReduction\": \"" + isNoiseReduction + "\"}";
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** The previous view shape: {@code body} is a nested JSON object. */
+    private static String withObjectBody(String bodyJson, String featureId, String featureName, String isNoiseReduction) {
+        return "{\"body\": " + bodyJson
+                + ", \"featureId\": \"" + featureId + "\", \"featureName\": \"" + featureName + "\","
+                + " \"featureType\": \"lexicon\", \"isNoiseReduction\": \"" + isNoiseReduction + "\"}";
+    }
+
+    private static final String SAMPLE_JSON = withStringBody(SAMPLE_BODY, "1", "lexicon_market_cond_1", "N");
+
+    private static final String MIXED_CASE_SCOPE_JSON =
+            withStringBody(MIXED_CASE_SCOPE_BODY, "2", "lexicon_market_cond_2", "Y");
 
     @Nested
     @DisplayName("parsing the sample View Data JSON")
@@ -93,6 +108,74 @@ class FeatureDefinitionTest {
         void parsesScope() {
             FeatureDefinition fd = FeatureDefinition.parse(SAMPLE_JSON);
             assertThat(fd.getBody().getScope()).containsExactly("Message Body", "Attachment");
+        }
+    }
+
+    @Nested
+    @DisplayName("body delivered as a JSON-encoded string")
+    class StringBody {
+
+        @Test
+        @DisplayName("the literal string-body shape from the view parses into FeatureDefinition.Body")
+        void parsesLiteralStringBody() {
+            String json = "{\"body\": \"{\\\"id\\\": 1, \\\"lexiconName\\\": \\\"lexicon_market_cond-1\\\", "
+                    + "\\\"objectId\\\": \\\"2\\\", \\\"totalTermsCount\\\": 10, \\\"minimumHits\\\": 3, "
+                    + "\\\"scope\\\": [\\\"Message Body\\\", \\\"Attachment\\\"]}\", "
+                    + "\"featureId\": \"1\", \"featureName\": \"lexicon_market_cond_1\", "
+                    + "\"featureType\": \"lexicon\", \"isNoiseReduction\": \"N\"}";
+
+            FeatureDefinition fd = FeatureDefinition.parse(json);
+
+            assertThat(fd.getFeatureId()).isEqualTo("1");
+            assertThat(fd.getFeatureName()).isEqualTo("lexicon_market_cond_1");
+            assertThat(fd.getFeatureType()).isEqualTo("lexicon");
+            assertThat(fd.isNoiseReductionFlagSet()).isFalse();
+            assertThat(fd.getBody().getId()).isEqualTo(1);
+            assertThat(fd.getBody().getLexiconName()).isEqualTo("lexicon_market_cond-1");
+            assertThat(fd.getBody().getObjectId()).isEqualTo("2");
+            assertThat(fd.getBody().getTotalTermsCount()).isEqualTo(10);
+            assertThat(fd.getBody().getMinimumHits()).isEqualTo(3);
+            assertThat(fd.getBody().getScope()).containsExactly("Message Body", "Attachment");
+        }
+
+        @Test
+        @DisplayName("string body and the previous nested-object body parse to equal FeatureDefinitions")
+        void stringAndObjectBodiesAreEquivalent() {
+            FeatureDefinition fromString = FeatureDefinition.parse(SAMPLE_JSON);
+            FeatureDefinition fromObject =
+                    FeatureDefinition.parse(withObjectBody(SAMPLE_BODY, "1", "lexicon_market_cond_1", "N"));
+
+            assertThat(fromString).isEqualTo(fromObject);
+        }
+
+        @Test
+        @DisplayName("unknown fields inside the string body are ignored")
+        void ignoresUnknownBodyFields() {
+            String body = SAMPLE_BODY.replace("\"id\": 1,", "\"id\": 1, \"somethingNew\": true,");
+            FeatureDefinition fd = FeatureDefinition.parse(withStringBody(body, "1", "x", "N"));
+            assertThat(fd.getBody().getLexiconName()).isEqualTo("lexicon_market_cond-1");
+        }
+
+        @Test
+        @DisplayName("a string body without lexiconName throws the missing body.lexiconName error")
+        void stringBodyWithoutLexiconNameThrows() {
+            assertThatThrownBy(() -> FeatureDefinition.parse(withStringBody("{\"id\": 1}", "1", "x", "N")))
+                    .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class)
+                    .hasMessageContaining("body.lexiconName");
+        }
+
+        @Test
+        @DisplayName("a string body that is not valid JSON throws FeatureDefinitionParseException")
+        void malformedStringBodyThrows() {
+            assertThatThrownBy(() -> FeatureDefinition.parse(withStringBody("not json {{{", "1", "x", "N")))
+                    .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class);
+        }
+
+        @Test
+        @DisplayName("a blank string body throws the missing body.lexiconName error")
+        void blankStringBodyThrows() {
+            assertThatThrownBy(() -> FeatureDefinition.parse(withStringBody("", "1", "x", "N")))
+                    .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class);
         }
     }
 
@@ -184,7 +267,8 @@ class FeatureDefinitionTest {
         @Test
         @DisplayName("hasScope returns false when the scope array itself is empty")
         void returnsFalseForEmptyScope() {
-            String json = SAMPLE_JSON.replace("[\"Message Body\", \"Attachment\"]", "[]");
+            String json = withStringBody(SAMPLE_BODY.replace("[\"Message Body\", \"Attachment\"]", "[]"),
+                    "1", "lexicon_market_cond_1", "N");
             FeatureDefinition fd = FeatureDefinition.parse(json);
             assertThat(fd.getBody().hasScope("Message Body")).isFalse();
         }
