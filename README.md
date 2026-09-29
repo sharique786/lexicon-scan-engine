@@ -448,7 +448,7 @@ All tables are written in append mode through the Spark BigQuery connector; this
 | `lexicon-hit-unrestricted` | Same, unrestricted source only | Identical shape, split purely by AVRO subfolder |
 | `feature-hit-summary` | One row per message | `features[]`: `id`, `name`, `type`, `is_noise_reduction`, `hit_status` for every evaluated group, plus `sub_features[]` (`type`, `name`, `hit_status`) for multi-member groups; `feature_hit_type` from the view's `feature_tagging_type` |
 | `pipeline_record_audit` | One row per message, **success and failure** | `status` `SUCCESS`/`FAILED`, `return_code` 0/1, `error_message`, `record_id` = `message_id`, `source_name`, `sent_date`, `run_date`. De-duplicated on `record_id`/`stage_name`/`execution_date`/`pipeline_exec_id`. Other columns belong to stages this job does not run and are left null/0 |
-| `pipeline_stage_audit` | Two rows per run | `IN_PROGRESS` at start, then `SUCCESS` or `FAILED` (with `error_message`) |
+| `pipeline_stage_audit` | Two rows per run | `IN_PROGRESS` at start (`input_record_count`/`output_record_count` null — not known yet), then `SUCCESS` or `FAILED` (with `error_message`) with `input_record_count` = unique `message_id` count from the BigQuery view and `output_record_count` = number of messages saved to `lexicon-hit-summary` |
 
 Each per-message table also carries `message_id`, `process_id`, `pipeline_exec_id`, `dataset_partition_value`, `created_by`, `created_ts`.
 

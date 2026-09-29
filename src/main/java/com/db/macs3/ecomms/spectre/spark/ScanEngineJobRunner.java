@@ -14,6 +14,7 @@ import com.db.macs3.ecomms.spectre.gcs.HyperscanPathResolver;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.model.output.PipelineStageAuditRow;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
@@ -133,37 +134,36 @@ public class ScanEngineJobRunner {
         log.info("Job starting: processId={}, pipelineExecId={}, policyEngineId={}",
                 runtimeArgs.processId(), runtimeArgs.pipelineExecId(), runtimeArgs.policyEngineId());
         writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, null,
-                BqColumns.JobStatus.IN_PROGRESS, null, null);
+                BqColumns.JobStatus.IN_PROGRESS, null, null, null, null);
 
+        RunStats stats = new RunStats();
         try {
-            runPipeline(sparkSession, runtimeArgs, tableConfig, dataprocConfig);
+            runPipeline(sparkSession, runtimeArgs, tableConfig, dataprocConfig, stats);
             Instant jobEnd = Instant.now();
             log.info("Job completed successfully in {}ms", Duration.between(jobStart, jobEnd).toMillis());
             writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, jobEnd,
-                    BqColumns.JobStatus.SUCCESS, null, null);
+                    BqColumns.JobStatus.SUCCESS, null, null, stats.inputRecordCount, stats.outputRecordCount);
         } catch (Exception e) {
             Instant jobEnd = Instant.now();
             log.error("Job failed after {}ms: {}", Duration.between(jobStart, jobEnd).toMillis(), e.getMessage(), e);
             writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, jobEnd,
-                    BqColumns.JobStatus.FAILED, 0, e.toString());
+                    BqColumns.JobStatus.FAILED, 0, e.toString(), stats.inputRecordCount, stats.outputRecordCount);
             throw e;
         }
     }
 
     private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig,
-                             DataprocConfig dataprocConfig) {
+                             DataprocConfig dataprocConfig, RunStats stats) {
 
-        // 1. Resolve the Hyperscan base path — one GCS listing call total for this whole run.
+        // Resolve the Hyperscan base path — one GCS listing call total for this whole run.
         DataprocConfig.HyperscanGcsConfig hyperscanConfig = dataprocConfig.hyperscan();
         String hyperscanBasePath = runStage("resolve Hyperscan base path", () -> HyperscanPathResolver.resolveBasePath(
                 hyperscanConfig.hdbGcsBucket(), hyperscanConfig.hdbGcsPrefix(), runtimeArgs.policyEngineId(),
                 gcsClient::listImmediateChildDirectories));
         log.info("Hyperscan base path for this run: {}", hyperscanBasePath);
 
-        // 2 + 3. Read the view (one query covering every dataset_details entry), then resolve every
-        // DISTINCT feature referenced to its .zip bundle path. collectAsList is the stage's real Spark
-        // action (.cache() alone does not materialise); the list is bounded by feature count, not
-        // message count, so collecting it to the driver is safe.
+        // Read the view (one query covering every dataset_details entry), then resolve every
+        // DISTINCT feature referenced to its .zip bundle path. collectAsList is the stage's real Spark action.
         Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(spark, tableConfig, runtimeArgs).cache();
         Map<String, String> featureToZipPath = runStage("read view + resolve distinct features", () -> {
             List<String> distinctFeatureDefJson = viewRows.select(BqColumns.View.FEATURE_DEFINITION)
@@ -181,47 +181,120 @@ public class ScanEngineJobRunner {
             log.info("Resolved Hyperscan zip bundle path(s) for this run: {}", zipPaths);
             return zipPaths;
         });
+
         // One broadcast: the Compile Service writes one zip per feature (the .hdb and the term-metadata
         // JSON together), so HyperscanBundleLoader needs a single feature -> path map. Broadcast via
         // JavaSparkContext (the raw Scala SparkContext needs an implicit ClassTag Java cannot supply).
         Broadcast<Map<String, String>> broadcastFeatureToZipPath = javaSparkContext.broadcast(featureToZipPath);
 
-        // 4 + 5. Read + union AVRO messages (restricted to the view's message_id set), then aggregate
+        Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct().cache();
+        long viewDistinctMessageCount = relevantMessageIds.count();
+        log.info("Total unique message count from BigQuery view: {}", viewDistinctMessageCount);
+        stats.inputRecordCount = (int) viewDistinctMessageCount;
+
+        // Read + union AVRO messages (restricted to the view's message_id set), then aggregate
         // the view by message_id, join, and attach output-facing columns. These are lazy
         // transformations: the logged duration reflects DAG construction, not execution.
         DataprocConfig.MessagesGcsConfig messagesConfig = dataprocConfig.messages();
-        Dataset<Row> joined = runStage("read AVRO messages + join with view", () -> {
-            Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct();
+        AvroReadResult avroReadResult = runStage("read AVRO messages + join with view", () -> {
             List<Dataset<Row>> perDatasetMessages = new ArrayList<>();
             for (RuntimeArgs.DatasetDetail datasetDetail : runtimeArgs.datasetDetails()) {
                 perDatasetMessages.add(MessageAvroReader.readDataset(
                         spark, gcsClient, messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(),
                         datasetDetail.datasetId(), datasetDetail.datasetPartitionValue(), relevantMessageIds));
             }
+
             Dataset<Row> messages = perDatasetMessages.getFirst();
             for (int datasetIndex = 1; datasetIndex < perDatasetMessages.size(); datasetIndex++) {
                 messages = messages.unionByName(perDatasetMessages.get(datasetIndex), true);
             }
 
+            long avroDistinctMessageCount = messages.select(BqColumns.View.MESSAGE_ID).distinct().count();
+
+            if (log.isDebugEnabled()) {
+                log.info("Total unique message count read from AVRO across all dataset(s): {}", avroDistinctMessageCount);
+                logMessageIdDiffIfDebug("BigQuery view", relevantMessageIds.as(Encoders.STRING()), viewDistinctMessageCount,
+                        "AVRO read", messages.select(BqColumns.View.MESSAGE_ID).distinct().as(Encoders.STRING()),
+                        avroDistinctMessageCount);
+            }
+
             Dataset<Row> groupedView = FeatureDecisionViewReader.groupByMessageId(viewRows);
-            return messages.join(groupedView, BqColumns.View.MESSAGE_ID)
+            Dataset<Row> joinedRows = messages.join(groupedView, BqColumns.View.MESSAGE_ID)
                     .withColumn(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT, functions.lit(runtimeArgs.pipelineExecId()))
                     .withColumn(JoinedRowColumns.CREATED_BY_FOR_OUTPUT, functions.lit(properties.getCreatedBy()))
                     .withColumn(JoinedRowColumns.DATASET_PARTITION_VALUE_FOR_OUTPUT,
                             functions.col(JoinedRowColumns.DATASET_PARTITION_VALUE));
+            return new AvroReadResult(joinedRows, messages, avroDistinctMessageCount);
         });
 
-        // 6. mapPartitions — the only place Hyperscan bundles are loaded. Still lazy: scanning happens
-        // when the writes in step 7 trigger it.
+        Dataset<Row> joined = avroReadResult.joined();
+
+        // mapPartitions — the only place Hyperscan bundles are loaded. Still lazy: scanning happens
+        // when .count() below (or, failing that, the writes in step 7) trigger it.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).cache();
 
-        // 7. Split and write — each write triggers its own Spark action, executing steps 4-6.
+        if (log.isDebugEnabled()) {
+            long finalMessageCount = results.count();
+            log.info("Final message count before writing output: {}", finalMessageCount);
+            logMessageIdDiffIfDebug("AVRO read",
+                    avroReadResult.avroMessages().select(BqColumns.View.MESSAGE_ID).distinct().as(Encoders.STRING()),
+                    avroReadResult.avroDistinctMessageCount(),
+                    "final (pre-write)",
+                    results.map((MapFunction<MessageProcessingResult, String>) MessageProcessingResult::getMessageId,
+                            Encoders.STRING()),
+                    finalMessageCount);
+        }
+
+        // Split and write — each write triggers its own Spark action, executing step 6 above
+        // (already materialized/cached by the .count() call, so these reuse it rather than rescanning).
         runStageVoid("scan messages + write outputs",
-                () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, dataprocConfig.stageName(), results));
+                () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, dataprocConfig.stageName(), results, stats));
+    }
+
+    /**
+     * The lazy transformation "read AVRO messages + join with view" stage needs to hand back to its
+     * caller, alongside the joined {@code Dataset} itself: the per-dataset-unioned AVRO messages
+     * ({@link #logMessageIdDiffIfDebug} needs their message_id set again once the final message count
+     * is known, after this stage has already returned — cheap to re-derive since each dataset's own
+     * piece is already cached inside {@code MessageAvroReader.readDataset}) and their distinct
+     * message count (logged, and compared against the final message count).
+     */
+    private record AvroReadResult(Dataset<Row> joined, Dataset<Row> avroMessages, long avroDistinctMessageCount) {
+    }
+
+    /**
+     * Mutable, driver-only holder for the {@code input_record_count}/{@code output_record_count}
+     * values {@link #runPipeline} computes partway through — {@link #run} needs them for the
+     * SUCCESS/FAILED {@code pipeline_stage_audit} row it writes AFTER {@link #runPipeline} returns
+     * (or throws), so a plain return value would lose them on the failure path. Never serialized to
+     * a Spark task — read/written only on the driver.
+     */
+    private static final class RunStats {
+        private Integer inputRecordCount;
+        private Integer outputRecordCount;
+    }
+
+    /**
+     * Debug-only diagnostic: when {@code countA != countB} AND debug logging is enabled, computes and
+     * logs the actual message ids present in one side but not the other (via {@code Dataset.except},
+     * not collected unless both conditions hold — a mismatch is expected to be a rare edge case, not
+     * the common path, so this never runs against the common, matching-counts case, and never
+     * collects anything to the driver when debug logging is off).
+     */
+    private void logMessageIdDiffIfDebug(String labelA, Dataset<String> idsA, long countA,
+                                         String labelB, Dataset<String> idsB, long countB) {
+        if (countA == countB || !log.isDebugEnabled()) {
+            return;
+        }
+        List<String> onlyInA = idsA.except(idsB).collectAsList();
+        List<String> onlyInB = idsB.except(idsA).collectAsList();
+        log.debug("Unique message count mismatch: {} has {} unique message id(s), {} has {} unique message id(s); "
+                        + "message id(s) only in {}: {}; message id(s) only in {}: {}",
+                labelA, countA, labelB, countB, labelA, onlyInA, labelB, onlyInB);
     }
 
     /**
@@ -257,10 +330,14 @@ public class ScanEngineJobRunner {
     // (non-serializable) runner the way a lambda referencing an instance field would.
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                               DataprocConfig.MessagesGcsConfig messagesConfig, String stageName,
-                              Dataset<MessageProcessingResult> results) {
+                              Dataset<MessageProcessingResult> results, RunStats stats) {
         Dataset<Row> summaryRows = results.mapPartitions(
-                new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA));
+                new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA)).cache();
         OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
+
+        long outputRecordCount = summaryRows.count();
+        stats.outputRecordCount = (int) outputRecordCount;
+        log.info("Total message count saved to lexicon-hit-summary: {}", outputRecordCount);
 
         Dataset<Row> restrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(true), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
@@ -322,11 +399,16 @@ public class ScanEngineJobRunner {
     private static final String STAGE_AUDIT_UNKNOWN_STRING = "N/A";
 
     /**
-     * @param errorCount written to the INTEGER {@code error_count} column (0 when null)
+     * @param errorCount        written to the INTEGER {@code error_count} column (0 when null)
+     * @param inputRecordCount  unique message count from the BigQuery view (null on the
+     *                          {@code IN_PROGRESS} row, where it isn't known yet)
+     * @param outputRecordCount number of messages saved to {@code lexicon-hit-summary} (null on the
+     *                          {@code IN_PROGRESS} row, where it isn't known yet)
      */
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                                  String stageName, Instant startTime, Instant endTime, String status,
-                                 Integer errorCount, String errorMessage) {
+                                 Integer errorCount, String errorMessage, Integer inputRecordCount,
+                                 Integer outputRecordCount) {
         // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath are NOT NULL in the table
         // (see PipelineStageAuditRow) but neither RuntimeArgs nor DataprocConfig carries them, so a
         // placeholder is written.
@@ -334,7 +416,7 @@ public class ScanEngineJobRunner {
                 runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
                 stageName, STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING,
                 STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING, null,
-                startTime, endTime, status, 0, 0, 0, 0,
+                startTime, endTime, status, 0, 0, inputRecordCount, outputRecordCount,
                 errorCount == null ? 0 : errorCount, errorMessage, null, null,
                 LocalDate.now(ZoneOffset.UTC), null, null, null);
         OutputTableWriter.writePipelineStageAudit(spark, tableConfig, row);

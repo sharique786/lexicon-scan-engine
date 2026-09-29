@@ -87,9 +87,13 @@ public final class MessageAvroReader {
             throw new IllegalStateException("MessageAvroReader: combinedMessages in null after reading AVRO files");
         }
 
-        return combinedMessages.join(
+        Dataset<Row> result = combinedMessages.join(
                 functions.broadcast(relevantMessageIds.dropDuplicates(BqColumns.View.MESSAGE_ID)),
-                BqColumns.View.MESSAGE_ID);
+                BqColumns.View.MESSAGE_ID).cache();
+        long uniqueMessageCount = result.select(BqColumns.View.MESSAGE_ID).distinct().count();
+        log.info("dataset_id='{}': total unique message count read from AVRO (after matching against the "
+                + "view's message_id set): {}", datasetId, uniqueMessageCount);
+        return result;
     }
 
     /**
