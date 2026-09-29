@@ -8,19 +8,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * {@link RuntimeArgs} or the {@link DataprocConfig} YAML. Bound from {@code application.yml} in
  * production and {@code application-test.yml} for tests.
  *
- * <h2>{@link #maxAttachmentSizeBytes}</h2>
- * <p>Bound via {@code @Value} from the environment variable {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES}
- * directly, because {@code SPECTRE_...} does not follow the {@code scan-engine.*} prefix's relaxed-binding
- * naming. {@code null} (env var absent) means no limit — every attachment is scanned regardless of size.
+ * <p>{@code maxAttachmentSizeBytes} and {@code stageName} used to live here (bound via
+ * {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} and {@code stage-name} respectively) but are now
+ * sourced from the {@link DataprocConfig} YAML instead — {@code spectre.engine.messages.max-attachment-limit}
+ * ({@link DataprocConfig.MessagesGcsConfig#maxAttachmentLimit()}) and {@code spectre.engine.stage-name}
+ * ({@link DataprocConfig#stageName()}) — since both are per-pipeline-execution values, not
+ * job-infrastructure config. {@code null}/absent still means "no limit" for the attachment size, same as
+ * before.
  */
 @ConfigurationProperties(prefix = "scan-engine")
 public class ScanEngineProperties {
-
-    /**
-     * See class Javadoc — bound via {@code @Value}, not this class's own relaxed binding.
-     */
-    @Value("${SPECTRE_MAX_ATTACHMENT_SIZE_BYTES:#{null}}")
-    private Long maxAttachmentSizeBytes;
 
     /**
      * Bounds each Spark partition's cached-bundle count (database + term metadata together) — see {@code HyperscanBundleLoader}.
@@ -33,20 +30,6 @@ public class ScanEngineProperties {
      */
     @Value("${created-by: SPECTRE-COMPOSER-SA}")
     private String createdBy;
-
-    /**
-     * This job's {@code pipeline_stage_audit.stage_name} identity.
-     */
-    @Value("${stage-name: spectre-lexicon-tagging}")
-    private String stageName;
-
-    public Long getMaxAttachmentSizeBytes() {
-        return maxAttachmentSizeBytes;
-    }
-
-    public void setMaxAttachmentSizeBytes(Long maxAttachmentSizeBytes) {
-        this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
-    }
 
     public int getMaxCachedDatabasesPerPartition() {
         return maxCachedDatabasesPerPartition;
@@ -62,13 +45,5 @@ public class ScanEngineProperties {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
-    }
-
-    public String getStageName() {
-        return stageName;
-    }
-
-    public void setStageName(String stageName) {
-        this.stageName = stageName;
     }
 }

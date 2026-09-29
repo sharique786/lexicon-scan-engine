@@ -28,8 +28,8 @@ public class MessageAttachment implements Serializable {
      *                           nested/derived from another (e.g. an extracted embedded file)
      * @param fileName           original filename
      * @param cleanText          extracted text content to scan — subject to the
-     *                           {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} size limit,
-     *                           see {@code ScanEngineProperties}
+     *                           {@code spectre.engine.messages.max-attachment-limit} size limit,
+     *                           see {@code DataprocConfig.MessagesGcsConfig}
      */
     public MessageAttachment(String attachmentId, String parentAttachmentId, String fileName, String cleanText) {
         this.attachmentId = attachmentId;

@@ -35,12 +35,14 @@ import java.util.Objects;
  *
  * spectre:
  *   engine:
+ *     stage-name: spectre-lexicon-tagging
  *     hyperscan:
  *       hdb-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-policy-config-dev
  *       hdb-gcs-prefix: policy_test
  *     messages:
  *       msg-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-source-data-dev
  *       msg-gcs-prefix: coreapp-trans
+ *       max-attachment-limit: 5242880
  *     bigquery:
  *       bq-project: db-dev-tugr-mp-spectre
  *       bq-dataset: spectre_audit
@@ -122,6 +124,10 @@ public final class DataprocConfig implements Serializable {
 
     public BqTableConfig bigquery() {
         return spectre.engine().bigquery();
+    }
+
+    public String stageName() {
+        return spectre.engine().stageName();
     }
 
     // SafeConstructor rather than SnakeYAML's default Constructor: this file is
@@ -211,24 +217,34 @@ public final class DataprocConfig implements Serializable {
     }
 
     /**
-     * {@code spectre.engine:} — carries the three subsections this job actually reads.
+     * {@code spectre.engine:} — carries the three subsections this job actually reads, plus
+     * {@link #stageName}, this job's {@code pipeline_stage_audit}/{@code pipeline_record_audit}
+     * {@code stage_name} identity (replaces the previous {@code scan-engine.stage-name}
+     * {@code application.yml} property — see {@code ScanEngineProperties}).
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class EngineConfig implements Serializable {
         @Serial
         private static final long serialVersionUID = 1L;
 
+        private final String stageName;
         private final HyperscanGcsConfig hyperscan;
         private final MessagesGcsConfig messages;
         private final BqTableConfig bigquery;
 
         @JsonCreator
-        public EngineConfig(@JsonProperty("hyperscan") HyperscanGcsConfig hyperscan,
+        public EngineConfig(@JsonProperty("stage-name") String stageName,
+                            @JsonProperty("hyperscan") HyperscanGcsConfig hyperscan,
                             @JsonProperty("messages") MessagesGcsConfig messages,
                             @JsonProperty("bigquery") BqTableConfig bigquery) {
+            this.stageName = stageName;
             this.hyperscan = hyperscan;
             this.messages = messages;
             this.bigquery = bigquery;
+        }
+
+        public String stageName() {
+            return stageName;
         }
 
         public HyperscanGcsConfig hyperscan() {
@@ -246,18 +262,19 @@ public final class DataprocConfig implements Serializable {
         @Override
         public boolean equals(Object obj) {
             return this == obj || (obj instanceof EngineConfig other
-                    && Objects.equals(hyperscan, other.hyperscan) && Objects.equals(messages, other.messages)
-                    && Objects.equals(bigquery, other.bigquery));
+                    && Objects.equals(stageName, other.stageName) && Objects.equals(hyperscan, other.hyperscan)
+                    && Objects.equals(messages, other.messages) && Objects.equals(bigquery, other.bigquery));
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(hyperscan, messages, bigquery);
+            return Objects.hash(stageName, hyperscan, messages, bigquery);
         }
 
         @Override
         public String toString() {
-            return "EngineConfig[hyperscan=" + hyperscan + ", messages=" + messages + ", bigquery=" + bigquery + "]";
+            return "EngineConfig[stageName=" + stageName + ", hyperscan=" + hyperscan + ", messages=" + messages
+                    + ", bigquery=" + bigquery + "]";
         }
     }
 
@@ -313,7 +330,12 @@ public final class DataprocConfig implements Serializable {
      * previous {@code live-message-bucket}/{@code test-message-bucket}
      * Spring properties and the hardcoded {@code coreapp-trans/} constant;
      * see {@code MessageAvroReader} Javadoc for why the live/test split is
-     * gone — this YAML supplies exactly one bucket per run now).
+     * gone — this YAML supplies exactly one bucket per run now), plus
+     * {@link #maxAttachmentLimit}, the {@code maxAttachmentSizeBytes} value
+     * {@code FeatureScanOrchestrator} enforces (replaces the previous
+     * {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} environment variable — see
+     * {@code ScanEngineProperties}). {@code null} (property absent) means no
+     * limit — every attachment is scanned regardless of size, same as before.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static final class MessagesGcsConfig implements Serializable {
@@ -322,12 +344,15 @@ public final class DataprocConfig implements Serializable {
 
         private final String msgGcsBucket;
         private final String msgGcsPrefix;
+        private final Long maxAttachmentLimit;
 
         @JsonCreator
         public MessagesGcsConfig(@JsonProperty("msg-gcs-bucket") String msgGcsBucket,
-                                 @JsonProperty("msg-gcs-prefix") String msgGcsPrefix) {
+                                 @JsonProperty("msg-gcs-prefix") String msgGcsPrefix,
+                                 @JsonProperty("max-attachment-limit") Long maxAttachmentLimit) {
             this.msgGcsBucket = msgGcsBucket;
             this.msgGcsPrefix = msgGcsPrefix;
+            this.maxAttachmentLimit = maxAttachmentLimit;
         }
 
         public String msgGcsBucket() {
@@ -338,20 +363,26 @@ public final class DataprocConfig implements Serializable {
             return msgGcsPrefix;
         }
 
+        public Long maxAttachmentLimit() {
+            return maxAttachmentLimit;
+        }
+
         @Override
         public boolean equals(Object obj) {
             return this == obj || (obj instanceof MessagesGcsConfig other
-                    && Objects.equals(msgGcsBucket, other.msgGcsBucket) && Objects.equals(msgGcsPrefix, other.msgGcsPrefix));
+                    && Objects.equals(msgGcsBucket, other.msgGcsBucket) && Objects.equals(msgGcsPrefix, other.msgGcsPrefix)
+                    && Objects.equals(maxAttachmentLimit, other.maxAttachmentLimit));
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(msgGcsBucket, msgGcsPrefix);
+            return Objects.hash(msgGcsBucket, msgGcsPrefix, maxAttachmentLimit);
         }
 
         @Override
         public String toString() {
-            return "MessagesGcsConfig[msgGcsBucket=" + msgGcsBucket + ", msgGcsPrefix=" + msgGcsPrefix + "]";
+            return "MessagesGcsConfig[msgGcsBucket=" + msgGcsBucket + ", msgGcsPrefix=" + msgGcsPrefix
+                    + ", maxAttachmentLimit=" + maxAttachmentLimit + "]";
         }
     }
 }

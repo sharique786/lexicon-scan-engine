@@ -3,15 +3,17 @@
 # GCS buckets and BQ table/view identifiers are NOT configured here — they
 # are per-pipeline-execution values, supplied via the --config_file_path
 # Dataproc submit argument (a DataprocConfig YAML file on GCS; see
-# RuntimeArgs/DataprocConfig class Javadoc). What remains here is genuine
-# job-infrastructure config, overridable at Dataproc submit time as Spark
-# driver system properties (e.g.
-# --properties spark.driver.extraJavaOptions=-Dscan-engine.stage-name=...)
+# RuntimeArgs/DataprocConfig class Javadoc). stage-name and the attachment
+# size limit are also per-pipeline-execution values now (spectre.engine.stage-name
+# and spectre.engine.messages.max-attachment-limit in that same file) — not
+# configured here either. What remains here is genuine job-infrastructure
+# config, overridable at Dataproc submit time as Spark driver system
+# properties (e.g.
+# --properties spark.driver.extraJavaOptions=-Dscan-engine.created-by=...)
 # via Spring Boot's standard property-source precedence.
 scan-engine:
   max-cached-databases-per-partition: 20
   created-by: SPECTRE-COMPOSER-SA
-  stage-name: spectre-lexicon-tagging
 
 # Logging levels are NOT configured here — see src/main/resources/log4j2.properties
 # instead. A Spring Boot `logging.level.*` block only ever reaches the DRIVER

@@ -8,7 +8,6 @@
 scan-engine:
   max-cached-databases-per-partition: 5
   created-by: lexicon-scan-engine-test
-  stage-name: lexicon-scan-engine-test
 
 spring:
   main:

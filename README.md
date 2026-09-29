@@ -120,12 +120,14 @@ Only the `spectre.engine.*` subtree is read:
 ```yaml
 spectre:
   engine:
+    stage-name: spectre-lexicon-tagging               # pipeline_stage_audit / pipeline_record_audit stage_name
     hyperscan:
       hdb-gcs-bucket: <bucket holding lexicon zip bundles>
       hdb-gcs-prefix: policy_test
     messages:
       msg-gcs-bucket: <bucket holding AVRO messages>
       msg-gcs-prefix: coreapp-trans
+      max-attachment-limit: 5242880                   # maxAttachmentSizeBytes; absent/unset = no limit
     bigquery:
       bq-project / bq-dataset / bq-view-name          # the decision view (three separate fields)
       bq-output-hit-summary, bq-output-hit-restricted, bq-output-hit-unrestricted,
@@ -209,7 +211,7 @@ A message goes through several independent filters before and during scanning:
 | 4 | Per message | Blank `message_id`, blank output dataset partition, or a null/blank `process_id`, `pipeline_exec_id`, `created_by` fail **that message** only (recorded in `pipeline_record_audit`) |
 | 5 | Per feature (scope) | A feature scans only the areas listed in `body.scope`. A missing or empty scope scans nothing |
 | 6 | Per area | A blank subject or body, or a blank attachment `clean_text`, is not scanned |
-| 7 | Attachments | If `SPECTRE_MAX_ATTACHMENT_SIZE_BYTES` is set, an attachment whose UTF-8 `clean_text` is larger is skipped entirely (not scanned, not an error) |
+| 7 | Attachments | If `spectre.engine.messages.max-attachment-limit` is set, an attachment whose UTF-8 `clean_text` is larger is skipped entirely (not scanned, not an error) |
 | 8 | CHAT/VOICE body | Only `message_text` cells of the HTML table are scanned ([§4](#4-message-types-and-what-gets-scanned)) |
 | 9 | Decision tree | A hit NoiseReduction group stops evaluation: no Disclaimer or Lexicon group is scanned ([§8](#8-decision-tree)) |
 | 10 | Disclaimer suppression | A Lexicon match fully inside a disclaimer match in the same area is dropped from the detail tables ([§8](#8-decision-tree)) |
@@ -485,9 +487,8 @@ Each per-message table also carries `message_id`, `process_id`, `pipeline_exec_i
 | Source | Carries |
 |---|---|
 | `RuntimeArgs` (7 `--key=value` arguments) | See [§2.1](#21-job-arguments-runtimeargs) |
-| `DataprocConfig` (YAML on GCS, from `--config_file_path`) | Hyperscan zip bucket/prefix, message bucket/prefix, BigQuery view and output-table identifiers |
-| `application.yml` (`scan-engine.*`) | `max-cached-databases-per-partition` (default 20), `created-by` (`SPECTRE-COMPOSER-SA`), `stage-name` (`spectre-lexicon-tagging`) — overridable at submit time as driver system properties |
-| Env `SPECTRE_MAX_ATTACHMENT_SIZE_BYTES` | Skip attachments whose UTF-8 `clean_text` is larger; unset = no limit |
+| `DataprocConfig` (YAML on GCS, from `--config_file_path`) | Hyperscan zip bucket/prefix, message bucket/prefix, BigQuery view and output-table identifiers, `spectre.engine.stage-name` (`pipeline_stage_audit`/`pipeline_record_audit` stage_name), `spectre.engine.messages.max-attachment-limit` (`maxAttachmentSizeBytes`; absent = no limit) |
+| `application.yml` (`scan-engine.*`) | `max-cached-databases-per-partition` (default 20), `created-by` (`SPECTRE-COMPOSER-SA`) — overridable at submit time as driver system properties |
 | `log4j2.properties` | Driver **and** executor logging (root `WARN`, this project's package `INFO`); Spring's `logging.level.*` would only reach the driver |
 
 ---

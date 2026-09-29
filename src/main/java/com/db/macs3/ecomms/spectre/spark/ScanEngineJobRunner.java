@@ -132,17 +132,20 @@ public class ScanEngineJobRunner {
         Instant jobStart = Instant.now();
         log.info("Job starting: processId={}, pipelineExecId={}, policyEngineId={}",
                 runtimeArgs.processId(), runtimeArgs.pipelineExecId(), runtimeArgs.policyEngineId());
-        writeStageAudit(sparkSession, tableConfig, runtimeArgs, jobStart, null, BqColumns.JobStatus.IN_PROGRESS, null, null);
+        writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, null,
+                BqColumns.JobStatus.IN_PROGRESS, null, null);
 
         try {
             runPipeline(sparkSession, runtimeArgs, tableConfig, dataprocConfig);
             Instant jobEnd = Instant.now();
             log.info("Job completed successfully in {}ms", Duration.between(jobStart, jobEnd).toMillis());
-            writeStageAudit(sparkSession, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.SUCCESS, null, null);
+            writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, jobEnd,
+                    BqColumns.JobStatus.SUCCESS, null, null);
         } catch (Exception e) {
             Instant jobEnd = Instant.now();
             log.error("Job failed after {}ms: {}", Duration.between(jobStart, jobEnd).toMillis(), e.getMessage(), e);
-            writeStageAudit(sparkSession, tableConfig, runtimeArgs, jobStart, jobEnd, BqColumns.JobStatus.FAILED, 0, e.toString());
+            writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, jobEnd,
+                    BqColumns.JobStatus.FAILED, 0, e.toString());
             throw e;
         }
     }
@@ -212,13 +215,13 @@ public class ScanEngineJobRunner {
         // when the writes in step 7 trigger it.
         Dataset<MessageProcessingResult> results = joined.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
-                        properties.getMaxAttachmentSizeBytes(), properties.getMaxCachedDatabasesPerPartition()),
+                        messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).cache();
 
         // 7. Split and write — each write triggers its own Spark action, executing steps 4-6.
         runStageVoid("scan messages + write outputs",
-                () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, results));
+                () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, dataprocConfig.stageName(), results));
     }
 
     /**
@@ -253,7 +256,8 @@ public class ScanEngineJobRunner {
     // A mapper class holds only serializable fields, so it cannot accidentally capture this
     // (non-serializable) runner the way a lambda referencing an instance field would.
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                              DataprocConfig.MessagesGcsConfig messagesConfig, Dataset<MessageProcessingResult> results) {
+                              DataprocConfig.MessagesGcsConfig messagesConfig, String stageName,
+                              Dataset<MessageProcessingResult> results) {
         Dataset<Row> summaryRows = results.mapPartitions(
                 new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA));
         OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
@@ -277,7 +281,7 @@ public class ScanEngineJobRunner {
         // PipelineRecordAuditRowMapper.
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         Dataset<Row> recordAuditRows = results.mapPartitions(
-                new PipelineRecordAuditRowMapper(runtimeArgs, properties.getStageName(), properties.getCreatedBy(), today),
+                new PipelineRecordAuditRowMapper(runtimeArgs, stageName, properties.getCreatedBy(), today),
                 Encoders.row(OutputTableWriter.PIPELINE_RECORD_AUDIT_SCHEMA));
         // De-duplicated on the table's natural key (record_id/stage_name/execution_date/pipeline_exec_id):
         // the same message_id can appear more than once in `results`, and the mapper would otherwise
@@ -321,14 +325,14 @@ public class ScanEngineJobRunner {
      * @param errorCount written to the INTEGER {@code error_count} column (0 when null)
      */
     private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                                 Instant startTime, Instant endTime, String status,
+                                 String stageName, Instant startTime, Instant endTime, String status,
                                  Integer errorCount, String errorMessage) {
         // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath are NOT NULL in the table
         // (see PipelineStageAuditRow) but neither RuntimeArgs nor DataprocConfig carries them, so a
         // placeholder is written.
         PipelineStageAuditRow row = new PipelineStageAuditRow(
                 runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
-                properties.getStageName(), STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING,
+                stageName, STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING,
                 STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING, null,
                 startTime, endTime, status, 0, 0, 0, 0,
                 errorCount == null ? 0 : errorCount, errorMessage, null, null,

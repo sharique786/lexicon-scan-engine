@@ -26,6 +26,7 @@ class DataprocConfigTest {
 
             spectre:
               engine:
+                stage-name: spectre-lexicon-tagging
                 hyperscan:
                   hdb-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-policy-config-dev
                   hdb-gcs-prefix: policy_test
@@ -33,6 +34,7 @@ class DataprocConfigTest {
                 messages:
                   msg-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-source-data-dev
                   msg-gcs-prefix: coreapp-trans
+                  max-attachment-limit: 5242880
 
                 bigquery:
                   bq-project: db-dev-tugr-mp-spectre
@@ -59,11 +61,14 @@ class DataprocConfigTest {
         assertThat(config.clusterName()).isEqualTo("spectre-dataproc-v3");
         assertThat(config.workflowTimeoutSeconds()).isEqualTo(43200L);
 
+        assertThat(config.stageName()).isEqualTo("spectre-lexicon-tagging");
+
         assertThat(config.hyperscan().hdbGcsBucket()).isEqualTo("db-dev-euwe3-gcs-109910-3-spectre-policy-config-dev");
         assertThat(config.hyperscan().hdbGcsPrefix()).isEqualTo("policy_test");
 
         assertThat(config.messages().msgGcsBucket()).isEqualTo("db-dev-euwe3-gcs-109910-3-spectre-source-data-dev");
         assertThat(config.messages().msgGcsPrefix()).isEqualTo("coreapp-trans");
+        assertThat(config.messages().maxAttachmentLimit()).isEqualTo(5242880L);
 
         BqTableConfig bq = config.bigquery();
         assertThat(bq.bqProject()).isEqualTo("db-dev-tugr-mp-spectre");
@@ -159,8 +164,17 @@ class DataprocConfigTest {
     @Test
     @DisplayName("differing messages bucket/prefix values are not equal")
     void differingMessagesConfigNotEqual() {
-        DataprocConfig.MessagesGcsConfig a = new DataprocConfig.MessagesGcsConfig("bucket-a", "coreapp-trans");
-        DataprocConfig.MessagesGcsConfig b = new DataprocConfig.MessagesGcsConfig("bucket-a", "a-different-prefix");
+        DataprocConfig.MessagesGcsConfig a = new DataprocConfig.MessagesGcsConfig("bucket-a", "coreapp-trans", null);
+        DataprocConfig.MessagesGcsConfig b = new DataprocConfig.MessagesGcsConfig("bucket-a", "a-different-prefix", null);
         assertThat(a).isNotEqualTo(b);
+    }
+
+    @Test
+    @DisplayName("a missing max-attachment-limit parses as null (no limit), matching the previous default")
+    void missingMaxAttachmentLimitParsesAsNull() throws Exception {
+        DataprocConfig config = DataprocConfig.parseYaml(
+                new ByteArrayInputStream(SAMPLE_YAML.replace(
+                        "      max-attachment-limit: 5242880\n", "").getBytes(StandardCharsets.UTF_8)));
+        assertThat(config.messages().maxAttachmentLimit()).isNull();
     }
 }
