@@ -50,9 +50,14 @@ import java.util.stream.Collectors;
  *       {@link DataprocConfig} YAML that {@code --config_file_path} points to (BigQuery identifiers and
  *       the Hyperscan/message GCS locations)</li>
  *   <li>Write the {@code IN_PROGRESS} {@code pipeline_stage_audit} row</li>
- *   <li>Resolve the Hyperscan base path — one GCS listing call ({@link HyperscanPathResolver})</li>
  *   <li>Read the BigQuery view in one filtered query covering every {@code dataset_details} entry
- *       ({@link FeatureDecisionViewReader}); it stays a distributed {@code Dataset}</li>
+ *       ({@link FeatureDecisionViewReader}) and compute its distinct {@code message_id} count. <b>If
+ *       that count is zero</b> (no rows matched this run's filter), {@link #runPipeline} returns
+ *       immediately — no Hyperscan resolution, no AVRO read, no output table other than
+ *       {@code pipeline_stage_audit} is touched, and the {@code SUCCESS} row below is written with
+ *       {@code input_record_count = 0}/{@code output_record_count = 0}. This is treated as a normal,
+ *       successful "nothing to do" completion, not a failure</li>
+ *   <li>Otherwise: resolve the Hyperscan base path — one GCS listing call ({@link HyperscanPathResolver})</li>
  *   <li>Collect the (small) set of DISTINCT lexicon features referenced, resolve each to its
  *       {@code .zip} bundle path, and broadcast that one feature → path map</li>
  *   <li>Read the AVRO messages of every {@code dataset_details} entry, restricted to the view's
@@ -152,8 +157,37 @@ public class ScanEngineJobRunner {
         }
     }
 
-    private void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig,
-                             DataprocConfig dataprocConfig, RunStats stats) {
+    // Package-private rather than private: ScanEngineJobRunnerTest calls this directly (with
+    // FeatureDecisionViewReader.readFiltered mocked static) to exercise the empty-view early return
+    // without needing a live BigQuery connection.
+    void runPipeline(SparkSession spark, RuntimeArgs runtimeArgs, BqTableConfig tableConfig,
+                     DataprocConfig dataprocConfig, RunStats stats) {
+
+        // Read the view FIRST, before anything else (Hyperscan resolution, AVRO reads, any output
+        // table besides pipeline_stage_audit) — an empty view means there is nothing at all to
+        // process this run, and the early return just below is what makes that a graceful no-op
+        // completion rather than a failure. See that early return for the full rationale.
+        Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(spark, tableConfig, runtimeArgs).cache();
+        Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct().cache();
+        long viewDistinctMessageCount = relevantMessageIds.count();
+        log.info("Total unique message count from BigQuery view: {}", viewDistinctMessageCount);
+        stats.inputRecordCount = (int) viewDistinctMessageCount;
+
+        if (viewDistinctMessageCount == 0) {
+            // No BigQuery view rows for this run's filter (process_id/feature_partition_value/
+            // policy_engine_id/dataset_partition(s)) — previously this fell through into
+            // MessageAvroReader (which can throw NoAvroFilesFoundException for the same, correlated
+            // reason: no data this run) and/or into writing empty Datasets to every output table,
+            // either of which turned "nothing to do" into a FAILED job. Per requirement: an empty
+            // view is not a failure — write nothing except pipeline_stage_audit (via the SUCCESS row
+            // `run()` writes right after this method returns, using the 0 values set below) and stop.
+            stats.outputRecordCount = 0;
+            log.warn("BigQuery view returned no rows for this run (process_id={}, feature_partition_value={}, "
+                            + "policy_engine_id={}) — nothing to process; only pipeline_stage_audit will be "
+                            + "written (SUCCESS, input_record_count=0, output_record_count=0).",
+                    runtimeArgs.processId(), runtimeArgs.featurePartitionValue(), runtimeArgs.policyEngineId());
+            return;
+        }
 
         // Resolve the Hyperscan base path — one GCS listing call total for this whole run.
         DataprocConfig.HyperscanGcsConfig hyperscanConfig = dataprocConfig.hyperscan();
@@ -162,9 +196,8 @@ public class ScanEngineJobRunner {
                 gcsClient::listImmediateChildDirectories));
         log.info("Hyperscan base path for this run: {}", hyperscanBasePath);
 
-        // Read the view (one query covering every dataset_details entry), then resolve every
-        // DISTINCT feature referenced to its .zip bundle path. collectAsList is the stage's real Spark action.
-        Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(spark, tableConfig, runtimeArgs).cache();
+        // Resolve every DISTINCT feature the (non-empty) view referenced to its .zip bundle path.
+        // collectAsList is the stage's real Spark action.
         Map<String, String> featureToZipPath = runStage("read view + resolve distinct features", () -> {
             List<String> distinctFeatureDefJson = viewRows.select(BqColumns.View.FEATURE_DEFINITION)
                     .distinct().as(Encoders.STRING()).collectAsList();
@@ -186,11 +219,6 @@ public class ScanEngineJobRunner {
         // JSON together), so HyperscanBundleLoader needs a single feature -> path map. Broadcast via
         // JavaSparkContext (the raw Scala SparkContext needs an implicit ClassTag Java cannot supply).
         Broadcast<Map<String, String>> broadcastFeatureToZipPath = javaSparkContext.broadcast(featureToZipPath);
-
-        Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct().cache();
-        long viewDistinctMessageCount = relevantMessageIds.count();
-        log.info("Total unique message count from BigQuery view: {}", viewDistinctMessageCount);
-        stats.inputRecordCount = (int) viewDistinctMessageCount;
 
         // Read + union AVRO messages (restricted to the view's message_id set), then aggregate
         // the view by message_id, join, and attach output-facing columns. These are lazy
@@ -271,11 +299,12 @@ public class ScanEngineJobRunner {
      * values {@link #runPipeline} computes partway through — {@link #run} needs them for the
      * SUCCESS/FAILED {@code pipeline_stage_audit} row it writes AFTER {@link #runPipeline} returns
      * (or throws), so a plain return value would lose them on the failure path. Never serialized to
-     * a Spark task — read/written only on the driver.
+     * a Spark task — read/written only on the driver. Package-private (class and fields) so
+     * {@code ScanEngineJobRunnerTest} can construct one and read the values {@link #runPipeline} sets.
      */
-    private static final class RunStats {
-        private Integer inputRecordCount;
-        private Integer outputRecordCount;
+    static final class RunStats {
+        Integer inputRecordCount;
+        Integer outputRecordCount;
     }
 
     /**

@@ -479,6 +479,7 @@ Each per-message table also carries `message_id`, `process_id`, `pipeline_exec_i
 | Anything outside the per-message try/catch (loader construction, unexpected partition-level error) | Fails the partition, therefore the Spark job |
 | An unreadable `start_time_utc` | `sent_date` is NULL; the message still succeeds |
 | Argument/config error, no Hyperscan compile folder, no AVRO files, BigQuery write failure | Fails the job; `pipeline_stage_audit` gets a `FAILED` row where possible (argument/config errors happen before any audit row can be written) |
+| BigQuery view returns zero rows for this run's filter (`process_id`/`feature_partition_value`/`policy_engine_id`/`dataset_partition`(s)) | **Not a failure.** The view is read first, before Hyperscan resolution or any AVRO read; if its distinct `message_id` count is 0, `ScanEngineJobRunner.runPipeline` returns immediately without touching anything else. Only `pipeline_stage_audit` gets a row — `SUCCESS`, `input_record_count = 0`, `output_record_count = 0`. No other output table (including `pipeline_record_audit`) is written |
 
 ---
 
