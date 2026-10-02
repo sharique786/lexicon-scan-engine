@@ -525,6 +525,24 @@ spark.dynamicAllocation.shuffleTracking.enabled=true
 spark.speculation=false                   # tasks do external work and write; a duplicate attempt is unverified
 ```
 
+**Large Hyperscan bundles (a bigger `.hdb`): native-memory hardening.** A `SIGSEGV` in `libhs_runtime.so` with executor exit status 134 ("Container from a bad node") means the native library crashed while loading or scanning a database, typically after native memory ran out. Hyperscan databases and scratch live outside the Java heap, so they count against `memoryOverhead`, not `executor.memory`. Each concurrent task holds its own cached databases (up to `max-cached-databases-per-partition`) plus its Scanner scratch, so native memory grows with `cores × cache size × database size`. Start from these, then tune from the `hs_err_pid*.log` and per-load size logs:
+
+```
+spark.executor.cores=2                     # halve concurrent tasks: fewer databases and scratch buffers live per JVM
+spark.executor.memory=10g                  # smaller heap: leave room for off-heap use inside the container
+spark.executor.memoryOverhead=12g          # raise further if YARN still kills containers; size to cores x cache x largest .hdb
+spark.executor.extraJavaOptions=-XX:MaxDirectMemorySize=2g -XX:+ExitOnOutOfMemoryError -XX:ErrorFile=/tmp/hs_err_%p.log
+spark.memory.offHeap.enabled=false         # Spark's own off-heap pool is separate from Hyperscan's JNI memory; do not use it to "make room"
+spark.task.maxFailures=2                   # a deterministic native crash will not heal on retry; fail fast instead of 4 crashes
+spark.excludeOnFailure.enabled=true        # keep retries off the node that just crashed
+spark.excludeOnFailure.task.maxTaskAttemptsPerNode=1
+spark.executor.heartbeatInterval=30s       # a long native load must not read as a lost executor
+spark.network.timeout=600s
+spark.hadoop.fs.gs.inputstream.buffer.size=8388608   # 8 MB GCS read buffer: fewer round-trips per large bundle
+```
+
+Pair these with the cache setting in `application.yml`: lower `max-cached-databases-per-partition` (for example from 20 to 3) until the bundle size is back to normal. Whether the executor survives is governed by that product: `cores x cached bundles x largest .hdb` must fit inside `memoryOverhead` with margin. These values are reasoned, not measured on a live cluster. Also confirm the Dataproc worker machine type has enough physical RAM: `(executor memory + overhead) x executors per node` must fit in YARN's per-node limit (`yarn.nodemanager.resource.memory-mb`).
+
 **Partitioning and skew (code-enforced)**
 
 ```
