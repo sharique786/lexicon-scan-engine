@@ -358,7 +358,7 @@ Every remaining group is scanned. A Lexicon match is **suppressed** when it is *
 
 | Table | NoiseReduction | Disclaimer | Lexicon |
 |---|---|---|---|
-| `lexicon-hit-summary` | every *evaluated* group, raw matches (a no-hit group gets an `N/A` placeholder entry) | same | same, **before** suppression |
+| `lexicon-hit-summary` | every *evaluated* group, raw matches (a no-hit group gets an `N/A` placeholder entry; a multi-member group — several `features_to_apply` under one `feature_id` — gets one entry **per member lexicon**, named by its `lexiconName`, so a no-hit member is reported alongside the hit ones) | same | same, **before** suppression |
 | `lexicon-hit-restricted` / `-unrestricted` | hit groups only | hit groups only | **after** suppression |
 | `feature-hit-summary` | every evaluated group with its hit status | same | same |
 

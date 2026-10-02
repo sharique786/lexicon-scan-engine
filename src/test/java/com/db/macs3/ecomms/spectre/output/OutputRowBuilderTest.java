@@ -181,6 +181,60 @@ class OutputRowBuilderTest {
         }
 
         @Test
+        @DisplayName("multi-member (OR) NoiseReduction group: one entry per member lexicon — the hit member keeps " +
+                "its terms, the no-hit member gets the N/A placeholder")
+        void multiMemberGroupReportsNoHitMemberToo() {
+            List<FeatureDecisionRow> rows = List.of(
+                    noiseRow(3L, "lexicon_mkt_cond_2", "OR"), noiseRow(3L, "lexicon_mkt_cond_3", "OR"));
+            Map<String, List<TermMatchResult>> canned = Map.of("lexicon_mkt_cond_2", List.of(
+                    new TermMatchResult("lexicon_mkt_cond_2::1", "spam",
+                            List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam"))))));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-101",
+                    FeatureGroupingService.groupAndOrder(rows),
+                    r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+
+            LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons()).hasSize(2);
+            var hit = row.getEvaluatedLexicons().stream()
+                    .filter(e -> e.getName().equals("lexicon_mkt_cond_2")).findFirst().orElseThrow();
+            assertThat(hit.getId()).isEqualTo(3L);
+            assertThat(hit.getTotalTermsCount()).isEqualTo(3L);
+            assertThat(hit.getRegexHitCount()).isEqualTo(1L);
+            assertThat(hit.getTermDtls().getFirst().getTermId()).isEqualTo("lexicon_mkt_cond_2::1");
+
+            var noHit = row.getEvaluatedLexicons().stream()
+                    .filter(e -> e.getName().equals("lexicon_mkt_cond_3")).findFirst().orElseThrow();
+            assertThat(noHit.getTotalTermsCount()).isEqualTo(3L);
+            assertThat(noHit.getRegexHitCount()).isZero();
+            assertThat(noHit.getTermDtls()).hasSize(1);
+            assertThat(noHit.getTermDtls().getFirst().getTermId()).isEqualTo("N/A");
+            assertThat(noHit.getTermDtls().getFirst().getTermRegexPattern()).isEqualTo("N/A");
+            assertThat(noHit.getTermDtls().getFirst().getTermDescription()).isEqualTo("N/A");
+            assertThat(noHit.getTermDtls().getFirst().getRegexMatchHitCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("multi-member group where no member hit: every member still gets its own placeholder entry")
+        void multiMemberGroupAllNoHit() {
+            List<FeatureDecisionRow> rows = List.of(
+                    noiseRow(3L, "lexicon_mkt_cond_2", "OR"), noiseRow(3L, "lexicon_mkt_cond_3", "OR"));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-101",
+                    FeatureGroupingService.groupAndOrder(rows), r -> List.of());
+
+            LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons()).extracting(e -> e.getName())
+                    .containsExactly("lexicon_mkt_cond_2", "lexicon_mkt_cond_3");
+            assertThat(row.getEvaluatedLexicons()).allSatisfy(e -> {
+                assertThat(e.getRegexHitCount()).isZero();
+                assertThat(e.getTermDtls().getFirst().getTermId()).isEqualTo("N/A");
+            });
+        }
+
+        @Test
         @DisplayName("regexMatchHitCount counts every individual occurrence of a term, not just whether it matched")
         void regexMatchHitCountReflectsMultipleOccurrences() {
             List<FeatureDecisionRow> rows = List.of(

@@ -64,6 +64,19 @@ public final class OutputRowBuilder {
         List<LexiconHitSummaryRow.EvaluatedLexicon> evaluatedLexicons = new ArrayList<>();
 
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
+            if (groupResult.getGroup().isMultiMember()) {
+                // Composite/NoiseReduction group with several features_to_apply: one entry per member
+                // lexicon, so a member with no hit is reported (zero-hit placeholder) alongside the hit ones.
+                for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.getMemberMatches().entrySet()) {
+                    FeatureDefinition.Body body = FeatureDefinition.parse(entry.getKey().getFeatureDefinitionJson()).getBody();
+                    String memberName = body.getLexiconName() != null && !body.getLexiconName().isBlank()
+                            ? body.getLexiconName() : groupResult.getGroup().getFeatureName();
+                    long memberTotal = body.getTotalTermsCount() == null ? 0 : body.getTotalTermsCount();
+                    evaluatedLexicons.add(buildEvaluatedLexicon(groupResult.getGroup().getFeatureId(), memberName,
+                            memberTotal, entry.getValue()));
+                }
+                continue;
+            }
             long totalTermsCount = 0;
             List<LexiconHitSummaryRow.TermDtl> termDtls = new ArrayList<>();
 
@@ -104,6 +117,21 @@ public final class OutputRowBuilder {
 
         return new LexiconHitSummaryRow(
                 messageId, processId, pipelineExecId, evaluatedLexicons, datasetPartitionValue, createdBy, createdTs);
+    }
+
+    private static LexiconHitSummaryRow.EvaluatedLexicon buildEvaluatedLexicon(
+            Long id, String name, long totalTermsCount, List<TermMatchResult> matches) {
+        List<LexiconHitSummaryRow.TermDtl> termDtls = new ArrayList<>();
+        for (TermMatchResult termMatch : matches) {
+            termDtls.add(new LexiconHitSummaryRow.TermDtl(termMatch.getTermId(), termMatch.getTermRegexPattern(),
+                    (long) termMatch.getMatches().size(), termMatch.getTermDescription()));
+        }
+        long regexHitCount = termDtls.size();
+        if (termDtls.isEmpty()) {
+            termDtls.add(new LexiconHitSummaryRow.TermDtl(
+                    NO_HIT_TERM_ID, NO_HIT_TERM_REGEX_PATTERN, 0L, NO_HIT_TERM_DESCRIPTION));
+        }
+        return new LexiconHitSummaryRow.EvaluatedLexicon(id, name, totalTermsCount, regexHitCount, termDtls);
     }
 
     // ── lexicon-hit-restricted / lexicon-hit-unrestricted (shared shape) ────
