@@ -1,0 +1,75 @@
+package com.db.macs3.ecomms.spectre.spark;
+
+import com.db.macs3.ecomms.spectre.bq.OutputTableWriter;
+import com.db.macs3.ecomms.spectre.config.RuntimeArgs;
+import com.db.macs3.ecomms.spectre.constants.BqColumns;
+import com.db.macs3.ecomms.spectre.model.output.PipelineRecordAuditRow;
+import org.apache.spark.api.java.function.MapPartitionsFunction;
+import org.apache.spark.sql.Row;
+
+import java.io.Serial;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+/**
+ * Maps every {@link MessageProcessingResult} in a partition — success and
+ * failure alike — to a {@code pipeline_record_audit} {@link Row}, so the
+ * audit table reflects every record this job processed, each with its own
+ * {@code SUCCESS}/{@code FAILED} {@link com.db.macs3.ecomms.spectre.constants.BqColumns.RecordStatus}
+ * — see {@link ScanEngineJobRunner writeOutputs}, which runs this via
+ * {@code Dataset.mapPartitions} directly on the cached results
+ * {@code Dataset}, rather than via {@code JavaRDD.map}.
+ *
+ * <p>Only processId/triggerType/pipelineExecId/recordId/stageName/status/
+ * returnCode/errorMessage/executionDate/createdBy/createdTs, plus
+ * sentDate/runDate/sourceName (copied from the AVRO message — see
+ * {@link MessageProcessingResult#withMessageAttributes}), are populated —
+ * every other field (rule evaluation details, token counts, Gemini request
+ * timing, rerun/eval-test linkage) belongs to stages this job doesn't run
+ * and has no source data for. The Integer count/token fields default to 0
+ * rather than null since they have no real value to report here.
+ * {@code returnCode}/{@code errorMessage} are null on a successful result.
+ *
+ * <p>{@code runtimeArgs}/{@code stageName}/{@code createdBy}/{@code executionDate} are held as serializable fields
+ * rather than read from {@code ScanEngineJobRunner} inside a lambda: referencing a runner instance field in a Spark
+ * closure would capture the (non-serializable, driver-only) runner and fail with {@code Task not serializable}.
+ */
+public final class PipelineRecordAuditRowMapper implements MapPartitionsFunction<MessageProcessingResult, Row> {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    private final RuntimeArgs runtimeArgs;
+    private final String stageName;
+    private final String createdBy;
+    private final LocalDate executionDate;
+
+    public PipelineRecordAuditRowMapper(RuntimeArgs runtimeArgs, String stageName, String createdBy,
+                                        LocalDate executionDate) {
+        this.runtimeArgs = runtimeArgs;
+        this.stageName = stageName;
+        this.createdBy = createdBy;
+        this.executionDate = executionDate;
+    }
+
+    @Override
+    public Iterator<Row> call(Iterator<MessageProcessingResult> input) {
+        List<Row> rows = new ArrayList<>();
+        while (input.hasNext()) {
+            MessageProcessingResult result = input.next();
+            boolean isError = result.isError();
+            rows.add(OutputTableWriter.toRow(new PipelineRecordAuditRow(
+                    runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
+                    result.getMessageId(), stageName, null, null, null, null, null,
+                    isError ? BqColumns.RecordStatus.FAILED : BqColumns.RecordStatus.SUCCESS,
+                    isError ? 1 : 0, result.getErrorMessage(), null, 0, null, 0,
+                    0, 0, 0, 0, 0, 0,
+                    Instant.now(), createdBy, null, executionDate,
+                    result.getSentDate(), result.getRunDate(), result.getSourceName(), null, null, null)));
+        }
+        return rows.iterator();
+    }
+}
