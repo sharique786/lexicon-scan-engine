@@ -43,9 +43,9 @@ import java.util.regex.Pattern;
  * mentally stripped back out, not a literal character-for-character match.
  *
  * <h2>When stripping applies</h2>
- * <p>{@link #strip} is applied to the subject and to the message body (EMAIL {@code raw_text} directly; CHAT/VOICE
- * {@code raw_text} through {@code ChatVoiceMessageTextExtractor} first — see {@link #stripExtracted}). It is idempotent on
- * text that has no tags and only single spaces (identity mapping). Attachment {@code clean_text} is never stripped: it is
+ * <p>{@link #strip} is applied to the subject and to the message body (EMAIL {@code msg_text} directly; CHAT/VOICE
+ * {@code msg_text} through {@code ChatVoiceMessageTextExtractor} first — see {@link #stripExtracted}). It is idempotent on
+ * text that has no tags and only single spaces (identity mapping). Attachment {@code attachment_text} is never stripped: it is
  * already free of markup, so {@link #identity} skips the scan and the offset array.
  */
 public final class HtmlStrippingService {
@@ -125,7 +125,7 @@ public final class HtmlStrippingService {
      * array means "stripped position == original position," computed in O(1)
      * with no backing array at all. This exists specifically for content
      * that {@link #strip} would leave byte-for-byte unchanged anyway (e.g.
-     * attachment {@code cleanText}, already HTML-free by the time it reaches
+     * attachment {@code attachmentText}, already HTML-free by the time it reaches
      * this engine — see {@code MessageAttachment} class Javadoc): running the
      * full tag/whitespace-scanning algorithm AND allocating an {@code int[]}
      * sized to the text's length is pure waste on text that can be

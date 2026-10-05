@@ -110,7 +110,7 @@ import java.util.stream.Collectors;
  *       ({@link #precomputeAreaTexts}), and every {@link #scanRow} call for
  *       that message reuses the same precomputed
  *       {@link HtmlStrippingService.StripResult}s. Attachment
- *       {@code cleanText} uses {@link HtmlStrippingService#identity} rather
+ *       {@code attachmentText} uses {@link HtmlStrippingService#identity} rather
  *       than {@link HtmlStrippingService#strip} — see
  *       {@code MessageAttachment} class Javadoc: it is already HTML-free by
  *       the time it reaches this engine, so the real stripping algorithm
@@ -119,8 +119,8 @@ import java.util.stream.Collectors;
  * </ul>
  *
  * <h2>MESSAGE_BODY stripping is channel-specific — see {@link #messageBodyStripResult}</h2>
- * <p>EMAIL {@code raw_text} is stripped directly, as it always has been. CHAT/VOICE
- * {@code raw_text} is an HTML table report where only the {@code <td>} cell(s) whose
+ * <p>EMAIL {@code msg_text} is stripped directly, as it always has been. CHAT/VOICE
+ * {@code msg_text} is an HTML table report where only the {@code <td>} cell(s) whose
  * {@code class} carries the {@code message_text} token are real message content — every other
  * column (room name, event type, email, attachment metadata, ...) must never reach Hyperscan.
  * {@link #messageBodyStripResult} routes to {@code ChatVoiceMessageTextExtractor} for those two
@@ -139,7 +139,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * @param bundleLoader           this partition's shared, cached zip-bundle loader — see
      *                               {@link HyperscanBundleLoader} class Javadoc
      * @param maxAttachmentSizeBytes null means unlimited — an attachment whose
-     *                               {@code cleanText} UTF-8 byte length exceeds this is
+     *                               {@code attachmentText} UTF-8 byte length exceeds this is
      *                               skipped entirely (not scanned, not an error)
      */
     public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes) {
@@ -173,9 +173,9 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
             areaTexts.add(new MessageAreaText(MatchArea.SUBJECT, null, subject, HtmlStrippingService.strip(subject)));
         }
 
-        String rawText = message.getContent() == null ? null : message.getContent().getRawText();
-        if (rawText != null && !rawText.isBlank()) {
-            areaTexts.add(new MessageAreaText(MatchArea.MESSAGE_BODY, null, rawText, messageBodyStripResult(message, rawText)));
+        String msgText = message.getContent() == null ? null : message.getContent().getMsgText();
+        if (msgText != null && !msgText.isBlank()) {
+            areaTexts.add(new MessageAreaText(MatchArea.MESSAGE_BODY, null, msgText, messageBodyStripResult(message, msgText)));
         }
 
         for (MessageAttachment attachment : message.attachmentsOrEmpty()) {
@@ -188,45 +188,45 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     }
 
     /**
-     * Resolves the MESSAGE_BODY area's {@link HtmlStrippingService.StripResult} for {@code rawText},
+     * Resolves the MESSAGE_BODY area's {@link HtmlStrippingService.StripResult} for {@code msgText},
      * per {@link ChannelType} — see {@code ChatVoiceMessageTextExtractor} class Javadoc for why
      * CHAT/VOICE need a different strategy than the plain {@link HtmlStrippingService#strip} the
      * EMAIL path has always used.
      *
      * <h2>EMAIL — unchanged</h2>
-     * <p>Strips {@code rawText} directly, exactly as before this method existed.
+     * <p>Strips {@code msgText} directly, exactly as before this method existed.
      *
      * <h2>CHAT/VOICE — extract {@code message_text} cells first, then strip</h2>
-     * <p>{@code rawText} for these channels is an HTML table report where most columns (room
+     * <p>{@code msgText} for these channels is an HTML table report where most columns (room
      * name, event type, email, attachment metadata, ...) are never scannable message content —
      * only the {@code <td>} cell(s) whose {@code class} carries the {@code message_text} token
      * do. Scanning the WHOLE table would feed Hyperscan every other column's text too, risking a
      * lexicon match on content that was never part of the actual message. {@link ChatVoiceMessageTextExtractor#extract}
-     * pulls just those cells out (with an offset map back to {@code rawText}), and
+     * pulls just those cells out (with an offset map back to {@code msgText}), and
      * {@link HtmlStrippingService#stripExtracted} then strips any further HTML those cells
      * themselves carry (e.g. a {@code <p>}-wrapped message) while composing that offset map with
-     * its own — so a match's position always resolves back to {@code rawText}, never to the
+     * its own — so a match's position always resolves back to {@code msgText}, never to the
      * intermediate, cells-only text.
      *
      * <h2>Fallback: not every CHAT/VOICE message is that table shape</h2>
-     * <p>When no {@code message_text} cell is found at all (including a {@code rawText} that
+     * <p>When no {@code message_text} cell is found at all (including a {@code msgText} that
      * isn't this table shape to begin with — e.g. a plain-text test fixture, or a CHAT/VOICE
      * message this engine hasn't seen the shape of yet), this falls back to stripping
-     * {@code rawText} directly, same as EMAIL — never silently drops content that could still
+     * {@code msgText} directly, same as EMAIL — never silently drops content that could still
      * legitimately be scanned.
      */
-    private static HtmlStrippingService.StripResult messageBodyStripResult(ScanMessage message, String rawText) {
+    private static HtmlStrippingService.StripResult messageBodyStripResult(ScanMessage message, String msgText) {
         MessageSource source = message.getSource();
         ChannelType channelType = ChannelType.fromChannelName(source == null ? null : source.getChannelName());
         if (channelType == ChannelType.CHAT || channelType == ChannelType.VOICE) {
-            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
             if (extraction.anyCellFound()) {
                 return HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap());
             }
-            log.debug("channelType={}: no message_text <td> cell found in raw_text — "
+            log.debug("channelType={}: no message_text <td> cell found in msg_text — "
                     + "falling back to whole-text HTML stripping", channelType);
         }
-        return HtmlStrippingService.strip(rawText);
+        return HtmlStrippingService.strip(msgText);
     }
 
     /**
@@ -236,13 +236,13 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         if (!withinSizeLimit(attachment)) {
             return null;
         }
-        String cleanText = attachment.getCleanText();
-        if (cleanText == null || cleanText.isBlank()) {
+        String attachmentText = attachment.getAttachmentText();
+        if (attachmentText == null || attachmentText.isBlank()) {
             return null;
         }
-        // identity(), not strip(): attachment cleanText is already HTML-free — see class Javadoc.
-        return new MessageAreaText(MatchArea.ATTACHMENT, attachment.getAttachmentId(), cleanText,
-                HtmlStrippingService.identity(cleanText));
+        // identity(), not strip(): attachment attachmentText is already HTML-free — see class Javadoc.
+        return new MessageAreaText(MatchArea.ATTACHMENT, attachment.getAttachmentId(), attachmentText,
+                HtmlStrippingService.identity(attachmentText));
     }
 
     /**
@@ -314,10 +314,10 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         if (maxAttachmentSizeBytes == null) {
             return true;
         }
-        if (attachment.getCleanText() == null) {
+        if (attachment.getAttachmentText() == null) {
             return true;
         }
-        long byteLength = attachment.getCleanText().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        long byteLength = attachment.getAttachmentText().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
         return byteLength <= maxAttachmentSizeBytes;
     }
 

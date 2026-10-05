@@ -199,7 +199,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
+                    new MessageContent(null, "there is a bomb in the body", "bomb in subject too"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -225,7 +225,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "there is a bomb in the body", "bomb in subject too", null),
+                    new MessageContent(null, "there is a bomb in the body", "bomb in subject too"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in attachment too")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -254,7 +254,7 @@ class FeatureScanOrchestratorTest {
 
         ScanMessage message = new ScanMessage("msg-101",
                 new MessageSource("chat", "src", "sys", "conv-1"),
-                new MessageContent(null, null, null, null),
+                new MessageContent(null, null, null),
                 List.of(new MessageAttachment("att-1", null, "file.txt", "bomb in a long attachment")),
                 new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
         FeatureDecisionRow attachOnlyRow = row("3", feature, defJson(feature, "Attachment"));
@@ -282,7 +282,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "there is a bomb in the body", null, null),
+                    new MessageContent(null, "there is a bomb in the body", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow bodyOnlyRow = row("4", feature, defJson(feature, "Message Body"));
@@ -309,7 +309,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "insider trading", null, null),
+                    new MessageContent(null, "insider trading", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("5", feature, defJson(feature, "Message Body"));
@@ -339,7 +339,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "insider trading occurred and was later disclosed to the board", null, null),
+                    new MessageContent(null, "insider trading occurred and was later disclosed to the board", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("6", feature, defJson(feature, "Message Body"));
@@ -366,7 +366,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "insider trading occurred yesterday", null, null),
+                    new MessageContent(null, "insider trading occurred yesterday", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("7", feature, defJson(feature, "Message Body"));
@@ -402,14 +402,14 @@ class FeatureScanOrchestratorTest {
             // Only 2 of 3 required leaves present -> required side NOT satisfied -> no result at all.
             ScanMessage partialMessage = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "alpha and beta but not the third", null, null),
+                    new MessageContent(null, "alpha and beta but not the third", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(partialMessage).scan(decisionRow)).isEmpty();
 
             // All 3 required leaves present, excluded absent -> matches, correct term_id.
             ScanMessage fullMessage = new ScanMessage("msg-102",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "alpha beta gamma all present here", null, null),
+                    new MessageContent(null, "alpha beta gamma all present here", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(fullMessage).scan(decisionRow);
             assertThat(results).hasSize(1);
@@ -436,7 +436,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "alpha beta gamma present", null, null),
+                    new MessageContent(null, "alpha beta gamma present", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("9", feature, defJson(feature, "Message Body"));
@@ -469,7 +469,7 @@ class FeatureScanOrchestratorTest {
             // "simple term" and "required" both present, "excluded" absent -> BOTH terms match.
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "here is a simple term and also required", null, null),
+                    new MessageContent(null, "here is a simple term and also required", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("10", feature, defJson(feature, "Message Body"));
@@ -506,7 +506,7 @@ class FeatureScanOrchestratorTest {
 
             ScanMessage nearMessage = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "we manipulate the closing price today", null, null),
+                    new MessageContent(null, "we manipulate the closing price today", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(nearMessage).scan(decisionRow);
 
@@ -520,7 +520,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage farMessage = new ScanMessage("msg-102",
                     new MessageSource("chat", "src", "sys", "conv-1"),
                     new MessageContent(null,
-                            "manipulate one two three four five six seven eight nine ten price", null, null),
+                            "manipulate one two three four five six seven eight nine ten price", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(farMessage).scan(decisionRow)).isEmpty();
         }
@@ -545,7 +545,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "please avoidnow any frontrun of the danger zone", null, null),
+                    new MessageContent(null, "please avoidnow any frontrun of the danger zone", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             FeatureDecisionRow decisionRow = row("12", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -584,7 +584,7 @@ class FeatureScanOrchestratorTest {
             // NEAR-chain satisfied (within 5 words) AND the third leaf also present -> matches.
             ScanMessage bothPresent = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "any hint from the analyst about to publish soon", null, null),
+                    new MessageContent(null, "any hint from the analyst about to publish soon", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(bothPresent).scan(decisionRow);
             assertThat(results).hasSize(1);
@@ -593,14 +593,14 @@ class FeatureScanOrchestratorTest {
             // NEAR-chain satisfied, but the third leaf is ABSENT -> plain AND (not OR) means no match.
             ScanMessage onlyNearChain = new ScanMessage("msg-102",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "any hint from the analyst today", null, null),
+                    new MessageContent(null, "any hint from the analyst today", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(onlyNearChain).scan(decisionRow)).isEmpty();
 
             // Third leaf present, but the NEAR-chain is not (leaves too far apart) -> no match.
             ScanMessage onlyThirdLeaf = new ScanMessage("msg-103",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "pre-publication of something unrelated", null, null),
+                    new MessageContent(null, "pre-publication of something unrelated", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(onlyThirdLeaf).scan(decisionRow)).isEmpty();
         }
@@ -628,13 +628,13 @@ class FeatureScanOrchestratorTest {
 
             ScanMessage onlyExcluded = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "this message has exclleaf only", null, null),
+                    new MessageContent(null, "this message has exclleaf only", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(onlyExcluded).scan(decisionRow)).isEmpty();
 
             ScanMessage onlyRequired = new ScanMessage("msg-102",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "this message has reqleaf only", null, null),
+                    new MessageContent(null, "this message has reqleaf only", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             List<TermMatchResult> results = orchestrator.scannerFor(onlyRequired).scan(decisionRow);
             assertThat(results).hasSize(1);
@@ -642,7 +642,7 @@ class FeatureScanOrchestratorTest {
 
             ScanMessage both = new ScanMessage("msg-103",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "this message has reqleaf and exclleaf both", null, null),
+                    new MessageContent(null, "this message has reqleaf and exclleaf both", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(both).scan(decisionRow))
                     .as("required present AND excluded ALSO present -> term must NOT appear in results")
@@ -671,7 +671,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "legacyword here, and manipulate the price too", null, null),
+                    new MessageContent(null, "legacyword here, and manipulate the price too", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             FeatureDecisionRow decisionRow = row("14", feature, defJson(feature, "Message Body"));
             List<TermMatchResult> results = orchestrator.scannerFor(message).scan(decisionRow);
@@ -686,7 +686,7 @@ class FeatureScanOrchestratorTest {
     // ── CHAT/VOICE channel-specific MESSAGE_BODY handling ───────────────────────
 
     /**
-     * The exact CHAT-type {@code content.raw_text} sample from the requirement: an HTML table
+     * The exact CHAT-type {@code content.msg_text} sample from the requirement: an HTML table
      * report with 3 rows, only the LAST TWO of which have a non-empty {@code message_text} cell
      * ({@code "Hi There"}, then {@code "<p>Can you share market price?</p>"}) — the first row's
      * cell is empty (an attachment-only event).
@@ -725,8 +725,8 @@ class FeatureScanOrchestratorTest {
 
     @Test
     @DisplayName("CHAT channel: matches 'market price' inside a message_text <td>, and the reported "
-                 + "start/end in raw_text point EXACTLY at 'market price' — never at an unrelated column")
-    void chatChannel_matchesInsideMessageTextCell_positionResolvesToRawText() {
+                 + "start/end in msg_text point EXACTLY at 'market price' — never at an unrelated column")
+    void chatChannel_matchesInsideMessageTextCell_positionResolvesToMsgText() {
         String feature = "lex_chat-1";
         byte[] dbBytes = compileAndSerialize(
                 new Expression("market price", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1),
@@ -739,7 +739,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, CHAT_TABLE_RAW_TEXT, null, null),
+                    new MessageContent(null, CHAT_TABLE_RAW_TEXT, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
@@ -770,7 +770,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("CHAT", "src", "sys", "conv-1"),
-                    new MessageContent(null, CHAT_TABLE_RAW_TEXT, null, null),
+                    new MessageContent(null, CHAT_TABLE_RAW_TEXT, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
@@ -784,7 +784,7 @@ class FeatureScanOrchestratorTest {
     @DisplayName("VOICE channel: matches inside a message_text <td> the same way CHAT does")
     void voiceChannel_matchesInsideMessageTextCell() {
         String feature = "lex_voice-1";
-        String rawText = "<html><body><table><tbody><tr>"
+        String msgText = "<html><body><table><tbody><tr>"
                 + "<td class=\"room_name\"></td>"
                 + "<td class=\"message-text-cell message_text\">This is very strong language</td>"
                 + "<td class=\"event_type\">speechtotext</td></tr><tr>"
@@ -801,7 +801,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
@@ -811,12 +811,12 @@ class FeatureScanOrchestratorTest {
             var match = results.getFirst().getMatches().getFirst();
             int start = match.getSpan().getStartCharIndex();
             int end = match.getSpan().getEndCharIndex();
-            assertThat(rawText.substring(start, end)).isEqualTo("strong language");
+            assertThat(msgText.substring(start, end)).isEqualTo("strong language");
         }
     }
 
     @Test
-    @DisplayName("CHAT channel falls back to whole-text stripping when raw_text has no message_text "
+    @DisplayName("CHAT channel falls back to whole-text stripping when msg_text has no message_text "
                  + "<td> at all — e.g. plain, non-table text — so existing plain-text CHAT messages "
                  + "keep matching exactly as before this feature existed")
     void chatChannel_noMessageTextCell_fallsBackToPlainStripping() {
@@ -829,7 +829,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, "there is a bomb in the body", null, null),
+                    new MessageContent(null, "there is a bomb in the body", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
@@ -842,12 +842,12 @@ class FeatureScanOrchestratorTest {
     // ── CHAT/VOICE with varying row counts — matched text position/length correctness ──────────
 
     /**
-     * Builds a minimal CHAT/VOICE-shaped {@code raw_text} table with one row per entry in
+     * Builds a minimal CHAT/VOICE-shaped {@code msg_text} table with one row per entry in
      * {@code cellTexts} (in order), each row's {@code message_text} cell holding that entry —
      * lets a test vary "how many rows/cells precede the matching one" just by varying this
      * array's length, without hand-building a full table each time.
      */
-    private static String messageTextTableRawText(String... cellTexts) {
+    private static String messageTextTableMsgText(String... cellTexts) {
         StringBuilder sb = new StringBuilder("<html><body><table><tbody>");
         for (String cellText : cellTexts) {
             sb.append("<tr><td class=\"room_name\"></td>")
@@ -860,17 +860,17 @@ class FeatureScanOrchestratorTest {
 
     /**
      * Asserts a single match's {@code startCharIndex}/{@code endCharIndex}/length resolve back
-     * to EXACTLY {@code expectedText} in {@code rawText} — the position/length correctness check
+     * to EXACTLY {@code expectedText} in {@code msgText} — the position/length correctness check
      * this whole test group exists for.
      */
-    private static void assertSingleMatchPositionAndLength(List<TermMatchResult> results, String rawText,
+    private static void assertSingleMatchPositionAndLength(List<TermMatchResult> results, String msgText,
                                                             String expectedText) {
         assertThat(results).hasSize(1);
         assertThat(results.getFirst().getMatches()).hasSize(1);
         var span = results.getFirst().getMatches().getFirst().getSpan();
         assertThat(span.length()).as("matched span length").isEqualTo(expectedText.length());
-        assertThat(rawText.substring(span.getStartCharIndex(), span.getEndCharIndex()))
-                .as("raw_text.substring(startCharIndex, endCharIndex)").isEqualTo(expectedText);
+        assertThat(msgText.substring(span.getStartCharIndex(), span.getEndCharIndex()))
+                .as("msg_text.substring(startCharIndex, endCharIndex)").isEqualTo(expectedText);
         assertThat(span.getMatchedText()).isEqualTo(expectedText);
     }
 
@@ -878,7 +878,7 @@ class FeatureScanOrchestratorTest {
     @DisplayName("VOICE, single row: position/length resolve exactly to the one message_text cell's content")
     void voiceChannel_singleRow_positionAndLengthCorrect() {
         String feature = "lex_voice-2";
-        String rawText = messageTextTableRawText("This call contains insider trading information");
+        String msgText = messageTextTableMsgText("This call contains insider trading information");
 
         byte[] dbBytes = compileAndSerialize(
                 new Expression("insider trading", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
@@ -888,12 +888,12 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "insider trading");
+            assertSingleMatchPositionAndLength(results, msgText, "insider trading");
         }
     }
 
@@ -902,7 +902,7 @@ class FeatureScanOrchestratorTest {
                  + "rows' own message_text cells, not just their combined length coincidentally")
     void voiceChannel_threeRows_matchInLastRow_positionAndLengthCorrect() {
         String feature = "lex_voice-3";
-        String rawText = messageTextTableRawText(
+        String msgText = messageTextTableMsgText(
                 "Cats and dogs hate each other",
                 "This is very strong language",
                 "Please transfer the funds to account 12345");
@@ -915,12 +915,12 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+            assertSingleMatchPositionAndLength(results, msgText, "transfer the funds");
         }
     }
 
@@ -929,7 +929,7 @@ class FeatureScanOrchestratorTest {
                  + "both preceding AND following rows present")
     void voiceChannel_fiveRows_matchInMiddleRow_positionAndLengthCorrect() {
         String feature = "lex_voice-4";
-        String rawText = messageTextTableRawText(
+        String msgText = messageTextTableMsgText(
                 "alpha bravo",
                 "charlie delta",
                 "insider trading is illegal and unethical",
@@ -944,12 +944,12 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "insider trading");
+            assertSingleMatchPositionAndLength(results, msgText, "insider trading");
         }
     }
 
@@ -958,7 +958,7 @@ class FeatureScanOrchestratorTest {
                  + "position/length is resolved independently and correctly, not just the first")
     void voiceChannel_fourRows_matchesInTwoRows_eachPositionAndLengthCorrect() {
         String feature = "lex_voice-5";
-        String rawText = messageTextTableRawText(
+        String msgText = messageTextTableMsgText(
                 "please wire the funds today",
                 "no relevant content here",
                 "we will wire the funds tomorrow instead",
@@ -972,7 +972,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
@@ -983,7 +983,7 @@ class FeatureScanOrchestratorTest {
             for (var match : results.getFirst().getMatches()) {
                 var span = match.getSpan();
                 assertThat(span.length()).isEqualTo("wire the funds".length());
-                assertThat(rawText.substring(span.getStartCharIndex(), span.getEndCharIndex()))
+                assertThat(msgText.substring(span.getStartCharIndex(), span.getEndCharIndex()))
                         .isEqualTo("wire the funds");
             }
             // And the two occurrences are genuinely at different positions, not the same one twice.
@@ -997,7 +997,7 @@ class FeatureScanOrchestratorTest {
     @DisplayName("CHAT, 2 rows: match is in the SECOND row")
     void chatChannel_twoRows_matchInSecondRow_positionAndLengthCorrect() {
         String feature = "lex_chat-4";
-        String rawText = messageTextTableRawText(
+        String msgText = messageTextTableMsgText(
                 "Hi there, how are you?",
                 "Can you please share confidential information");
 
@@ -1010,12 +1010,12 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "confidential information");
+            assertSingleMatchPositionAndLength(results, msgText, "confidential information");
         }
     }
 
@@ -1023,7 +1023,7 @@ class FeatureScanOrchestratorTest {
     @DisplayName("CHAT, 4 rows: match is in the THIRD row, and other rows' content is never mistaken for it")
     void chatChannel_fourRows_matchInThirdRow_positionAndLengthCorrect() {
         String feature = "lex_chat-5";
-        String rawText = messageTextTableRawText(
+        String msgText = messageTextTableMsgText(
                 "good morning everyone",
                 "let's sync at 3pm",
                 "please transfer the funds before the deadline",
@@ -1037,12 +1037,12 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+            assertSingleMatchPositionAndLength(results, msgText, "transfer the funds");
         }
     }
 
@@ -1053,7 +1053,7 @@ class FeatureScanOrchestratorTest {
                  + "no offset translation needed since there is no markup to skip over")
     void emailChannel_plainText_positionAndLengthCorrect() {
         String feature = "lex_email-1";
-        String rawText = "Please transfer the funds to account 12345 immediately";
+        String msgText = "Please transfer the funds to account 12345 immediately";
 
         byte[] dbBytes = compileAndSerialize(
                 new Expression("transfer the funds", EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS), 1));
@@ -1063,17 +1063,17 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+            assertSingleMatchPositionAndLength(results, msgText, "transfer the funds");
 
             // For plain, HTML-free text the match position is a direct, un-translated index —
-            // exactly rawText.indexOf(the literal), with no HTML to have skipped over.
+            // exactly msgText.indexOf(the literal), with no HTML to have skipped over.
             var span = results.getFirst().getMatches().getFirst().getSpan();
-            assertThat(span.getStartCharIndex()).isEqualTo(rawText.indexOf("transfer the funds"));
+            assertThat(span.getStartCharIndex()).isEqualTo(msgText.indexOf("transfer the funds"));
         }
     }
 
@@ -1083,7 +1083,7 @@ class FeatureScanOrchestratorTest {
                  + "length resolve to an exact substring, same guarantee as the CHAT/VOICE cell tests above")
     void emailChannel_htmlContent_matchNotInterruptedByTags_positionAndLengthCorrect() {
         String feature = "lex_email-2";
-        String rawText = "<div><p>Please see the attached statement.</p>"
+        String msgText = "<div><p>Please see the attached statement.</p>"
                 + "<p>Kindly transfer the funds to the escrow account.</p></div>";
 
         byte[] dbBytes = compileAndSerialize(
@@ -1094,12 +1094,12 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
                     .scan(row("1", feature, defJson(feature, "Message Body")));
-            assertSingleMatchPositionAndLength(results, rawText, "transfer the funds");
+            assertSingleMatchPositionAndLength(results, msgText, "transfer the funds");
         }
     }
 
@@ -1109,7 +1109,7 @@ class FeatureScanOrchestratorTest {
                  + "match the values already verified independently in HtmlStrippingServiceTest")
     void emailChannel_htmlContent_matchSpansAcrossTags_positionMatchesWorkedExample() {
         String feature = "lex_email-3";
-        String rawText = "<p>Enjoy</p>\n<p>Happy Birthday</p>";
+        String msgText = "<p>Enjoy</p>\n<p>Happy Birthday</p>";
         String patternText = "Enjoy(?:\\s+\\S+){0,2}\\s+Happy"; // actual regex text: Enjoy(?:\s+\S+){0,2}\s+Happy
 
         byte[] dbBytes = compileAndSerialize(
@@ -1123,7 +1123,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             List<TermMatchResult> results = orchestrator.scannerFor(message)
@@ -1158,16 +1158,16 @@ class FeatureScanOrchestratorTest {
 
     @Test
     @DisplayName("CHAT, scope=[subject, Attachment] (no Message Body): 'bomb' present ONLY in the "
-                 + "message_text cell -> NOT a match, even though the word is genuinely in raw_text")
+                 + "message_text cell -> NOT a match, even though the word is genuinely in msg_text")
     void chatChannel_scopeExcludesMessageBody_termOnlyInBody_noMatch() {
         String feature = "lex_scope-1";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-1.zip");
-        String rawText = messageTextTableRawText("there is a bomb in the chat body");
+        String msgText = messageTextTableMsgText("there is a bomb in the chat body");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, "no relevant subject text here", null),
+                    new MessageContent(null, msgText, "no relevant subject text here"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "nothing relevant here")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1183,12 +1183,12 @@ class FeatureScanOrchestratorTest {
     void chatChannel_scopeIsAttachmentOnly_termOnlyInAttachment_matches() {
         String feature = "lex_scope-2";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-2.zip");
-        String rawText = messageTextTableRawText("nothing relevant in the chat body");
+        String msgText = messageTextTableMsgText("nothing relevant in the chat body");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, "no relevant subject either", null),
+                    new MessageContent(null, msgText, "no relevant subject either"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1207,12 +1207,12 @@ class FeatureScanOrchestratorTest {
     void chatChannel_scopeIsMessageBodyOnly_termOnlyInAttachment_noMatch() {
         String feature = "lex_scope-3";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-3.zip");
-        String rawText = messageTextTableRawText("nothing relevant in the chat body");
+        String msgText = messageTextTableMsgText("nothing relevant in the chat body");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1228,12 +1228,12 @@ class FeatureScanOrchestratorTest {
     void voiceChannel_scopeIsSubjectOnly_termOnlyInBody_noMatch() {
         String feature = "lex_scope-4";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-4.zip");
-        String rawText = messageTextTableRawText("there is a bomb in this voice transcript");
+        String msgText = messageTextTableMsgText("there is a bomb in this voice transcript");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, "no relevant subject", null),
+                    new MessageContent(null, msgText, "no relevant subject"),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "subject"));
@@ -1249,12 +1249,12 @@ class FeatureScanOrchestratorTest {
     void voiceChannel_scopeIsSubjectOnly_termInAllAreas_matchesSubjectOnly() {
         String feature = "lex_scope-5";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-5.zip");
-        String rawText = messageTextTableRawText("there is a bomb in this voice transcript too");
+        String msgText = messageTextTableMsgText("there is a bomb in this voice transcript too");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, "bomb mentioned in the subject", null),
+                    new MessageContent(null, msgText, "bomb mentioned in the subject"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment too")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1273,12 +1273,12 @@ class FeatureScanOrchestratorTest {
     void chatChannel_allScopesIncluded_termInAllThreeAreas_matchesAllThree() {
         String feature = "lex_scope-6";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-6.zip");
-        String rawText = messageTextTableRawText("there is a bomb in the chat body");
+        String msgText = messageTextTableMsgText("there is a bomb in the chat body");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, "bomb mentioned in the subject", null),
+                    new MessageContent(null, msgText, "bomb mentioned in the subject"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1300,7 +1300,7 @@ class FeatureScanOrchestratorTest {
     void chatChannel_termInOtherTableColumn_onlyAttachmentMatches() {
         String feature = "lex_scope-7";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-7.zip");
-        String rawText = "<html><body><table><tbody><tr>"
+        String msgText = "<html><body><table><tbody><tr>"
                 + "<td class=\"company_name\">BOMB SQUAD HOLDINGS</td>"
                 + "<td class=\"message-text-cell message_text\">nothing relevant here</td>"
                 + "</tr></tbody></table></body></html>";
@@ -1308,7 +1308,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1327,12 +1327,12 @@ class FeatureScanOrchestratorTest {
     void chatChannel_scopeIsAttachmentOnly_noAttachmentPresent_noMatch() {
         String feature = "lex_scope-8";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-8.zip");
-        String rawText = messageTextTableRawText("there is a bomb in the chat body");
+        String msgText = messageTextTableMsgText("there is a bomb in the chat body");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("chat", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Attachment"));
@@ -1348,12 +1348,12 @@ class FeatureScanOrchestratorTest {
     void voiceChannel_scopeIsMessageBodyOnly_termInBodyAndAttachment_matchesBodyOnly() {
         String feature = "lex_scope-9";
         HyperscanBundleLoader loader = bombLoader(feature, "gs://bucket/lex_scope-9.zip");
-        String rawText = messageTextTableRawText("there is a bomb in this voice transcript");
+        String msgText = messageTextTableMsgText("there is a bomb in this voice transcript");
 
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("voice", "src", "sys", "conv-1"),
-                    new MessageContent(null, rawText, null, null),
+                    new MessageContent(null, msgText, null),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment too")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1377,7 +1377,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, "nothing relevant in the body", "there is a bomb in the subject", null),
+                    new MessageContent(null, "nothing relevant in the body", "there is a bomb in the subject"),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "SUBJECT"));
@@ -1398,7 +1398,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, "there is a bomb in the body", "nothing relevant in the subject", null),
+                    new MessageContent(null, "there is a bomb in the body", "nothing relevant in the subject"),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "message body"));
@@ -1419,7 +1419,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, "nothing relevant in the body", "nothing relevant in the subject", null),
+                    new MessageContent(null, "nothing relevant in the body", "nothing relevant in the subject"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "there is a bomb in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1441,7 +1441,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, "bomb mentioned in the body", "bomb mentioned in the subject", null),
+                    new MessageContent(null, "bomb mentioned in the body", "bomb mentioned in the subject"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 
@@ -1486,7 +1486,7 @@ class FeatureScanOrchestratorTest {
             ScanMessage mixed = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
                     new MessageContent(null, hebrew + "\n Second line review retained launder while the order "
-                            + "book, keep in the market mouth shut", null, null),
+                            + "book, keep in the market mouth shut", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
 
@@ -1496,7 +1496,7 @@ class FeatureScanOrchestratorTest {
 
             ScanMessage tooFar = new ScanMessage("msg-102",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, hebrew + " keep one two three four mouth shut", null, null),
+                    new MessageContent(null, hebrew + " keep one two three four mouth shut", null),
                     List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
             assertThat(orchestrator.scannerFor(tooFar).scan(decisionRow)).isEmpty();
         }
@@ -1531,7 +1531,7 @@ class FeatureScanOrchestratorTest {
             FeatureDecisionRow decisionRow = row("1", feature, defJson(feature, "Message Body"));
             java.util.function.Function<String, Set<String>> termIdsFor = text -> {
                 ScanMessage message = new ScanMessage("msg", new MessageSource("chat", "src", "sys", "conv-1"),
-                        new MessageContent(null, text, null, null), List.of(),
+                        new MessageContent(null, text, null), List.of(),
                         new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
                 Set<String> ids = new HashSet<>();
                 orchestrator.scannerFor(message).scan(decisionRow).forEach(r -> ids.add(r.getTermId()));
@@ -1581,7 +1581,7 @@ class FeatureScanOrchestratorTest {
         try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
             ScanMessage message = new ScanMessage("msg-101",
                     new MessageSource("email", "src", "sys", "conv-1"),
-                    new MessageContent(null, "bomb mentioned in the body", "nothing relevant in the subject", null),
+                    new MessageContent(null, "bomb mentioned in the body", "nothing relevant in the subject"),
                     List.of(new MessageAttachment("att-1", null, "file.txt", "bomb mentioned in the attachment")),
                     new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
 

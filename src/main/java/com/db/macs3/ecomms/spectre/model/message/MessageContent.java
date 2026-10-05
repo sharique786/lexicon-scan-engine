@@ -13,24 +13,20 @@ public class MessageContent implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private String header;
-    private String rawText;
+    private String msgText;
     private String subject;
-    private String cleanText;
 
     /**
      * @param header    display header text, not scanned by this engine
-     * @param rawText   the message body, in its ORIGINAL form (may contain HTML) —
+     * @param msgText   the message body, in its ORIGINAL form (may contain HTML) —
      *                  the field this engine scans; see {@link ScanMessage} class Javadoc
      * @param subject   the message subject — scanned when a feature's scope includes it
      *                  (see {@code BqColumns.FeatureDefinitionJson.SCOPE_SUBJECT})
-     * @param cleanText a pre-cleaned form of the body, carried through for parity with
-     *                  the source schema but not itself scanned — see {@link ScanMessage}
      */
-    public MessageContent(String header, String rawText, String subject, String cleanText) {
+    public MessageContent(String header, String msgText, String subject) {
         this.header = header;
-        this.rawText = rawText;
+        this.msgText = msgText;
         this.subject = subject;
-        this.cleanText = cleanText;
     }
 
     public String getHeader() {
@@ -41,12 +37,12 @@ public class MessageContent implements Serializable {
         this.header = header;
     }
 
-    public String getRawText() {
-        return rawText;
+    public String getMsgText() {
+        return msgText;
     }
 
-    public void setRawText(String rawText) {
-        this.rawText = rawText;
+    public void setMsgText(String msgText) {
+        this.msgText = msgText;
     }
 
     public String getSubject() {
@@ -55,14 +51,6 @@ public class MessageContent implements Serializable {
 
     public void setSubject(String subject) {
         this.subject = subject;
-    }
-
-    public String getCleanText() {
-        return cleanText;
-    }
-
-    public void setCleanText(String cleanText) {
-        this.cleanText = cleanText;
     }
 
     @Override
@@ -75,19 +63,18 @@ public class MessageContent implements Serializable {
         }
         MessageContent other = (MessageContent) obj;
         return Objects.equals(header, other.header)
-                && Objects.equals(rawText, other.rawText)
-                && Objects.equals(subject, other.subject)
-                && Objects.equals(cleanText, other.cleanText);
+                && Objects.equals(msgText, other.msgText)
+                && Objects.equals(subject, other.subject);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(header, rawText, subject, cleanText);
+        return Objects.hash(header, msgText, subject);
     }
 
     @Override
     public String toString() {
-        return "MessageContent[header=" + header + ", rawText=" + rawText
-                + ", subject=" + subject + ", cleanText=" + cleanText + "]";
+        return "MessageContent[header=" + header + ", msgText=" + msgText
+                + ", subject=" + subject + "]";
     }
 }

@@ -91,7 +91,7 @@ public final class HyperscanScanService {
      * @param stripResult  this area's text, already HTML-stripped ONCE per message
      *                     (see class Javadoc) — {@link HtmlStrippingService#strip} for
      *                     subject/body, {@link HtmlStrippingService#identity} for
-     *                     attachment {@code cleanText} (never needs stripping)
+     *                     attachment {@code attachmentText} (never needs stripping)
      * @param database     a loaded Hyperscan database — see {@code HyperscanBundleLoader}
      * @param area         which part of the message this text is
      * @param attachmentId required (non-null) iff {@code area == ATTACHMENT}; null otherwise

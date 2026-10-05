@@ -14,7 +14,7 @@ class ChatVoiceMessageTextExtractorTest {
     class WorkedExample {
 
         /**
-         * The exact CHAT-type {@code content.raw_text} sample from the requirement — 3 rows,
+         * The exact CHAT-type {@code content.msg_text} sample from the requirement — 3 rows,
          * only the last two of which have a non-empty {@code message_text} cell.
          */
         private static final String RAW_TEXT =
@@ -61,24 +61,24 @@ class ChatVoiceMessageTextExtractorTest {
         void extractedAndStrippedTextMatchesRequirement() {
             ChatVoiceMessageTextExtractor.ExtractionResult extraction =
                     ChatVoiceMessageTextExtractor.extract(RAW_TEXT);
-            String cleanText = HtmlStrippingService.stripExtracted(
+            String attachmentText = HtmlStrippingService.stripExtracted(
                     extraction.extractedText(), extraction.offsetMap()).strippedText();
 
-            assertThat(cleanText).contains("Hi There Can you share market price?");
-            assertThat(cleanText).doesNotContain("DEUTSCHE BANK", "aakanksha", "34644ea1", "File_0.xlsx");
+            assertThat(attachmentText).contains("Hi There Can you share market price?");
+            assertThat(attachmentText).doesNotContain("DEUTSCHE BANK", "aakanksha", "34644ea1", "File_0.xlsx");
         }
 
         @Test
-        @DisplayName("'market price' resolves back to raw_text at an EXACT substring match — "
+        @DisplayName("'market price' resolves back to msg_text at an EXACT substring match — "
                      + "no HTML markup in between, since it's a single unbroken run in one cell")
-        void matchedTextPositionResolvesExactlyToRawText() {
+        void matchedTextPositionResolvesExactlyToMsgText() {
             ChatVoiceMessageTextExtractor.ExtractionResult extraction =
                     ChatVoiceMessageTextExtractor.extract(RAW_TEXT);
             HtmlStrippingService.StripResult stripResult =
                     HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap());
 
-            String cleanText = stripResult.strippedText();
-            int localStart = cleanText.indexOf("market price");
+            String attachmentText = stripResult.strippedText();
+            int localStart = attachmentText.indexOf("market price");
             assertThat(localStart).isGreaterThanOrEqualTo(0);
             int localEnd = localStart + "market price".length();
 
@@ -95,8 +95,8 @@ class ChatVoiceMessageTextExtractorTest {
         @Test
         @DisplayName("matches regardless of token order in the class attribute")
         void matchesRegardlessOfTokenOrder() {
-            String rawText = "<table><tr><td class=\"message_text message-text-cell\">hello</td></tr></table>";
-            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
+            String msgText = "<table><tr><td class=\"message_text message-text-cell\">hello</td></tr></table>";
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
             assertThat(extraction.anyCellFound()).isTrue();
             assertThat(extraction.extractedText()).isEqualTo("hello");
         }
@@ -105,15 +105,15 @@ class ChatVoiceMessageTextExtractorTest {
         @DisplayName("does NOT match a class that merely CONTAINS the token as a substring, e.g. "
                      + "'message-text-cell' alone without the exact 'message_text' token")
         void doesNotMatchSubstringOnlyClass() {
-            String rawText = "<table><tr><td class=\"message-text-cell\">hello</td></tr></table>";
-            assertThat(ChatVoiceMessageTextExtractor.extract(rawText).anyCellFound()).isFalse();
+            String msgText = "<table><tr><td class=\"message-text-cell\">hello</td></tr></table>";
+            assertThat(ChatVoiceMessageTextExtractor.extract(msgText).anyCellFound()).isFalse();
         }
 
         @Test
         @DisplayName("single-quoted class attribute is supported too")
         void supportsSingleQuotedClassAttribute() {
-            String rawText = "<table><tr><td class='message-text-cell message_text'>hello</td></tr></table>";
-            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
+            String msgText = "<table><tr><td class='message-text-cell message_text'>hello</td></tr></table>";
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
             assertThat(extraction.anyCellFound()).isTrue();
             assertThat(extraction.extractedText()).isEqualTo("hello");
         }
@@ -126,46 +126,46 @@ class ChatVoiceMessageTextExtractorTest {
         @Test
         @DisplayName("concatenates every matching cell's content, in document order, separated by a space")
         void concatenatesInDocumentOrder() {
-            String rawText = "<table>"
+            String msgText = "<table>"
                     + "<tr><td class=\"message_text\">This is very strong language</td></tr>"
                     + "<tr><td class=\"message_text\">Cats and dogs hate each other</td></tr>"
                     + "</table>";
-            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
             assertThat(extraction.extractedText()).isEqualTo("This is very strong language Cats and dogs hate each other");
         }
 
         @Test
-        @DisplayName("each cell's own content maps back to ITS OWN position in raw_text, not the other cell's")
+        @DisplayName("each cell's own content maps back to ITS OWN position in msg_text, not the other cell's")
         void eachCellMapsToItsOwnPosition() {
-            String rawText = "<table>"
+            String msgText = "<table>"
                     + "<tr><td class=\"message_text\">alpha</td></tr>"
                     + "<tr><td class=\"message_text\">beta</td></tr>"
                     + "</table>";
-            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
             HtmlStrippingService.StripResult stripResult =
                     HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap());
-            String cleanText = stripResult.strippedText();
+            String attachmentText = stripResult.strippedText();
 
-            int alphaStart = cleanText.indexOf("alpha");
-            int betaStart = cleanText.indexOf("beta");
+            int alphaStart = attachmentText.indexOf("alpha");
+            int betaStart = attachmentText.indexOf("beta");
             int rawAlphaStart = stripResult.offsetMap().toOriginal(alphaStart);
             int rawBetaStart = stripResult.offsetMap().toOriginal(betaStart);
 
-            assertThat(rawText.substring(rawAlphaStart, rawAlphaStart + 5)).isEqualTo("alpha");
-            assertThat(rawText.substring(rawBetaStart, rawBetaStart + 4)).isEqualTo("beta");
+            assertThat(msgText.substring(rawAlphaStart, rawAlphaStart + 5)).isEqualTo("alpha");
+            assertThat(msgText.substring(rawBetaStart, rawBetaStart + 4)).isEqualTo("beta");
         }
 
         @Test
         @DisplayName("an empty cell contributes nothing but still keeps document order intact")
         void emptyCellContributesNothing() {
-            String rawText = "<table>"
+            String msgText = "<table>"
                     + "<tr><td class=\"message_text\"></td></tr>"
                     + "<tr><td class=\"message_text\">Hi There</td></tr>"
                     + "</table>";
-            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(rawText);
-            String cleanText = HtmlStrippingService.stripExtracted(
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
+            String attachmentText = HtmlStrippingService.stripExtracted(
                     extraction.extractedText(), extraction.offsetMap()).strippedText();
-            assertThat(cleanText).contains("Hi There");
+            assertThat(attachmentText).contains("Hi There");
         }
     }
 
@@ -183,8 +183,8 @@ class ChatVoiceMessageTextExtractorTest {
         @Test
         @DisplayName("anyCellFound is false for a table with no message_text column")
         void falseForTableWithoutMessageTextColumn() {
-            String rawText = "<table><tr><td class=\"company_name\">DEUTSCHE BANK</td></tr></table>";
-            assertThat(ChatVoiceMessageTextExtractor.extract(rawText).anyCellFound()).isFalse();
+            String msgText = "<table><tr><td class=\"company_name\">DEUTSCHE BANK</td></tr></table>";
+            assertThat(ChatVoiceMessageTextExtractor.extract(msgText).anyCellFound()).isFalse();
         }
     }
 

@@ -20,9 +20,9 @@ final class AvroConstants {
     static final String FIELD_MESSAGE = "message";
     static final String FIELD_CONTENT = "content";
     static final String FIELD_HEADER = "header";
-    static final String FIELD_RAW_TEXT = "raw_text";
+    static final String FIELD_MSG_TEXT = "msg_text";
     static final String FIELD_SUBJECT = "subject";
-    static final String FIELD_CLEAN_TEXT = "clean_text";
+    static final String FIELD_ATTACHMENT_TEXT = "attachment_text";
     static final String FIELD_ATTACHMENTS = "attachments";
     static final String FIELD_METADATA = "metadata";
     static final String FIELD_START_TIME_UTC = "start_time_utc";

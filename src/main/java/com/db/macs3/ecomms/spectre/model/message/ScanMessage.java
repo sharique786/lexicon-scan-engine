@@ -12,14 +12,12 @@ import java.util.Objects;
  * {@link MessageMetadata}), since {@code pipeline_record_audit.sent_date} needs it.
  *
  * <h2>Which text field is scanned</h2>
- * <p>{@link MessageContent} carries both {@code rawText} and {@code cleanText}.
- * This engine scans {@code rawText} (via {@code HtmlStrippingService} — see
- * that class for when/why HTML stripping applies) rather than
- * {@code cleanText}, because {@code rawText} is the ORIGINAL text whose
- * character positions a match's {@code startCharIndex}/{@code endCharIndex}
- * must be reported against. {@code cleanText} is carried through for
- * completeness/parity with the source schema but is not itself scanned by
- * this engine.
+ * <p>{@link MessageContent} carries {@code msgText} (the body) and the subject; each
+ * {@link MessageAttachment} carries its own {@code attachmentText}. The body is scanned via
+ * {@code HtmlStrippingService} (see that class for when/why HTML stripping applies), working
+ * against {@code msgText} because it is the ORIGINAL text whose character positions a match's
+ * {@code startCharIndex}/{@code endCharIndex} must be reported against. Attachment text is scanned
+ * as-is, per attachment.
  */
 public class ScanMessage implements Serializable {
 

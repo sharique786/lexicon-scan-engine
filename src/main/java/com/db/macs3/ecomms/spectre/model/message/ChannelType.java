@@ -2,7 +2,7 @@ package com.db.macs3.ecomms.spectre.model.message;
 
 /**
  * The message's originating channel — drives which HTML-handling strategy
- * {@code FeatureScanOrchestrator} applies to {@code content.raw_text} before
+ * {@code FeatureScanOrchestrator} applies to {@code content.msg_text} before
  * scanning it against Hyperscan. Resolved from {@link MessageSource#getChannelName()}
  * (the AVRO {@code source.channel_name} field), matched case-insensitively —
  * this project's AVRO does not carry a separate, distinctly-named
@@ -12,7 +12,7 @@ package com.db.macs3.ecomms.spectre.model.message;
  *
  * <h2>Why EMAIL is the fallback, not a dedicated UNKNOWN</h2>
  * <p>{@code EMAIL} is this engine's original behaviour — strip
- * {@code raw_text} directly, with no {@code <td>}-cell extraction pass (see
+ * {@code msg_text} directly, with no {@code <td>}-cell extraction pass (see
  * {@code FeatureScanOrchestrator} class Javadoc). A null/blank/unrecognised
  * {@code channel_name} therefore falls back to that same original behaviour
  * rather than a separate branch, so a message with no channel information at

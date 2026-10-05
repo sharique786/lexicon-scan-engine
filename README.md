@@ -190,8 +190,8 @@ Fields converted into a `ScanMessage` (`MessageRowConverter`):
 | `source.channel_name` | Message type — EMAIL / CHAT / VOICE ([§4](#4-message-types-and-what-gets-scanned)) |
 | `source.source_name` | `pipeline_record_audit.source_name` |
 | `message.content.subject` | Scanned when a feature's scope includes Subject |
-| `message.content.raw_text` | The message body — scanned when scope includes Message Body |
-| `attachments[].content.clean_text`, `attachments[].metadata.attachment_id` | Scanned when scope includes Attachment |
+| `message.content.msg_text` | The message body — scanned when scope includes Message Body |
+| `attachments[].content.attachment_text`, `attachments[].metadata.attachment_id` | Scanned when scope includes Attachment |
 | `message.metadata.start_time_utc` | `pipeline_record_audit.sent_date` (an unparseable value becomes NULL, not a failure) |
 | `processing.run_date` | `pipeline_record_audit.run_date` (ISO `yyyy-MM-dd`) |
 
@@ -210,8 +210,8 @@ A message goes through several independent filters before and during scanning:
 | 3 | Join | Inner join on `message_id` — an AVRO message with no view row is dropped; a view row with no AVRO message produces no output at all |
 | 4 | Per message | Blank `message_id`, blank output dataset partition, or a null/blank `process_id`, `pipeline_exec_id`, `created_by` fail **that message** only (recorded in `pipeline_record_audit`) |
 | 5 | Per feature (scope) | A feature scans only the areas listed in `body.scope`. A missing or empty scope scans nothing |
-| 6 | Per area | A blank subject or body, or a blank attachment `clean_text`, is not scanned |
-| 7 | Attachments | If `spectre.engine.messages.max-attachment-limit` is set, an attachment whose UTF-8 `clean_text` is larger is skipped entirely (not scanned, not an error) |
+| 6 | Per area | A blank subject or body, or a blank attachment `attachment_text`, is not scanned |
+| 7 | Attachments | If `spectre.engine.messages.max-attachment-limit` is set, an attachment whose UTF-8 `attachment_text` is larger is skipped entirely (not scanned, not an error) |
 | 8 | CHAT/VOICE body | Only `message_text` cells of the HTML table are scanned ([§4](#4-message-types-and-what-gets-scanned)) |
 | 9 | Decision tree | A hit NoiseReduction group stops evaluation: no Disclaimer or Lexicon group is scanned ([§8](#8-decision-tree)) |
 | 10 | Disclaimer suppression | A Lexicon match fully inside a disclaimer match in the same area is dropped from the detail tables ([§8](#8-decision-tree)) |
@@ -225,15 +225,15 @@ A message goes through several independent filters before and during scanning:
 | Area | Source field | Prepared how |
 |---|---|---|
 | `SUBJECT` | `message.content.subject` | `HtmlStrippingService.strip` |
-| `MESSAGE_BODY` — EMAIL | `message.content.raw_text` | `HtmlStrippingService.strip` on the whole body |
-| `MESSAGE_BODY` — CHAT, VOICE | `message.content.raw_text`, an HTML table report | `ChatVoiceMessageTextExtractor` keeps only `<td>` cells whose `class` contains the token `message_text` (e.g. `class="message-text-cell message_text"`), joins them with a space, then strips them |
-| `ATTACHMENT` (per attachment) | `attachments[].content.clean_text` | Not stripped (`HtmlStrippingService.identity`) — upstream already delivers markup-free text |
+| `MESSAGE_BODY` — EMAIL | `message.content.msg_text` | `HtmlStrippingService.strip` on the whole body |
+| `MESSAGE_BODY` — CHAT, VOICE | `message.content.msg_text`, an HTML table report | `ChatVoiceMessageTextExtractor` keeps only `<td>` cells whose `class` contains the token `message_text` (e.g. `class="message-text-cell message_text"`), joins them with a space, then strips them |
+| `ATTACHMENT` (per attachment) | `attachments[].content.attachment_text` | Not stripped (`HtmlStrippingService.identity`) — upstream already delivers markup-free text |
 
-Why chat/voice needs extraction: every other column of the table (room name, event type, email address, attachment metadata) is not message content, and scanning it could match a lexicon term that was never part of the conversation. If a CHAT/VOICE `raw_text` has no `message_text` cell at all (not this table shape), it falls back to stripping the whole text like EMAIL, rather than dropping the message. The `<td>` match is a regex (`<td ...>...</td>`, non-nested), not a full HTML parser.
+Why chat/voice needs extraction: every other column of the table (room name, event type, email address, attachment metadata) is not message content, and scanning it could match a lexicon term that was never part of the conversation. If a CHAT/VOICE `msg_text` has no `message_text` cell at all (not this table shape), it falls back to stripping the whole text like EMAIL, rather than dropping the message. The `<td>` match is a regex (`<td ...>...</td>`, non-nested), not a full HTML parser.
 
 **Restricted vs. unrestricted** is not a message type. It is the AVRO subfolder a message came from, and only decides which detail table (`lexicon-hit-restricted` or `-unrestricted`) receives its hits.
 
-Every position reported for any area is relative to the **original** text of that area (for chat/voice, the original `raw_text`, not the extracted cells).
+Every position reported for any area is relative to the **original** text of that area (for chat/voice, the original `msg_text`, not the extracted cells).
 
 ---
 
@@ -306,8 +306,8 @@ This is what lets a term such as `Enjoy(?:\s+\S+){0,2}\s+Happy` match text where
 
 **Variants:**
 
-- `stripExtracted` (chat/voice): strips the extracted cells and *composes* the extraction's offset map with the stripping map, so a match resolves straight to the original `raw_text`.
-- `identity` (attachments): returns the text unchanged with an O(1) identity map and no array — attachment `clean_text` is markup-free and can be megabytes long.
+- `stripExtracted` (chat/voice): strips the extracted cells and *composes* the extraction's offset map with the stripping map, so a match resolves straight to the original `msg_text`.
+- `identity` (attachments): returns the text unchanged with an O(1) identity map and no array — attachment `attachment_text` is markup-free and can be megabytes long.
 
 **Not done:** HTML entities (`&nbsp;`, `&amp;`) are not decoded; the contents of `<script>`/`<style>` are not removed (only the tags); non-breaking spaces (U+00A0) are not treated as whitespace. Attachments are not normalised (no comma or whitespace collapsing).
 

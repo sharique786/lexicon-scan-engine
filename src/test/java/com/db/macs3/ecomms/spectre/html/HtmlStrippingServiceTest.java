@@ -64,7 +64,7 @@ class HtmlStrippingServiceTest {
 
     @Nested
     @DisplayName("clean-text normalisation: newlines, tabs, commas and repeated whitespace -> one space")
-    class CleanTextNormalisation {
+    class AttachmentTextNormalisation {
 
         @Test
         @DisplayName("newlines, tabs, CRLF and runs of spaces each collapse to exactly one space")
@@ -114,7 +114,7 @@ class HtmlStrippingServiceTest {
         }
 
         @Test
-        @DisplayName("CHAT/VOICE path: message_text cells are normalised the same way, offsets map to raw_text")
+        @DisplayName("CHAT/VOICE path: message_text cells are normalised the same way, offsets map to msg_text")
         void chatVoiceExtractionPathNormalisesToo() {
             String raw = "<table><tr><td class=\"message-text-cell message_text\">keep,\n\tin the, market</td></tr></table>";
             ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(raw);
@@ -238,7 +238,7 @@ class HtmlStrippingServiceTest {
 
         @Test
         @DisplayName("identity() and strip() agree on already-clean, HTML-free text")
-        void agreesWithStripOnCleanText() {
+        void agreesWithStripOnAttachmentText() {
             String clean = "insider trading occurred yesterday";
             assertThat(HtmlStrippingService.identity(clean).strippedText())
                     .isEqualTo(HtmlStrippingService.strip(clean).strippedText());

@@ -7,10 +7,10 @@ import java.util.Objects;
 /**
  * One entry of the AVRO message schema's {@code attachments} array.
  *
- * <p>Attachment content is exposed only as {@code clean_text} in the source
- * schema (no {@code raw_text} alternative) — it is treated as already free
+ * <p>Attachment content is exposed only as {@code attachment_text} in the source
+ * schema (no {@code msg_text} alternative) — it is treated as already free
  * of HTML by the upstream Msg Transformer job, so no HTML-stripping/offset-
- * mapping is applied when scanning it (contrast {@link MessageContent#getRawText}).
+ * mapping is applied when scanning it (contrast {@link MessageContent#getMsgText}).
  */
 public class MessageAttachment implements Serializable {
 
@@ -20,22 +20,22 @@ public class MessageAttachment implements Serializable {
     private String attachmentId;
     private String parentAttachmentId;
     private String fileName;
-    private String cleanText;
+    private String attachmentText;
 
     /**
      * @param attachmentId       this attachment's identifier
      * @param parentAttachmentId identifier of a parent attachment, when this one is
      *                           nested/derived from another (e.g. an extracted embedded file)
      * @param fileName           original filename
-     * @param cleanText          extracted text content to scan — subject to the
+     * @param attachmentText          extracted text content to scan — subject to the
      *                           {@code spectre.engine.messages.max-attachment-limit} size limit,
      *                           see {@code DataprocConfig.MessagesGcsConfig}
      */
-    public MessageAttachment(String attachmentId, String parentAttachmentId, String fileName, String cleanText) {
+    public MessageAttachment(String attachmentId, String parentAttachmentId, String fileName, String attachmentText) {
         this.attachmentId = attachmentId;
         this.parentAttachmentId = parentAttachmentId;
         this.fileName = fileName;
-        this.cleanText = cleanText;
+        this.attachmentText = attachmentText;
     }
 
     public String getAttachmentId() {
@@ -62,12 +62,12 @@ public class MessageAttachment implements Serializable {
         this.fileName = fileName;
     }
 
-    public String getCleanText() {
-        return cleanText;
+    public String getAttachmentText() {
+        return attachmentText;
     }
 
-    public void setCleanText(String cleanText) {
-        this.cleanText = cleanText;
+    public void setAttachmentText(String attachmentText) {
+        this.attachmentText = attachmentText;
     }
 
     @Override
@@ -82,17 +82,17 @@ public class MessageAttachment implements Serializable {
         return Objects.equals(attachmentId, other.attachmentId)
                 && Objects.equals(parentAttachmentId, other.parentAttachmentId)
                 && Objects.equals(fileName, other.fileName)
-                && Objects.equals(cleanText, other.cleanText);
+                && Objects.equals(attachmentText, other.attachmentText);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(attachmentId, parentAttachmentId, fileName, cleanText);
+        return Objects.hash(attachmentId, parentAttachmentId, fileName, attachmentText);
     }
 
     @Override
     public String toString() {
         return "MessageAttachment[attachmentId=" + attachmentId + ", parentAttachmentId=" + parentAttachmentId
-                + ", fileName=" + fileName + ", cleanText=" + cleanText + "]";
+                + ", fileName=" + fileName + ", attachmentText=" + attachmentText + "]";
     }
 }

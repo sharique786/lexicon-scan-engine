@@ -82,9 +82,8 @@ public final class MessageRowConverter implements Serializable {
         Row contentRow = messageRow.getAs(AvroConstants.FIELD_CONTENT);
         return new MessageContent(
                 RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_HEADER),
-                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_RAW_TEXT),
-                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_SUBJECT),
-                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_CLEAN_TEXT));
+                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_MSG_TEXT),
+                RowReaders.getStringOrNull(contentRow, AvroConstants.FIELD_SUBJECT));
     }
 
     private static List<MessageAttachment> readAttachments(Row row) {
@@ -109,12 +108,12 @@ public final class MessageRowConverter implements Serializable {
             parentAttachmentId = RowReaders.getStringOrNull(metadataRow, AvroConstants.FIELD_PARENT_ATTACHMENT_ID);
             fileName = RowReaders.getStringOrNull(metadataRow, AvroConstants.FIELD_FILE_NAME);
         }
-        String cleanText = null;
+        String attachmentText = null;
         if (RowReaders.hasNonNullField(attachmentRow, AvroConstants.FIELD_CONTENT)) {
             Row attachmentContentRow = attachmentRow.getAs(AvroConstants.FIELD_CONTENT);
-            cleanText = RowReaders.getStringOrNull(attachmentContentRow, AvroConstants.FIELD_CLEAN_TEXT);
+            attachmentText = RowReaders.getStringOrNull(attachmentContentRow, AvroConstants.FIELD_ATTACHMENT_TEXT);
         }
-        return new MessageAttachment(attachmentId, parentAttachmentId, fileName, cleanText);
+        return new MessageAttachment(attachmentId, parentAttachmentId, fileName, attachmentText);
     }
 
     private static MessageProcessing readProcessing(Row row) {
