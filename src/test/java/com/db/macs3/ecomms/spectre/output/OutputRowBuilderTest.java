@@ -324,6 +324,62 @@ class OutputRowBuilderTest {
             assertThat(matchedTextJson).contains("\"start\":50");
         }
 
+        private MessageEvaluationResult attachmentHitEvaluation() {
+            List<FeatureDecisionRow> rows = List.of(row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1)));
+            Map<String, List<TermMatchResult>> canned = Map.of("lex-1", List.of(new TermMatchResult("lex-1::1", "bomb",
+                    List.of(AreaMatch.attachment("att-1", new MatchSpan(3, 7, "bomb")),
+                            AreaMatch.attachment("att-2", new MatchSpan(5, 9, "bomb"))))));
+            return DecisionTreeEvaluator.evaluate("msg-104",
+                    FeatureGroupingService.groupAndOrder(rows), r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+        }
+
+        @Test
+        @DisplayName("attachment_text entries carry attachment_name from the attachment's file_name, keyed by attachment_id")
+        void attachmentNameIsWrittenPerAttachment() throws Exception {
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-104", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, attachmentHitEvaluation(), "scan-engine", NOW,
+                    Map.of("att-1", "report.pdf", "att-2", "notes.docx"));
+
+            String json = row.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getMatchedText();
+            var attachments = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json)
+                    .get("hit_details_hs").get(0).get("attachment_text");
+            assertThat(attachments).hasSize(2);
+            assertThat(attachments.get(0).get("attachment_id").asText()).isEqualTo("att-1");
+            assertThat(attachments.get(0).get("attachment_name").asText()).isEqualTo("report.pdf");
+            assertThat(attachments.get(1).get("attachment_name").asText()).isEqualTo("notes.docx");
+            assertThat(attachments.get(0).get("att_text").get(0).get("start").asInt()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("an attachment with no known file name gets attachment_name \"\" (key still present)")
+        void missingAttachmentNameIsEmptyString() throws Exception {
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-104", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, attachmentHitEvaluation(), "scan-engine", NOW,
+                    Map.of("att-1", "report.pdf")); // att-2 absent
+
+            String json = row.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getMatchedText();
+            var attachments = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json)
+                    .get("hit_details_hs").get(0).get("attachment_text");
+            assertThat(attachments.get(1).has("attachment_name")).isTrue();
+            assertThat(attachments.get(1).get("attachment_name").asText()).isEmpty();
+
+            // the 7-arg overload (no names) behaves the same for every attachment
+            LexiconHitDetailRow noNames = OutputRowBuilder.buildDetailRow(
+                    "msg-104", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, attachmentHitEvaluation(), "scan-engine", NOW);
+            assertThat(noNames.getEvaluatedLexicons().getFirst().getTermDtls().getFirst().getMatchedText())
+                    .contains("\"attachment_name\":\"\"");
+        }
+
+        @Test
+        @DisplayName("a message whose attachments carry file names is not affected for body/subject-only hits")
+        void bodyOnlyHitUnaffectedByAttachmentNames() {
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW,
+                    Map.of("att-1", "report.pdf"));
+            assertThat(row.getEvaluatedLexicons().get(1).getTermDtls().getFirst().getMatchedText())
+                    .contains("\"attachment_text\":[]").doesNotContain("report.pdf");
+        }
+
         @Test
         @DisplayName("a message short-circuited by a NoiseReduction hit still gets a detail row carrying that " +
                 "group's match — id, term_id, and matched_text")

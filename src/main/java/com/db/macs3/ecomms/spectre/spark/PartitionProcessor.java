@@ -10,6 +10,7 @@ import com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
+import com.db.macs3.ecomms.spectre.model.message.MessageAttachment;
 import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
 import com.db.macs3.ecomms.spectre.model.output.FeatureHitSummaryRow;
 import com.db.macs3.ecomms.spectre.model.output.LexiconHitDetailRow;
@@ -26,6 +27,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -263,8 +265,15 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         Instant now = Instant.now();
         LexiconHitSummaryRow summaryRow = OutputRowBuilder.buildSummaryRow(
                 message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
+        Map<String, String> attachmentNames = new HashMap<>();
+        for (MessageAttachment attachment : message.getAttachments()) {
+            if (attachment.getAttachmentId() != null && attachment.getFileName() != null) {
+                attachmentNames.put(attachment.getAttachmentId(), attachment.getFileName());
+            }
+        }
         LexiconHitDetailRow detailRow = OutputRowBuilder.buildDetailRow(
-                message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now);
+                message.getMessageId(), processId, pipelineExecId, datasetPartitionValueDate, evaluation, createdBy, now,
+                attachmentNames);
         FeatureHitSummaryRow featureHitSummaryRow = OutputRowBuilder.buildFeatureHitSummaryRow(
                 message.getMessageId(), datasetPartitionValueDate, pipelineExecId, processId, featureTaggingType,
                 evaluation, createdBy, now);

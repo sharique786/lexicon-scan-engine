@@ -16,7 +16,7 @@ import java.util.Objects;
  *   "message_id": "...",
  *   "msg_text": [{"text": "bomb", "start": 10, "length": 4}, ...],
  *   "subject": [{"text": "bomb", "start": 10, "length": 4}],
- *   "attachment_text": [{"attachment_id": "...", "att_text": [...]}]
+ *   "attachment_text": [{"attachment_id": "...", "attachment_name": "...", "att_text": [...]}]
  * }]}
  * </pre>
  *
@@ -237,12 +237,15 @@ public class MatchedTextJson implements Serializable {
         private static final long serialVersionUID = 1L;
 
         private String attachmentId;
+        private String attachmentName;
         private List<TextHit> attText;
 
         @JsonCreator
         public AttachmentTextHit(@JsonProperty("attachment_id") String attachmentId,
+                                 @JsonProperty("attachment_name") String attachmentName,
                                  @JsonProperty("att_text") List<TextHit> attText) {
             this.attachmentId = attachmentId;
+            this.attachmentName = attachmentName;
             this.attText = attText;
         }
 
@@ -253,6 +256,16 @@ public class MatchedTextJson implements Serializable {
 
         public void setAttachmentId(String attachmentId) {
             this.attachmentId = attachmentId;
+        }
+
+        /** The attachment's {@code metadata.file_name}; JSON {@code ""} when the source has none. */
+        @JsonProperty("attachment_name")
+        public String getAttachmentName() {
+            return attachmentName;
+        }
+
+        public void setAttachmentName(String attachmentName) {
+            this.attachmentName = attachmentName;
         }
 
         @JsonProperty("att_text")
@@ -273,17 +286,20 @@ public class MatchedTextJson implements Serializable {
                 return false;
             }
             AttachmentTextHit other = (AttachmentTextHit) obj;
-            return Objects.equals(attachmentId, other.attachmentId) && Objects.equals(attText, other.attText);
+            return Objects.equals(attachmentId, other.attachmentId)
+                    && Objects.equals(attachmentName, other.attachmentName)
+                    && Objects.equals(attText, other.attText);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(attachmentId, attText);
+            return Objects.hash(attachmentId, attachmentName, attText);
         }
 
         @Override
         public String toString() {
-            return "AttachmentTextHit[attachmentId=" + attachmentId + ", attText=" + attText + "]";
+            return "AttachmentTextHit[attachmentId=" + attachmentId + ", attachmentName=" + attachmentName
+                    + ", attText=" + attText + "]";
         }
     }
 }

@@ -459,9 +459,11 @@ Each per-message table also carries `message_id`, `process_id`, `pipeline_exec_i
   "message_id": "...",
   "msg_text":        [{"text": "bomb", "start": 50, "length": 4}],
   "subject":         [{"text": "bomb", "start": 10, "length": 4}],
-  "attachment_text": [{"attachment_id": "...", "att_text": [{"text": "bomb", "start": 3, "length": 4}]}]
+  "attachment_text": [{"attachment_id": "...", "attachment_name": "report.pdf", "att_text": [{"text": "bomb", "start": 3, "length": 4}]}]
 }]}
 ```
+
+`attachment_name` is the matching attachment's `attachments[].metadata.file_name`, looked up by `attachment_id`; it is `""` when the attachment has no file name.
 
 **Restricted CSV mirror.** The restricted detail rows are also written as one CSV file (`coalesce(1)`, header, overwrite) to `gs://<msg-gcs-bucket>/<msg-gcs-prefix>/<first dataset_id>/restricted/csv`; `evaluated_lexicons` is flattened to a JSON string, since CSV cannot hold nested values.
 

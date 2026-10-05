@@ -161,6 +161,20 @@ public final class OutputRowBuilder {
                                                      LocalDate datasetPartitionValue,
                                                      MessageEvaluationResult evaluation,
                                                      String createdBy, Instant createdTs) {
+        return buildDetailRow(messageId, processId, pipelineExecId, datasetPartitionValue, evaluation,
+                createdBy, createdTs, Map.of());
+    }
+
+    /**
+     * @param attachmentNames attachment_id → {@code attachments.metadata.file_name}, used for each
+     *                        {@code attachment_text[].attachment_name}; an id with no entry (or a null
+     *                        file name) is written as {@code ""}
+     */
+    public static LexiconHitDetailRow buildDetailRow(String messageId, String processId, String pipelineExecId,
+                                                     LocalDate datasetPartitionValue,
+                                                     MessageEvaluationResult evaluation,
+                                                     String createdBy, Instant createdTs,
+                                                     Map<String, String> attachmentNames) {
         Map<Long, List<TermMatchResult>> matchesByFeatureId = new LinkedHashMap<>();
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
             boolean reportedAsIs = groupResult.getGroup().isNoiseReduction() || groupResult.getGroup().isDisclaimer();
@@ -181,7 +195,7 @@ public final class OutputRowBuilder {
         for (Map.Entry<Long, List<TermMatchResult>> entry : matchesByFeatureId.entrySet()) {
             List<LexiconHitDetailRow.EvaluatedLexicon.TermDtl> termDtls = new ArrayList<>();
             for (TermMatchResult termMatch : entry.getValue()) {
-                String matchedTextJson = buildMatchedTextJson(messageId, termMatch.getMatches());
+                String matchedTextJson = buildMatchedTextJson(messageId, termMatch.getMatches(), attachmentNames);
                 termDtls.add(new LexiconHitDetailRow.EvaluatedLexicon.TermDtl(termMatch.getTermId(), matchedTextJson));
             }
             evaluatedLexicons.add(new LexiconHitDetailRow.EvaluatedLexicon(entry.getKey(), termDtls));
@@ -195,7 +209,7 @@ public final class OutputRowBuilder {
      * Builds the {@code matched_text} JSON for one term's matches — see
      * {@link MatchedTextJson} for the exact structure.
      */
-    static String buildMatchedTextJson(String messageId, List<AreaMatch> matches) {
+    static String buildMatchedTextJson(String messageId, List<AreaMatch> matches, Map<String, String> attachmentNames) {
         List<MatchedTextJson.TextHit> msgText = new ArrayList<>();
         List<MatchedTextJson.TextHit> subject = new ArrayList<>();
         Map<String, List<MatchedTextJson.TextHit>> attachmentHits = new LinkedHashMap<>();
@@ -214,7 +228,9 @@ public final class OutputRowBuilder {
 
         List<MatchedTextJson.AttachmentTextHit> attachmentText = new ArrayList<>();
         for (Map.Entry<String, List<MatchedTextJson.TextHit>> attachmentEntry : attachmentHits.entrySet()) {
-            attachmentText.add(new MatchedTextJson.AttachmentTextHit(attachmentEntry.getKey(), attachmentEntry.getValue()));
+            String attachmentName = attachmentNames.get(attachmentEntry.getKey());
+            attachmentText.add(new MatchedTextJson.AttachmentTextHit(
+                    attachmentEntry.getKey(), attachmentName == null ? "" : attachmentName, attachmentEntry.getValue()));
         }
 
         MatchedTextJson.HitDetail detail = new MatchedTextJson.HitDetail(messageId, msgText, subject, attachmentText);
