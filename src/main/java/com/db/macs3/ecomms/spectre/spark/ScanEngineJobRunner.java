@@ -13,6 +13,10 @@ import com.db.macs3.ecomms.spectre.gcs.GcsClient;
 import com.db.macs3.ecomms.spectre.gcs.HyperscanPathResolver;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
 import com.db.macs3.ecomms.spectre.model.output.PipelineStageAuditRow;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.broadcast.Broadcast;
@@ -26,6 +30,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -280,7 +286,7 @@ public class ScanEngineJobRunner {
         // Split and write — each write triggers its own Spark action, executing step 6 above
         // (already materialized/cached by the .count() call, so these reuse it rather than rescanning).
         runStageVoid("scan messages + write outputs",
-                () -> writeOutputs(tableConfig, runtimeArgs, messagesConfig, dataprocConfig.stageName(), results, stats));
+                () -> writeOutputs(tableConfig, runtimeArgs, dataprocConfig.csv(), dataprocConfig.stageName(), results, stats));
     }
 
     /**
@@ -358,7 +364,7 @@ public class ScanEngineJobRunner {
     // A mapper class holds only serializable fields, so it cannot accidentally capture this
     // (non-serializable) runner the way a lambda referencing an instance field would.
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                              DataprocConfig.MessagesGcsConfig messagesConfig, String stageName,
+                              DataprocConfig.CsvConfig csvConfig, String stageName,
                               Dataset<MessageProcessingResult> results, RunStats stats) {
         Dataset<Row> summaryRows = results.mapPartitions(
                 new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA)).cache();
@@ -371,7 +377,7 @@ public class ScanEngineJobRunner {
         Dataset<Row> restrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(true), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
         OutputTableWriter.writeLexiconHitDetail(tableConfig, restrictedDetailRows, true);
-        writeRestrictedCsvMirror(runtimeArgs, messagesConfig, restrictedDetailRows);
+        writeRestrictedCsvMirror(runtimeArgs, csvConfig, restrictedDetailRows);
 
         Dataset<Row> unrestrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(false), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
@@ -400,26 +406,75 @@ public class ScanEngineJobRunner {
         }
     }
 
+    static final String RESTRICTED_CSV_FILE_NAME = "lexicon-hit-restricted.csv";
+
     /**
-     * Mirrors the restricted detail rows to a single CSV file on GCS, at the same {@code restricted/}
-     * location {@link MessageAvroReader} reads the restricted AVRO messages from for this run's
-     * (first) dataset, with a {@code csv} subfolder appended — see
-     * {@link MessageAvroReader#restrictedPath}.
+     * Output folder: {@code gs://<restricted-data-bkt>/<trigger_type>/<process_id>/<pipeline_exec_id>/}.
      */
-    private void writeRestrictedCsvMirror(RuntimeArgs runtimeArgs, DataprocConfig.MessagesGcsConfig messagesConfig,
+    static String restrictedCsvFolder(String bucket, RuntimeArgs runtimeArgs) {
+        return "gs://" + bucket + "/" + runtimeArgs.triggerType() + "/" + runtimeArgs.processId() + "/"
+                + runtimeArgs.pipelineExecId() + "/";
+    }
+
+    /**
+     * Mirrors the restricted detail rows to a single CSV file,
+     * {@code gs://<restricted-data-bkt>/<trigger_type>/<process_id>/<pipeline_exec_id>/lexicon-hit-restricted.csv},
+     * when {@code spectre.engine.csv.write-toggle} is true. Spark can only write a directory of part files,
+     * so the single part file is written to a temporary subfolder and then renamed to the final file name.
+     */
+    private void writeRestrictedCsvMirror(RuntimeArgs runtimeArgs, DataprocConfig.CsvConfig csvConfig,
                                           Dataset<Row> restrictedDetailRows) {
-        String datasetId = runtimeArgs.datasetDetails().getFirst().datasetId();
-        String csvPath = MessageAvroReader.restrictedPath(
-                messagesConfig.msgGcsBucket(), messagesConfig.msgGcsPrefix(), datasetId) + "csv";
+        if (csvConfig == null || !csvConfig.writeEnabled()) {
+            log.info("Restricted CSV write is disabled (spectre.engine.csv.write-toggle is not true); skipping");
+            return;
+        }
+
+        String bucket = csvConfig.restrictedDataBkt();
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalArgumentException(
+                    "spectre.engine.csv.restricted-data-bkt is required when spectre.engine.csv.write-toggle is true");
+        }
+
+        String folder = restrictedCsvFolder(bucket, runtimeArgs);
+        String tmpDir = folder + "_tmp_" + RESTRICTED_CSV_FILE_NAME + "/";
         // CSV cannot hold nested array/struct columns, so evaluated_lexicons is written as a JSON string.
         restrictedDetailRows
                 .withColumn(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS,
                         functions.to_json(functions.col(BqColumns.LexiconHitDetail.EVALUATED_LEXICONS)))
-                .coalesce(1) // one CSV file at this path
+                .coalesce(1) // one part file
                 .write()
                 .option("header", "true")
                 .mode("overwrite")
-                .csv(csvPath);
+                .csv(tmpDir);
+
+        try (SparkSession session = restrictedDetailRows.sparkSession()) {
+            Configuration hadoopConf = session.sparkContext().hadoopConfiguration();
+            Path tmpPath = new Path(tmpDir);
+            FileSystem fs = tmpPath.getFileSystem(hadoopConf);
+            Path target = new Path(folder + RESTRICTED_CSV_FILE_NAME);
+            Path part = null;
+
+            for (FileStatus status : fs.listStatus(tmpPath)) {
+                String name = status.getPath().getName();
+                if (name.startsWith("part-") && name.endsWith(".csv")) {
+                    part = status.getPath();
+                    break;
+                }
+            }
+
+            if (part == null) {
+                throw new IllegalStateException("No CSV part file found under " + tmpDir);
+            }
+
+            fs.delete(target, false);
+            if (!fs.rename(part, target)) {
+                throw new IllegalStateException("Failed to rename " + part + " to " + target);
+            }
+            fs.delete(tmpPath, true);
+            log.info("Wrote restricted CSV to {}", target);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to finalize restricted CSV under " + folder, e);
+        }
     }
 
     /**

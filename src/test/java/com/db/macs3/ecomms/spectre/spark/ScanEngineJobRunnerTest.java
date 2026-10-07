@@ -86,7 +86,8 @@ class ScanEngineJobRunnerTest {
         DataprocConfig.EngineConfig engine = new DataprocConfig.EngineConfig("lexicon-scan-engine-test",
                 new DataprocConfig.HyperscanGcsConfig("hdb-bucket", "hdb-prefix"),
                 new DataprocConfig.MessagesGcsConfig("msg-bucket", "msg-prefix", null),
-                bigquery);
+                bigquery,
+                new DataprocConfig.CsvConfig("restricted-bucket", false));
         return new DataprocConfig("proj", "region", "cluster", 3600L, new DataprocConfig.SpectreConfig(engine));
     }
 

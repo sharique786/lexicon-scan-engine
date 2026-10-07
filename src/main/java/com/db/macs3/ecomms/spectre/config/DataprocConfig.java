@@ -43,6 +43,9 @@ import java.util.Objects;
  *       msg-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-source-data-dev
  *       msg-gcs-prefix: coreapp-trans
  *       max-attachment-limit: 5242880
+ *     csv:
+ *       restricted-data-bkt: my-restricted-data-bucket
+ *       write-toggle: true
  *     bigquery:
  *       bq-project: db-dev-tugr-mp-spectre
  *       bq-dataset: spectre_audit
@@ -128,6 +131,10 @@ public final class DataprocConfig implements Serializable {
 
     public String stageName() {
         return spectre.engine().stageName();
+    }
+
+    public CsvConfig csv() {
+        return spectre.engine().csv();
     }
 
     // SafeConstructor rather than SnakeYAML's default Constructor: this file is
@@ -231,16 +238,24 @@ public final class DataprocConfig implements Serializable {
         private final HyperscanGcsConfig hyperscan;
         private final MessagesGcsConfig messages;
         private final BqTableConfig bigquery;
+        private final CsvConfig csv;
 
         @JsonCreator
         public EngineConfig(@JsonProperty("stage-name") String stageName,
                             @JsonProperty("hyperscan") HyperscanGcsConfig hyperscan,
                             @JsonProperty("messages") MessagesGcsConfig messages,
-                            @JsonProperty("bigquery") BqTableConfig bigquery) {
+                            @JsonProperty("bigquery") BqTableConfig bigquery,
+                            @JsonProperty("csv") CsvConfig csv) {
             this.stageName = stageName;
             this.hyperscan = hyperscan;
             this.messages = messages;
             this.bigquery = bigquery;
+            this.csv = csv;
+        }
+
+        /** {@code null} when the {@code csv:} block is absent — treated as CSV write disabled. */
+        public CsvConfig csv() {
+            return csv;
         }
 
         public String stageName() {
@@ -263,18 +278,64 @@ public final class DataprocConfig implements Serializable {
         public boolean equals(Object obj) {
             return this == obj || (obj instanceof EngineConfig other
                     && Objects.equals(stageName, other.stageName) && Objects.equals(hyperscan, other.hyperscan)
-                    && Objects.equals(messages, other.messages) && Objects.equals(bigquery, other.bigquery));
+                    && Objects.equals(messages, other.messages) && Objects.equals(bigquery, other.bigquery)
+                    && Objects.equals(csv, other.csv));
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(stageName, hyperscan, messages, bigquery);
+            return Objects.hash(stageName, hyperscan, messages, bigquery, csv);
         }
 
         @Override
         public String toString() {
             return "EngineConfig[stageName=" + stageName + ", hyperscan=" + hyperscan + ", messages=" + messages
-                    + ", bigquery=" + bigquery + "]";
+                    + ", bigquery=" + bigquery + ", csv=" + csv + "]";
+        }
+    }
+
+    /**
+     * {@code spectre.engine.csv:} — destination bucket and on/off toggle for the restricted-data CSV
+     * file. {@code write-toggle} absent or {@code false} disables the CSV write.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class CsvConfig implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        private final String restrictedDataBkt;
+        private final Boolean writeToggle;
+
+        @JsonCreator
+        public CsvConfig(@JsonProperty("restricted-data-bkt") String restrictedDataBkt,
+                         @JsonProperty("write-toggle") Boolean writeToggle) {
+            this.restrictedDataBkt = restrictedDataBkt;
+            this.writeToggle = writeToggle;
+        }
+
+        public String restrictedDataBkt() {
+            return restrictedDataBkt;
+        }
+
+        public boolean writeEnabled() {
+            return Boolean.TRUE.equals(writeToggle);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return this == obj || (obj instanceof CsvConfig other
+                    && Objects.equals(restrictedDataBkt, other.restrictedDataBkt)
+                    && Objects.equals(writeToggle, other.writeToggle));
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(restrictedDataBkt, writeToggle);
+        }
+
+        @Override
+        public String toString() {
+            return "CsvConfig[restrictedDataBkt=" + restrictedDataBkt + ", writeToggle=" + writeToggle + "]";
         }
     }
 
