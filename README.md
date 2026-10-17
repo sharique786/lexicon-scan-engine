@@ -121,6 +121,9 @@ Only the `spectre.engine.*` subtree is read:
 spectre:
   engine:
     stage-name: spectre-lexicon-tagging               # pipeline_stage_audit / pipeline_record_audit stage_name
+    info:                                             # optional; each property defaults to "N/A" when absent or blank
+      composer-dag-path: dags/spectre_lexicon_dag.py  # written to pipeline_stage_audit.composer_dag_name
+      dproc-script-path: gs://bucket/scripts/scan.jar # written to pipeline_stage_audit.dproc_script_name
     hyperscan:
       hdb-gcs-bucket: <bucket holding lexicon zip bundles>
       hdb-gcs-prefix: policy_test
@@ -153,7 +156,7 @@ process_id = '<process_id>' AND feature_partition_value = '<feature_partition_va
 | `feature_tagging_type` | STRING | e.g. `Lexicon-Tagging`; copied to `feature-hit-summary.feature_hit_type` |
 | `feature_type` | STRING | `lexicon`, `composite`, `disclaimer`, `NoiseReduction` |
 | `feature_id`, `feature_name` | LONG, STRING | Groups rows into one (possibly composite) feature |
-| `sub_feature_type`, `lexicon_features_to_apply_name` | STRING | The member lexicon of this row |
+| `sub_feature_type`, `lexicon_features_to_apply_id`, `lexicon_features_to_apply_name` | STRING, LONG, STRING | The member lexicon of this row. The id and name are what the summary and detail tables report as `evaluated_lexicons.id`/`name` (not `feature_id`/`feature_name`) |
 | `is_noise_reduction` | BOOLEAN | NoiseReduction flag |
 | `operator` | STRING | `AND`/`OR` combining sibling rows of one `feature_id` |
 | `feature_definition` | JSON string | Parsed by `FeatureDefinition` — see below |
@@ -358,8 +361,8 @@ Every remaining group is scanned. A Lexicon match is **suppressed** when it is *
 
 | Table | NoiseReduction | Disclaimer | Lexicon |
 |---|---|---|---|
-| `lexicon-hit-summary` | every *evaluated* group, raw matches (a no-hit group gets an `N/A` placeholder entry; a multi-member group — several `features_to_apply` under one `feature_id` — gets one entry **per member lexicon**, named by its `lexiconName`, so a no-hit member is reported alongside the hit ones) | same | same, **before** suppression |
-| `lexicon-hit-restricted` / `-unrestricted` | hit groups only | hit groups only | **after** suppression |
+| `lexicon-hit-summary` | every *evaluated* group, raw matches (a no-hit group gets an `N/A` placeholder entry; a multi-member group — several `features_to_apply` under one `feature_id` — gets one entry **per member lexicon**, so a no-hit member is reported alongside the hit ones; every entry's `id`/`name` come from `lexicon_features_to_apply_id`/`_name`) | same | same, **before** suppression |
+| `lexicon-hit-restricted` / `-unrestricted` | hit groups only; `id` = `lexicon_features_to_apply_id` of the member that hit | same | **after** suppression; each surviving term is routed back to its member's `lexicon_features_to_apply_id` |
 | `feature-hit-summary` | every evaluated group with its hit status | same | same |
 
 Worked example — body `"... confidential information ... bomb threat"`; the disclaimer matches `confidential information` (chars 10–34), the lexicon matches `information` (15–27, inside the disclaimer) and `bomb` (50–54):
@@ -444,11 +447,11 @@ All tables are written in append mode through the Spark BigQuery connector; this
 | Table | Grain | Contents |
 |---|---|---|
 | `lexicon-hit-summary` | One row per message | `evaluated_lexicons[]`: one entry per **evaluated group** (`id`, `name`, `total_terms_count`, `regex_hit_count`, `term_dtls[]`), for NoiseReduction, Disclaimer and Lexicon groups alike, using raw (pre-suppression) counts. `term_dtls[]`: `term_id`, `term_regex_pattern`, `regex_match_hit_count`, `term_description`. A group evaluated with no matching term is still listed, with `regex_hit_count = 0` and one placeholder term (`term_id`/`term_regex_pattern`/`term_description = "N/A"`, count 0); groups never evaluated (after a NoiseReduction hit) have no entry |
-| `lexicon-hit-restricted` | One row per message *that has something to report*, restricted source only | `evaluated_lexicons[]`: `id` and `term_dtls[]` of `term_id` + `matched_text`. Contains hit NoiseReduction groups, hit Disclaimer groups and Lexicon groups after suppression. **No row** is written when nothing remains |
+| `lexicon-hit-restricted` | One row per message *that has something to report*, restricted source only | `evaluated_lexicons[]`: `id` (= `lexicon_features_to_apply_id`) and `term_dtls[]` of `term_id` + `matched_text`. Contains hit NoiseReduction groups, hit Disclaimer groups and Lexicon groups after suppression. **No row** is written when nothing remains |
 | `lexicon-hit-unrestricted` | Same, unrestricted source only | Identical shape, split purely by AVRO subfolder |
-| `feature-hit-summary` | One row per message | `features[]`: `id`, `name`, `type`, `is_noise_reduction`, `hit_status` for every evaluated group, plus `sub_features[]` (`type`, `name`, `hit_status`) for multi-member groups; `feature_hit_type` from the view's `feature_tagging_type` |
+| `feature-hit-summary` | One row per message | `features[]`: `id`, `name`, `type`, `is_noise_reduction`, `hit_status` for every evaluated group, plus `sub_features[]` (`type`, `name`, `hit_status`) for multi-member groups, NoiseReduction groups (even a single row) and `composite` groups (`type` falls back to `lexicon` when the view's `sub_feature_type` is empty); `feature_hit_type` from the view's `feature_tagging_type` |
 | `pipeline_record_audit` | One row per message, **success and failure** | `status` `SUCCESS`/`FAILED`, `return_code` 0/1, `error_message`, `record_id` = `message_id`, `source_name`, `sent_date`, `run_date`. De-duplicated on `record_id`/`stage_name`/`execution_date`/`pipeline_exec_id`. Other columns belong to stages this job does not run and are left null/0 |
-| `pipeline_stage_audit` | Two rows per run | `IN_PROGRESS` at start (`input_record_count`/`output_record_count` null — not known yet), then `SUCCESS` or `FAILED` (with `error_message`) with `input_record_count` = unique `message_id` count from the BigQuery view and `output_record_count` = number of messages saved to `lexicon-hit-summary` |
+| `pipeline_stage_audit` | Two rows per run | `composer_dag_name`/`dproc_script_name` come from `spectre.engine.info.composer-dag-path`/`dproc-script-path` (`N/A` when absent). `IN_PROGRESS` at start (`input_record_count`/`output_record_count` null — not known yet), then `SUCCESS` or `FAILED` (with `error_message`) with `input_record_count` = unique `message_id` count from the BigQuery view and `output_record_count` = number of messages saved to `lexicon-hit-summary` |
 
 Each per-message table also carries `message_id`, `process_id`, `pipeline_exec_id`, `dataset_partition_value`, `created_by`, `created_ts`.
 
@@ -490,7 +493,7 @@ Each per-message table also carries `message_id`, `process_id`, `pipeline_exec_i
 | Source | Carries |
 |---|---|
 | `RuntimeArgs` (7 `--key=value` arguments) | See [§2.1](#21-job-arguments-runtimeargs) |
-| `DataprocConfig` (YAML on GCS, from `--config_file_path`) | Hyperscan zip bucket/prefix, message bucket/prefix, BigQuery view and output-table identifiers, `spectre.engine.stage-name` (`pipeline_stage_audit`/`pipeline_record_audit` stage_name), `spectre.engine.messages.max-attachment-limit` (`maxAttachmentSizeBytes`; absent = no limit) |
+| `DataprocConfig` (YAML on GCS, from `--config_file_path`) | Hyperscan zip bucket/prefix, message bucket/prefix, BigQuery view and output-table identifiers, `spectre.engine.info.composer-dag-path`/`dproc-script-path` (optional, default `N/A`), `spectre.engine.stage-name` (`pipeline_stage_audit`/`pipeline_record_audit` stage_name), `spectre.engine.messages.max-attachment-limit` (`maxAttachmentSizeBytes`; absent = no limit) |
 | `application.yml` (`scan-engine.*`) | `max-cached-databases-per-partition` (default 20), `created-by` (`SPECTRE-COMPOSER-SA`) — overridable at submit time as driver system properties |
 | `log4j2.properties` | Driver **and** executor logging (root `WARN`, this project's package `INFO`); Spring's `logging.level.*` would only reach the driver |
 
