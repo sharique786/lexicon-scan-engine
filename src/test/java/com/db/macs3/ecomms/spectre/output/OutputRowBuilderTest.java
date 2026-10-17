@@ -129,6 +129,29 @@ class OutputRowBuilderTest {
         }
 
         @Test
+        @DisplayName("evaluated_lexicons.id/name come from lexicon_features_to_apply_id/_name, not feature_id/feature_name " +
+                "- for a single NoiseReduction row and a single lexicon row alike")
+        void idAndNameComeFromFeaturesToApply() {
+            FeatureDecisionRow noise = new FeatureDecisionRow("proc-1", "msg-103", DATASET_PARTITION_VALUE,
+                    "Lexicon-Tagging", "NoiseReduction", 9L, "noise-parent-name", null, "spam-lexicon", 777L,
+                    true, null, defJson("spam-lexicon", 3, 1), DATASET_PARTITION_VALUE, "101");
+            FeatureDecisionRow lex = new FeatureDecisionRow("proc-1", "msg-103", DATASET_PARTITION_VALUE,
+                    "Lexicon-Tagging", "lexicon", 1L, "lex-parent-name", null, "lex-actual", 555L,
+                    false, null, defJson("lex-actual", 4, 1), DATASET_PARTITION_VALUE, "101");
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-103",
+                    FeatureGroupingService.groupAndOrder(List.of(noise, lex)), r -> List.of());
+
+            LexiconHitSummaryRow row = OutputRowBuilder.buildSummaryRow(
+                    "msg-103", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons())
+                    .extracting(e -> e.getId(), e -> e.getName())
+                    .containsExactlyInAnyOrder(
+                            org.assertj.core.groups.Tuple.tuple(777L, "spam-lexicon"),
+                            org.assertj.core.groups.Tuple.tuple(555L, "lex-actual"));
+        }
+
+        @Test
         @DisplayName("a group that was evaluated but matched nothing is still reported: real id/name/" +
                 "total_terms_count, regex_hit_count 0, and one N/A / N/A / 0 / N/A term_dtls placeholder")
         void reportsZeroHitGroupWithPlaceholderTerm() {
@@ -144,7 +167,7 @@ class OutputRowBuilderTest {
             assertThat(row.getEvaluatedLexicons()).hasSize(1);
             var entry = row.getEvaluatedLexicons().getFirst();
             assertThat(entry.getId()).isEqualTo(1L);
-            assertThat(entry.getName()).isEqualTo("1-name");
+            assertThat(entry.getName()).isEqualTo("lexicon_market_cond-3");
             assertThat(entry.getTotalTermsCount()).isEqualTo(8L);
             assertThat(entry.getRegexHitCount()).isZero();
             assertThat(entry.getTermDtls()).hasSize(1);
@@ -266,6 +289,43 @@ class OutputRowBuilderTest {
     @Nested
     @DisplayName("lexicon-hit-restricted / -unrestricted (detail row)")
     class DetailRow {
+
+        @Test
+        @DisplayName("evaluated_lexicons.id is lexicon_features_to_apply_id for NoiseReduction, disclaimer and lexicon hits")
+        void idComesFromFeaturesToApplyId() {
+            FeatureDecisionRow disclaimer = new FeatureDecisionRow("proc-1", "msg-104", DATASET_PARTITION_VALUE,
+                    "Lexicon-Tagging", "disclaimer", 2L, "disc-parent", null, "disc-lex", 222L,
+                    false, null, defJson("disc-lex", 5, 1), DATASET_PARTITION_VALUE, "101");
+            FeatureDecisionRow lex = new FeatureDecisionRow("proc-1", "msg-104", DATASET_PARTITION_VALUE,
+                    "Lexicon-Tagging", "lexicon", 1L, "lex-parent", null, "lex-actual", 555L,
+                    false, null, defJson("lex-actual", 4, 1), DATASET_PARTITION_VALUE, "101");
+            Map<String, List<TermMatchResult>> canned = Map.of(
+                    "disc-lex", List.of(new TermMatchResult("disc-lex::1", "d",
+                            List.of(AreaMatch.messageBody(new MatchSpan(0, 3, "dis"))))),
+                    "lex-actual", List.of(new TermMatchResult("lex-actual::1", "l",
+                            List.of(AreaMatch.messageBody(new MatchSpan(50, 54, "bomb"))))));
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-104",
+                    FeatureGroupingService.groupAndOrder(List.of(disclaimer, lex)),
+                    r -> canned.getOrDefault(r.getFeaturesToApply(), List.of()));
+
+            LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
+                    "msg-104", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, evaluation, "scan-engine", NOW);
+
+            assertThat(row.getEvaluatedLexicons()).extracting(LexiconHitDetailRow.EvaluatedLexicon::getId)
+                    .containsExactly(222L, 555L);
+
+            LexiconHitDetailRow noise = OutputRowBuilder.buildDetailRow(
+                    "msg-102", "proc-1", "pipe-1", DATASET_PARTITION_VALUE,
+                    DecisionTreeEvaluator.evaluate("msg-102", FeatureGroupingService.groupAndOrder(List.of(
+                            new FeatureDecisionRow("proc-1", "msg-102", DATASET_PARTITION_VALUE, "Lexicon-Tagging",
+                                    "NoiseReduction", 9L, "n-parent", null, "spam-1", 777L, true, null,
+                                    defJson("spam-1", 3, 1), DATASET_PARTITION_VALUE, "101"))),
+                            r -> List.of(new TermMatchResult("spam-1::1", "spam",
+                                    List.of(AreaMatch.messageBody(new MatchSpan(0, 4, "spam")))))),
+                    "scan-engine", NOW);
+            assertThat(noise.getEvaluatedLexicons()).extracting(LexiconHitDetailRow.EvaluatedLexicon::getId)
+                    .containsExactly(777L);
+        }
 
         @Test
         @DisplayName("includes the disclaimer hit AND the surviving (post-suppression) lexicon group")
@@ -488,6 +548,41 @@ class OutputRowBuilderTest {
             var disclaimerFeature = row.getFeatures().stream().filter(f -> f.getId() == 2L).findFirst().orElseThrow();
             assertThat(disclaimerFeature.getHitStatus()).isTrue();
             assertThat(disclaimerFeature.getSubFeatures()).isEmpty(); // single-member group
+        }
+
+        @Test
+        @DisplayName("a single NoiseReduction row still reports its sub_features (type/name/hit_status)")
+        void singleNoiseReductionHasSubFeature() {
+            MessageEvaluationResult evaluation = shortCircuitedEvaluation();
+            FeatureHitSummaryRow row = OutputRowBuilder.buildFeatureHitSummaryRow(
+                    "msg-102", DATASET_PARTITION_VALUE, "pipe-1", "proc-1", "Lexicon-Tagging",
+                    evaluation, "scan-engine", NOW);
+            var noise = row.getFeatures().getFirst();
+            assertThat(noise.getSubFeatures()).hasSize(1);
+            var sub = noise.getSubFeatures().getFirst();
+            assertThat(sub.getType()).isEqualTo("lexicon"); // null sub_feature_type falls back to "lexicon"
+            assertThat(sub.getName()).isEqualTo("spam-1");
+            assertThat(sub.getHitStatus()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a single-member composite group reports its sub_features; a plain lexicon row does not")
+        void singleMemberCompositeHasSubFeature() {
+            FeatureDecisionRow comp = new FeatureDecisionRow("proc-1", "msg-105", DATASET_PARTITION_VALUE,
+                    "Lexicon-Tagging", "composite", 3L, "comp", "lexicon", "lex-c", 33L,
+                    false, null, defJson("lex-c", 2, 1), DATASET_PARTITION_VALUE, "101");
+            MessageEvaluationResult evaluation = DecisionTreeEvaluator.evaluate("msg-105",
+                    FeatureGroupingService.groupAndOrder(List.of(comp,
+                            row("1", "lexicon", "lex-1", defJson("lex-1", 3, 1)))), r -> List.of());
+            FeatureHitSummaryRow row = OutputRowBuilder.buildFeatureHitSummaryRow(
+                    "msg-105", DATASET_PARTITION_VALUE, "pipe-1", "proc-1", "Lexicon-Tagging",
+                    evaluation, "scan-engine", NOW);
+            var compFeature = row.getFeatures().stream().filter(f -> f.getId() == 3L).findFirst().orElseThrow();
+            assertThat(compFeature.getSubFeatures()).hasSize(1);
+            assertThat(compFeature.getSubFeatures().getFirst().getName()).isEqualTo("lex-c");
+            assertThat(compFeature.getSubFeatures().getFirst().getHitStatus()).isFalse();
+            var plain = row.getFeatures().stream().filter(f -> f.getId() == 1L).findFirst().orElseThrow();
+            assertThat(plain.getSubFeatures()).isEmpty();
         }
     }
 }

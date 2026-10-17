@@ -43,6 +43,7 @@ public final class ViewRowConverter implements Serializable {
                 RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_NAME),
                 RowReaders.getStringOrNull(row, BqColumns.View.SUB_FEATURE_TYPE),
                 RowReaders.getStringOrNull(row, BqColumns.View.FEATURES_TO_APPLY),
+                RowReaders.getLongOrNull(row, BqColumns.View.FEATURES_TO_APPLY_ID),
                 RowReaders.getBooleanOrDefault(row, BqColumns.View.IS_NOISE_REDUCTION),
                 RowReaders.getStringOrNull(row, BqColumns.View.OPERATOR),
                 RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION),

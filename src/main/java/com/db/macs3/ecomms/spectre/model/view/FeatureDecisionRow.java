@@ -35,6 +35,7 @@ public class FeatureDecisionRow implements Serializable {
     private String featureName;
     private String subFeatureType;
     private String featuresToApply;
+    private Long featuresToApplyId;
     private boolean isNoiseReduction;
     private String operator;
     private String featureDefinitionJson;
@@ -75,6 +76,22 @@ public class FeatureDecisionRow implements Serializable {
                               String featureName, String subFeatureType, String featuresToApply,
                               boolean isNoiseReduction, String operator, String featureDefinitionJson,
                               LocalDate featurePartitionValue, String policyEngineId) {
+        this(processId, messageId, datasetPartition, featureTaggingType, featureType, featureId, featureName,
+                subFeatureType, featuresToApply, null, isNoiseReduction, operator, featureDefinitionJson,
+                featurePartitionValue, policyEngineId);
+    }
+
+    /**
+     * As above, plus {@code featuresToApplyId} — the view's {@code lexicon_features_to_apply_id} (LONG/INTEGER),
+     * the id of the lexicon named by {@code featuresToApply}; reported as {@code evaluated_lexicons.id}.
+     */
+    public FeatureDecisionRow(String processId, String messageId, LocalDate datasetPartition,
+                              String featureTaggingType, String featureType, Long featureId,
+                              String featureName, String subFeatureType, String featuresToApply,
+                              Long featuresToApplyId,
+                              boolean isNoiseReduction, String operator, String featureDefinitionJson,
+                              LocalDate featurePartitionValue, String policyEngineId) {
+        this.featuresToApplyId = featuresToApplyId;
         this.processId = processId;
         this.messageId = messageId;
         this.datasetPartition = datasetPartition;
@@ -163,6 +180,14 @@ public class FeatureDecisionRow implements Serializable {
         this.featuresToApply = featuresToApply;
     }
 
+    public Long getFeaturesToApplyId() {
+        return featuresToApplyId;
+    }
+
+    public void setFeaturesToApplyId(Long featuresToApplyId) {
+        this.featuresToApplyId = featuresToApplyId;
+    }
+
     public boolean isNoiseReduction() {
         return isNoiseReduction;
     }
@@ -218,7 +243,7 @@ public class FeatureDecisionRow implements Serializable {
                         datasetPartition, other.datasetPartition, featureTaggingType, other.featureTaggingType,
                         featureType, other.featureType, featureId, other.featureId,
                         featureName, other.featureName, subFeatureType, other.subFeatureType,
-                        featuresToApply, other.featuresToApply, operator, other.operator,
+                        featuresToApply, other.featuresToApply, featuresToApplyId, other.featuresToApplyId, operator, other.operator,
                         featureDefinitionJson, other.featureDefinitionJson,
                         featurePartitionValue, other.featurePartitionValue,
                         policyEngineId, other.policyEngineId);
@@ -227,7 +252,7 @@ public class FeatureDecisionRow implements Serializable {
     @Override
     public int hashCode() {
         return Objects.hash(processId, messageId, datasetPartition, featureTaggingType, featureType,
-                featureId, featureName, subFeatureType, featuresToApply, isNoiseReduction, operator,
+                featureId, featureName, subFeatureType, featuresToApply, featuresToApplyId, isNoiseReduction, operator,
                 featureDefinitionJson, featurePartitionValue, policyEngineId);
     }
 
@@ -236,7 +261,7 @@ public class FeatureDecisionRow implements Serializable {
         return "FeatureDecisionRow[processId=" + processId + ", messageId=" + messageId
                 + ", datasetPartition=" + datasetPartition + ", featureTaggingType=" + featureTaggingType
                 + ", featureType=" + featureType + ", featureId=" + featureId + ", featureName=" + featureName
-                + ", subFeatureType=" + subFeatureType + ", featuresToApply=" + featuresToApply
+                + ", subFeatureType=" + subFeatureType + ", featuresToApply=" + featuresToApply + ", featuresToApplyId=" + featuresToApplyId
                 + ", isNoiseReduction=" + isNoiseReduction + ", operator=" + operator
                 + ", featureDefinitionJson=" + featureDefinitionJson
                 + ", featurePartitionValue=" + featurePartitionValue + ", policyEngineId=" + policyEngineId + "]";

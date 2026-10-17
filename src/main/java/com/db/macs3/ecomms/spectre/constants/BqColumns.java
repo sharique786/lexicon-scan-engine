@@ -28,6 +28,7 @@ public final class BqColumns {
         public static final String FEATURE_NAME = "feature_name";
         public static final String SUB_FEATURE_TYPE = "sub_feature_type";
         public static final String FEATURES_TO_APPLY = "lexicon_features_to_apply_name";
+        public static final String FEATURES_TO_APPLY_ID = "lexicon_features_to_apply_id";
         public static final String IS_NOISE_REDUCTION = "is_noise_reduction";
         public static final String OPERATOR = "operator";
         public static final String FEATURE_DEFINITION = "feature_definition";

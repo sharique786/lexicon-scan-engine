@@ -1,5 +1,7 @@
 package com.db.macs3.ecomms.spectre.output;
 
+import com.db.macs3.ecomms.spectre.constants.BqColumns;
+import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.model.decision.GroupEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
@@ -16,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,10 +72,9 @@ public final class OutputRowBuilder {
                 // lexicon, so a member with no hit is reported (zero-hit placeholder) alongside the hit ones.
                 for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.getMemberMatches().entrySet()) {
                     FeatureDefinition.Body body = FeatureDefinition.parse(entry.getKey().getFeatureDefinitionJson()).getBody();
-                    String memberName = body.getLexiconName() != null && !body.getLexiconName().isBlank()
-                            ? body.getLexiconName() : groupResult.getGroup().getFeatureName();
+                    String memberName = summaryName(entry.getKey(), groupResult);
                     long memberTotal = body.getTotalTermsCount() == null ? 0 : body.getTotalTermsCount();
-                    evaluatedLexicons.add(buildEvaluatedLexicon(groupResult.getGroup().getFeatureId(), memberName,
+                    evaluatedLexicons.add(buildEvaluatedLexicon(summaryId(entry.getKey(), groupResult), memberName,
                             memberTotal, entry.getValue()));
                 }
                 continue;
@@ -108,8 +110,8 @@ public final class OutputRowBuilder {
                 regexHitCount = 0;
             }
             evaluatedLexicons.add(new LexiconHitSummaryRow.EvaluatedLexicon(
-                    groupResult.getGroup().getFeatureId(),
-                    groupResult.getGroup().getFeatureName(),
+                    summaryId(groupResult.getMemberMatches().keySet().iterator().next(), groupResult),
+                    summaryName(groupResult.getMemberMatches().keySet().iterator().next(), groupResult),
                     totalTermsCount,
                     regexHitCount,
                     termDtls));
@@ -117,6 +119,23 @@ public final class OutputRowBuilder {
 
         return new LexiconHitSummaryRow(
                 messageId, processId, pipelineExecId, evaluatedLexicons, datasetPartitionValue, createdBy, createdTs);
+    }
+
+    /**
+     * {@code evaluated_lexicons.id}: always the member's {@code lexicon_features_to_apply_id}; the group's
+     * {@code feature_id} only when the view row carries none.
+     */
+    private static Long summaryId(FeatureDecisionRow member, GroupEvaluationResult groupResult) {
+        return member.getFeaturesToApplyId() != null ? member.getFeaturesToApplyId() : groupResult.getGroup().getFeatureId();
+    }
+
+    /**
+     * {@code evaluated_lexicons.name}: always the member's {@code lexicon_features_to_apply_name}; the group's
+     * {@code feature_name} only when the view row carries none.
+     */
+    private static String summaryName(FeatureDecisionRow member, GroupEvaluationResult groupResult) {
+        String name = member.getFeaturesToApply();
+        return name != null && !name.isBlank() ? name : groupResult.getGroup().getFeatureName();
     }
 
     private static LexiconHitSummaryRow.EvaluatedLexicon buildEvaluatedLexicon(
@@ -175,18 +194,44 @@ public final class OutputRowBuilder {
                                                      MessageEvaluationResult evaluation,
                                                      String createdBy, Instant createdTs,
                                                      Map<String, String> attachmentNames) {
+        // Keyed by lexicon_features_to_apply_id (see summaryId), not the group's feature_id.
         Map<Long, List<TermMatchResult>> matchesByFeatureId = new LinkedHashMap<>();
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
             boolean reportedAsIs = groupResult.getGroup().isNoiseReduction() || groupResult.getGroup().isDisclaimer();
             if (reportedAsIs && groupResult.isHit()) {
-                List<TermMatchResult> groupMatches = new ArrayList<>();
-                groupResult.getMemberMatches().values().forEach(groupMatches::addAll);
-                if (!groupMatches.isEmpty()) {
-                    matchesByFeatureId.put(groupResult.getGroup().getFeatureId(), groupMatches);
+                for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> member : groupResult.getMemberMatches().entrySet()) {
+                    if (!member.getValue().isEmpty()) {
+                        matchesByFeatureId.computeIfAbsent(summaryId(member.getKey(), groupResult), k -> new ArrayList<>())
+                                .addAll(member.getValue());
+                    }
                 }
             }
         }
-        matchesByFeatureId.putAll(evaluation.getFinalLexiconMatchesByFeatureId());
+        for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
+            List<TermMatchResult> kept = evaluation.getFinalLexiconMatchesByFeatureId()
+                    .get(groupResult.getGroup().getFeatureId());
+            if (kept == null || kept.isEmpty() || groupResult.getGroup().isNoiseReduction()
+                    || groupResult.getGroup().isDisclaimer()) {
+                continue;
+            }
+            // Suppression returns a flat per-group list; route each kept term back to the member that produced it.
+            Map<String, Long> idByTermId = new HashMap<>();
+            Long fallbackId = null;
+            for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> member : groupResult.getMemberMatches().entrySet()) {
+                Long id = summaryId(member.getKey(), groupResult);
+                if (fallbackId == null) {
+                    fallbackId = id;
+                }
+                for (TermMatchResult t : member.getValue()) {
+                    idByTermId.put(t.getTermId(), id);
+                }
+            }
+            for (TermMatchResult t : kept) {
+                Long id = idByTermId.getOrDefault(t.getTermId(),
+                        fallbackId != null ? fallbackId : groupResult.getGroup().getFeatureId());
+                matchesByFeatureId.computeIfAbsent(id, k -> new ArrayList<>()).add(t);
+            }
+        }
         if (matchesByFeatureId.isEmpty()) {
             return null;
         }
@@ -268,11 +313,17 @@ public final class OutputRowBuilder {
 
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
             List<FeatureHitSummaryRow.SubFeature> subFeatures = new ArrayList<>();
-            if (groupResult.getGroup().isMultiMember()) {
+            // NoiseReduction and composite groups always report their members as sub_features, even a
+            // single-member one; only a plain lexicon/disclaimer group with one row has none.
+            FeatureGroup group = groupResult.getGroup();
+            if (group.isMultiMember() || group.isNoiseReduction()
+                    || BqColumns.FeatureType.COMPOSITE.equalsIgnoreCase(group.getFeatureType())) {
                 for (Map.Entry<FeatureDecisionRow, Boolean> entry : groupResult.getMemberHit().entrySet()) {
                     FeatureDecisionRow member = entry.getKey();
+                    String subType = member.getSubFeatureType() == null || member.getSubFeatureType().isBlank()
+                            ? BqColumns.FeatureType.LEXICON : member.getSubFeatureType();
                     subFeatures.add(new FeatureHitSummaryRow.SubFeature(
-                            member.getSubFeatureType(), member.getFeaturesToApply(), entry.getValue()));
+                            subType, member.getFeaturesToApply(), entry.getValue()));
                 }
             }
 
