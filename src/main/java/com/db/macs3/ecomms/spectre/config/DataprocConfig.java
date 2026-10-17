@@ -43,6 +43,9 @@ import java.util.Objects;
  *       msg-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-source-data-dev
  *       msg-gcs-prefix: coreapp-trans
  *       max-attachment-limit: 5242880
+ *     info:
+ *       composer-dag-path: dags/spectre_lexicon_dag.py
+ *       dproc-script-path: gs://bucket/scripts/lexicon-scan-engine.jar
  *     csv:
  *       restricted-data-bkt: my-restricted-data-bucket
  *       write-toggle: true
@@ -135,6 +138,12 @@ public final class DataprocConfig implements Serializable {
 
     public CsvConfig csv() {
         return spectre.engine().csv();
+    }
+
+    /** Never null: an absent {@code info:} block yields an {@link InfoConfig} whose getters return {@code "N/A"}. */
+    public InfoConfig info() {
+        InfoConfig info = spectre.engine().info();
+        return info != null ? info : new InfoConfig(null, null);
     }
 
     // SafeConstructor rather than SnakeYAML's default Constructor: this file is
@@ -239,18 +248,31 @@ public final class DataprocConfig implements Serializable {
         private final MessagesGcsConfig messages;
         private final BqTableConfig bigquery;
         private final CsvConfig csv;
+        private final InfoConfig info;
+
+        public EngineConfig(String stageName, HyperscanGcsConfig hyperscan, MessagesGcsConfig messages,
+                            BqTableConfig bigquery, CsvConfig csv) {
+            this(stageName, hyperscan, messages, bigquery, csv, null);
+        }
 
         @JsonCreator
         public EngineConfig(@JsonProperty("stage-name") String stageName,
                             @JsonProperty("hyperscan") HyperscanGcsConfig hyperscan,
                             @JsonProperty("messages") MessagesGcsConfig messages,
                             @JsonProperty("bigquery") BqTableConfig bigquery,
-                            @JsonProperty("csv") CsvConfig csv) {
+                            @JsonProperty("csv") CsvConfig csv,
+                            @JsonProperty("info") InfoConfig info) {
             this.stageName = stageName;
             this.hyperscan = hyperscan;
             this.messages = messages;
             this.bigquery = bigquery;
             this.csv = csv;
+            this.info = info;
+        }
+
+        /** {@code null} when the {@code info:} block is absent. */
+        public InfoConfig info() {
+            return info;
         }
 
         /** {@code null} when the {@code csv:} block is absent — treated as CSV write disabled. */
@@ -279,18 +301,66 @@ public final class DataprocConfig implements Serializable {
             return this == obj || (obj instanceof EngineConfig other
                     && Objects.equals(stageName, other.stageName) && Objects.equals(hyperscan, other.hyperscan)
                     && Objects.equals(messages, other.messages) && Objects.equals(bigquery, other.bigquery)
-                    && Objects.equals(csv, other.csv));
+                    && Objects.equals(csv, other.csv) && Objects.equals(info, other.info));
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(stageName, hyperscan, messages, bigquery, csv);
+            return Objects.hash(stageName, hyperscan, messages, bigquery, csv, info);
         }
 
         @Override
         public String toString() {
             return "EngineConfig[stageName=" + stageName + ", hyperscan=" + hyperscan + ", messages=" + messages
-                    + ", bigquery=" + bigquery + ", csv=" + csv + "]";
+                    + ", bigquery=" + bigquery + ", csv=" + csv + ", info=" + info + "]";
+        }
+    }
+
+    /**
+     * {@code spectre.engine.info:} - descriptive values for {@code pipeline_stage_audit}.
+     * {@code composer-dag-path} is written to {@code composer_dag_name} and {@code dproc-script-path} to
+     * {@code dproc_script_name}. A missing or blank property reads as {@code "N/A"}.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static final class InfoConfig implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        public static final String DEFAULT = "N/A";
+
+        private final String composerDagPath;
+        private final String dprocScriptPath;
+
+        @JsonCreator
+        public InfoConfig(@JsonProperty("composer-dag-path") String composerDagPath,
+                          @JsonProperty("dproc-script-path") String dprocScriptPath) {
+            this.composerDagPath = composerDagPath;
+            this.dprocScriptPath = dprocScriptPath;
+        }
+
+        public String composerDagPath() {
+            return composerDagPath == null || composerDagPath.isBlank() ? DEFAULT : composerDagPath;
+        }
+
+        public String dprocScriptPath() {
+            return dprocScriptPath == null || dprocScriptPath.isBlank() ? DEFAULT : dprocScriptPath;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return this == obj || (obj instanceof InfoConfig other
+                    && Objects.equals(composerDagPath, other.composerDagPath)
+                    && Objects.equals(dprocScriptPath, other.dprocScriptPath));
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(composerDagPath, dprocScriptPath);
+        }
+
+        @Override
+        public String toString() {
+            return "InfoConfig[composerDagPath=" + composerDagPath + ", dprocScriptPath=" + dprocScriptPath + "]";
         }
     }
 

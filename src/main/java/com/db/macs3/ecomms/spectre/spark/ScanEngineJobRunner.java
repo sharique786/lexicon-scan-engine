@@ -144,21 +144,23 @@ public class ScanEngineJobRunner {
         Instant jobStart = Instant.now();
         log.info("Job starting: processId={}, pipelineExecId={}, policyEngineId={}",
                 runtimeArgs.processId(), runtimeArgs.pipelineExecId(), runtimeArgs.policyEngineId());
-        writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, null,
-                BqColumns.JobStatus.IN_PROGRESS, null, null, null, null);
+        StageAuditContext auditContext = new StageAuditContext(
+                sparkSession, tableConfig, runtimeArgs, dataprocConfig, jobStart);
+        writeStageAudit(auditContext,
+                new StageAuditOutcome(null, BqColumns.JobStatus.IN_PROGRESS, null, null, null, null));
 
         RunStats stats = new RunStats();
         try {
             runPipeline(sparkSession, runtimeArgs, tableConfig, dataprocConfig, stats);
             Instant jobEnd = Instant.now();
             log.info("Job completed successfully in {}ms", Duration.between(jobStart, jobEnd).toMillis());
-            writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, jobEnd,
-                    BqColumns.JobStatus.SUCCESS, null, null, stats.inputRecordCount, stats.outputRecordCount);
+            writeStageAudit(auditContext, new StageAuditOutcome(jobEnd, BqColumns.JobStatus.SUCCESS, null, null,
+                    stats.inputRecordCount, stats.outputRecordCount));
         } catch (Exception e) {
             Instant jobEnd = Instant.now();
             log.error("Job failed after {}ms: {}", Duration.between(jobStart, jobEnd).toMillis(), e.getMessage(), e);
-            writeStageAudit(sparkSession, tableConfig, runtimeArgs, dataprocConfig.stageName(), jobStart, jobEnd,
-                    BqColumns.JobStatus.FAILED, 0, e.toString(), stats.inputRecordCount, stats.outputRecordCount);
+            writeStageAudit(auditContext, new StageAuditOutcome(jobEnd, BqColumns.JobStatus.FAILED, 0, e.toString(),
+                    stats.inputRecordCount, stats.outputRecordCount));
             throw e;
         }
     }
@@ -478,31 +480,44 @@ public class ScanEngineJobRunner {
     }
 
     /**
-     * Placeholder for the NOT NULL Composer DAG / Dataproc script columns of {@code pipeline_stage_audit}.
+     * Placeholder for the NOT NULL columns of {@code pipeline_stage_audit} with no configured source.
      */
     private static final String STAGE_AUDIT_UNKNOWN_STRING = "N/A";
 
     /**
+     * What stays constant across the job's {@code pipeline_stage_audit} rows: where to write, who ran, and the
+     * start time.
+     */
+    private record StageAuditContext(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
+                                     DataprocConfig dataprocConfig, Instant startTime) {
+    }
+
+    /**
+     * What differs per audit row.
+     *
      * @param errorCount        written to the INTEGER {@code error_count} column (0 when null)
      * @param inputRecordCount  unique message count from the BigQuery view (null on the
      *                          {@code IN_PROGRESS} row, where it isn't known yet)
      * @param outputRecordCount number of messages saved to {@code lexicon-hit-summary} (null on the
      *                          {@code IN_PROGRESS} row, where it isn't known yet)
      */
-    private void writeStageAudit(SparkSession spark, BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
-                                 String stageName, Instant startTime, Instant endTime, String status,
-                                 Integer errorCount, String errorMessage, Integer inputRecordCount,
-                                 Integer outputRecordCount) {
-        // composerDagName/composerDagPath/dprocScriptName/dprocScriptPath are NOT NULL in the table
-        // (see PipelineStageAuditRow) but neither RuntimeArgs nor DataprocConfig carries them, so a
-        // placeholder is written.
+    private record StageAuditOutcome(Instant endTime, String status, Integer errorCount, String errorMessage,
+                                     Integer inputRecordCount, Integer outputRecordCount) {
+    }
+
+    private void writeStageAudit(StageAuditContext ctx, StageAuditOutcome outcome) {
+        RuntimeArgs runtimeArgs = ctx.runtimeArgs();
+        DataprocConfig.InfoConfig info = ctx.dataprocConfig().info();
+        // composer_dag_name / dproc_script_name come from spectre.engine.info.composer-dag-path /
+        // dproc-script-path ("N/A" when absent). The two *_path columns have no source and stay "N/A".
         PipelineStageAuditRow row = new PipelineStageAuditRow(
                 runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
-                stageName, STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING,
-                STAGE_AUDIT_UNKNOWN_STRING, STAGE_AUDIT_UNKNOWN_STRING, null,
-                startTime, endTime, status, 0, 0, inputRecordCount, outputRecordCount,
-                errorCount == null ? 0 : errorCount, errorMessage, null, null,
+                ctx.dataprocConfig().stageName(), info.composerDagPath(), STAGE_AUDIT_UNKNOWN_STRING,
+                info.dprocScriptPath(), STAGE_AUDIT_UNKNOWN_STRING, null,
+                ctx.startTime(), outcome.endTime(), outcome.status(), 0, 0,
+                outcome.inputRecordCount(), outcome.outputRecordCount(),
+                outcome.errorCount() == null ? 0 : outcome.errorCount(), outcome.errorMessage(), null, null,
                 LocalDate.now(ZoneOffset.UTC), null, null, null);
-        OutputTableWriter.writePipelineStageAudit(spark, tableConfig, row);
+        OutputTableWriter.writePipelineStageAudit(ctx.spark(), ctx.tableConfig(), row);
     }
 }

@@ -27,6 +27,9 @@ class DataprocConfigTest {
             spectre:
               engine:
                 stage-name: spectre-lexicon-tagging
+                info:
+                  composer-dag-path: dags/spectre_lexicon_dag.py
+                  dproc-script-path: gs://bucket/scripts/scan.jar
                 hyperscan:
                   hdb-gcs-bucket: db-dev-euwe3-gcs-109910-3-spectre-policy-config-dev
                   hdb-gcs-prefix: policy_test
@@ -51,6 +54,22 @@ class DataprocConfigTest {
             """;
 
     @Test
+    @DisplayName("info properties default to N/A when the info block or a property is absent or blank")
+    void infoDefaultsToNotAvailable() {
+        String noInfo = "spectre:\n  engine:\n    stage-name: s\n";
+        DataprocConfig absent = DataprocConfig.parseYaml(
+                new ByteArrayInputStream(noInfo.getBytes(StandardCharsets.UTF_8)));
+        assertThat(absent.info().composerDagPath()).isEqualTo("N/A");
+        assertThat(absent.info().dprocScriptPath()).isEqualTo("N/A");
+
+        String partial = "spectre:\n  engine:\n    info:\n      composer-dag-path: ''\n      dproc-script-path: x.jar\n";
+        DataprocConfig p = DataprocConfig.parseYaml(
+                new ByteArrayInputStream(partial.getBytes(StandardCharsets.UTF_8)));
+        assertThat(p.info().composerDagPath()).isEqualTo("N/A");
+        assertThat(p.info().dprocScriptPath()).isEqualTo("x.jar");
+    }
+
+    @Test
     @DisplayName("parses the real config_file_path YAML shape end to end")
     void parsesSampleYaml() throws Exception {
         DataprocConfig config = DataprocConfig.parseYaml(
@@ -62,6 +81,8 @@ class DataprocConfigTest {
         assertThat(config.workflowTimeoutSeconds()).isEqualTo(43200L);
 
         assertThat(config.stageName()).isEqualTo("spectre-lexicon-tagging");
+        assertThat(config.info().composerDagPath()).isEqualTo("dags/spectre_lexicon_dag.py");
+        assertThat(config.info().dprocScriptPath()).isEqualTo("gs://bucket/scripts/scan.jar");
 
         assertThat(config.hyperscan().hdbGcsBucket()).isEqualTo("db-dev-euwe3-gcs-109910-3-spectre-policy-config-dev");
         assertThat(config.hyperscan().hdbGcsPrefix()).isEqualTo("policy_test");
