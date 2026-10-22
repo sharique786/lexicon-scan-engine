@@ -338,8 +338,8 @@ class OutputRowBuilderTest {
         }
 
         @Test
-        @DisplayName("the suppressed lexicon term is gone; the disclaimer term that suppressed it is reported")
-        void suppressedTermIsGoneDisclaimerRemains() {
+        @DisplayName("the disclaimer term AND the standard lexicon terms (including the overlapped one) are reported")
+        void overlappedLexiconTermStillReported() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
             var disclaimer = row.getEvaluatedLexicons().getFirst();
@@ -349,7 +349,7 @@ class OutputRowBuilderTest {
 
             var lexicon = row.getEvaluatedLexicons().get(1);
             assertThat(lexicon.getTermDtls()).extracting(LexiconHitDetailRow.EvaluatedLexicon.TermDtl::getTermId)
-                    .containsExactly("lexicon_market_cond-1::2"); // ::1 (fully inside the disclaimer span) suppressed
+                    .containsExactly("lexicon_market_cond-1::1", "lexicon_market_cond-1::2"); // overlapped ::1 is still reported
         }
 
         @Test
@@ -378,7 +378,7 @@ class OutputRowBuilderTest {
         void matchedTextJsonIsCorrect() {
             LexiconHitDetailRow row = OutputRowBuilder.buildDetailRow(
                     "msg-101", "proc-1", "pipe-1", DATASET_PARTITION_VALUE, buildRealisticEvaluation(), "scan-engine", NOW);
-            String matchedTextJson = row.getEvaluatedLexicons().get(1).getTermDtls().getFirst().getMatchedText();
+            String matchedTextJson = row.getEvaluatedLexicons().get(1).getTermDtls().get(1).getMatchedText();
             assertThat(matchedTextJson).contains("hit_details_hs");
             assertThat(matchedTextJson).contains("\"bomb\"");
             assertThat(matchedTextJson).contains("\"start\":50");

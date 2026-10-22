@@ -217,7 +217,7 @@ A message goes through several independent filters before and during scanning:
 | 7 | Attachments | If `spectre.engine.messages.max-attachment-limit` is set, an attachment whose UTF-8 `attachment_text` is larger is skipped entirely (not scanned, not an error) |
 | 8 | CHAT/VOICE body | Only `message_text` cells of the HTML table are scanned ([§4](#4-message-types-and-what-gets-scanned)) |
 | 9 | Decision tree | A hit NoiseReduction group stops evaluation: no Disclaimer or Lexicon group is scanned ([§8](#8-decision-tree)) |
-| 10 | Disclaimer suppression | A Lexicon match fully inside a disclaimer match in the same area is dropped from the detail tables ([§8](#8-decision-tree)) |
+| 10 | Disclaimer suppression | A Lexicon match fully inside a disclaimer match in the same area no longer counts toward its feature's `hit_status` in `feature-hit-summary`; the detail tables still report it ([§8](#8-decision-tree)) |
 
 ---
 
@@ -355,21 +355,21 @@ Disclaimer matches are never themselves suppressed. Suppression spans come from 
 
 ### 8.3 Lexicon — scanned, then suppressed by disclaimers
 
-Every remaining group is scanned. A Lexicon match is **suppressed** when it is **fully contained** in a disclaimer match's span **in the same coordinate space**: same area, and for attachments the same `attachment_id`. Partial overlap does not suppress. A term left with no surviving matches is removed; a group left with no surviving term is absent from the detail table. The number of suppressed matches is kept on the result for observability only.
+Every remaining group is scanned. A Lexicon match is **suppressed** when it is **fully contained** in a disclaimer match's span **in the same coordinate space**: same area, and for attachments the same `attachment_id`. Partial overlap does not suppress. Suppression affects only `feature-hit-summary.hit_status`: a Lexicon feature (and each of its `sub_features`) is `true` only if at least one of its terms keeps a surviving match, so a feature whose matches all overlap a disclaimer is `false`. Disclaimer and NoiseReduction `hit_status` are unaffected. The detail tables are NOT filtered by suppression. The number of suppressed matches is kept on the result for observability only.
 
 ### 8.4 What each output gets
 
 | Table | NoiseReduction | Disclaimer | Lexicon |
 |---|---|---|---|
 | `lexicon-hit-summary` | every *evaluated* group, raw matches (a no-hit group gets an `N/A` placeholder entry; a multi-member group — several `features_to_apply` under one `feature_id` — gets one entry **per member lexicon**, so a no-hit member is reported alongside the hit ones; every entry's `id`/`name` come from `lexicon_features_to_apply_id`/`_name`) | same | same, **before** suppression |
-| `lexicon-hit-restricted` / `-unrestricted` | hit groups only; `id` = `lexicon_features_to_apply_id` of the member that hit | same | **after** suppression; each surviving term is routed back to its member's `lexicon_features_to_apply_id` |
-| `feature-hit-summary` | every evaluated group with its hit status | same | same |
+| `lexicon-hit-restricted` / `-unrestricted` | hit groups only; `id` = `lexicon_features_to_apply_id` of the member that hit | same | every match, **including** ones overlapping a disclaimer (not suppressed here); each term is keyed by its member's `lexicon_features_to_apply_id` |
+| `feature-hit-summary` | every evaluated group with its hit status | same | `hit_status` is **after** suppression (false when every match overlaps a disclaimer) |
 
 Worked example — body `"... confidential information ... bomb threat"`; the disclaimer matches `confidential information` (chars 10–34), the lexicon matches `information` (15–27, inside the disclaimer) and `bomb` (50–54):
 
 - summary: disclaimer entry (1 term) and lexicon entry (2 terms, raw);
-- detail: disclaimer entry (`confidential information`) and lexicon entry with only `bomb` (`information` is suppressed);
-- if the lexicon matched only `information`, the detail row would carry the disclaimer entry alone.
+- detail: disclaimer entry (`confidential information`) and lexicon entry with both `information` and `bomb`;
+- `feature-hit-summary`: lexicon `hit_status` true (`bomb` survives). If the lexicon matched only `information`, it would be `false`, while the detail row would still carry both entries.
 
 ---
 
@@ -447,7 +447,7 @@ All tables are written in append mode through the Spark BigQuery connector; this
 | Table | Grain | Contents |
 |---|---|---|
 | `lexicon-hit-summary` | One row per message | `evaluated_lexicons[]`: one entry per **evaluated group** (`id`, `name`, `total_terms_count`, `regex_hit_count`, `term_dtls[]`), for NoiseReduction, Disclaimer and Lexicon groups alike, using raw (pre-suppression) counts. `term_dtls[]`: `term_id`, `term_regex_pattern`, `regex_match_hit_count`, `term_description`. A group evaluated with no matching term is still listed, with `regex_hit_count = 0` and one placeholder term (`term_id`/`term_regex_pattern`/`term_description = "N/A"`, count 0); groups never evaluated (after a NoiseReduction hit) have no entry |
-| `lexicon-hit-restricted` | One row per message *that has something to report*, restricted source only | `evaluated_lexicons[]`: `id` (= `lexicon_features_to_apply_id`) and `term_dtls[]` of `term_id` + `matched_text`. Contains hit NoiseReduction groups, hit Disclaimer groups and Lexicon groups after suppression. **No row** is written when nothing remains |
+| `lexicon-hit-restricted` | One row per message *that has something to report*, restricted source only | `evaluated_lexicons[]`: `id` (= `lexicon_features_to_apply_id`) and `term_dtls[]` of `term_id` + `matched_text`. Contains hit NoiseReduction groups, hit Disclaimer groups and all Lexicon matches (disclaimer-overlapped ones included). **No row** is written when nothing remains |
 | `lexicon-hit-unrestricted` | Same, unrestricted source only | Identical shape, split purely by AVRO subfolder |
 | `feature-hit-summary` | One row per message | `features[]`: `id`, `name`, `type`, `is_noise_reduction`, `hit_status` for every evaluated group, plus `sub_features[]` (`type`, `name`, `hit_status`) for multi-member groups, NoiseReduction groups (even a single row) and `composite` groups (`type` falls back to `lexicon` when the view's `sub_feature_type` is empty); `feature_hit_type` from the view's `feature_tagging_type` |
 | `pipeline_record_audit` | One row per message, **success and failure** | `status` `SUCCESS`/`FAILED`, `return_code` 0/1, `error_message`, `record_id` = `message_id`, `source_name`, `sent_date`, `run_date`. De-duplicated on `record_id`/`stage_name`/`execution_date`/`pipeline_exec_id`. Other columns belong to stages this job does not run and are left null/0 |

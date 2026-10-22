@@ -197,39 +197,16 @@ public final class OutputRowBuilder {
         // Keyed by lexicon_features_to_apply_id (see summaryId), not the group's feature_id.
         Map<Long, List<TermMatchResult>> matchesByFeatureId = new LinkedHashMap<>();
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
-            boolean reportedAsIs = groupResult.getGroup().isNoiseReduction() || groupResult.getGroup().isDisclaimer();
-            if (reportedAsIs && groupResult.isHit()) {
+            // NoiseReduction/Disclaimer are reported only when the group is a hit; Lexicon matches are reported
+            // in full, INCLUDING ones a disclaimer overlaps (suppression only affects feature-hit-summary).
+            boolean lexicon = !groupResult.getGroup().isNoiseReduction() && !groupResult.getGroup().isDisclaimer();
+            if (lexicon || groupResult.isHit()) {
                 for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> member : groupResult.getMemberMatches().entrySet()) {
                     if (!member.getValue().isEmpty()) {
                         matchesByFeatureId.computeIfAbsent(summaryId(member.getKey(), groupResult), k -> new ArrayList<>())
                                 .addAll(member.getValue());
                     }
                 }
-            }
-        }
-        for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
-            List<TermMatchResult> kept = evaluation.getFinalLexiconMatchesByFeatureId()
-                    .get(groupResult.getGroup().getFeatureId());
-            if (kept == null || kept.isEmpty() || groupResult.getGroup().isNoiseReduction()
-                    || groupResult.getGroup().isDisclaimer()) {
-                continue;
-            }
-            // Suppression returns a flat per-group list; route each kept term back to the member that produced it.
-            Map<String, Long> idByTermId = new HashMap<>();
-            Long fallbackId = null;
-            for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> member : groupResult.getMemberMatches().entrySet()) {
-                Long id = summaryId(member.getKey(), groupResult);
-                if (fallbackId == null) {
-                    fallbackId = id;
-                }
-                for (TermMatchResult t : member.getValue()) {
-                    idByTermId.put(t.getTermId(), id);
-                }
-            }
-            for (TermMatchResult t : kept) {
-                Long id = idByTermId.getOrDefault(t.getTermId(),
-                        fallbackId != null ? fallbackId : groupResult.getGroup().getFeatureId());
-                matchesByFeatureId.computeIfAbsent(id, k -> new ArrayList<>()).add(t);
             }
         }
         if (matchesByFeatureId.isEmpty()) {
@@ -322,8 +299,10 @@ public final class OutputRowBuilder {
                     FeatureDecisionRow member = entry.getKey();
                     String subType = member.getSubFeatureType() == null || member.getSubFeatureType().isBlank()
                             ? BqColumns.FeatureType.LEXICON : member.getSubFeatureType();
+                    boolean memberHit = entry.getValue() && (!isStandardLexicon(group)
+                            || survives(evaluation, group, groupResult.getMemberMatches().get(member)));
                     subFeatures.add(new FeatureHitSummaryRow.SubFeature(
-                            subType, member.getFeaturesToApply(), entry.getValue()));
+                            subType, member.getFeaturesToApply(), memberHit));
                 }
             }
 
@@ -332,7 +311,8 @@ public final class OutputRowBuilder {
                     groupResult.getGroup().getFeatureName(),
                     groupResult.getGroup().getFeatureType(),
                     groupResult.getGroup().isNoiseReduction(),
-                    groupResult.isHit(),
+                    groupResult.isHit() && (!isStandardLexicon(group)
+                            || survives(evaluation, group, flattenMatches(groupResult))),
                     subFeatures));
         }
 
@@ -341,5 +321,31 @@ public final class OutputRowBuilder {
         return new FeatureHitSummaryRow(
                 messageId, features, datasetPartitionValue, featureTaggingType,
                 createdBy, createdTs, processId, pipelineExecId);
+    }
+
+    private static boolean isStandardLexicon(FeatureGroup group) {
+        return !group.isNoiseReduction() && !group.isDisclaimer();
+    }
+
+    /** True iff at least one of these matches' terms still has a match after disclaimer suppression. */
+    private static boolean survives(MessageEvaluationResult evaluation, FeatureGroup group, List<TermMatchResult> matches) {
+        List<TermMatchResult> kept = evaluation.getFinalLexiconMatchesByFeatureId().get(group.getFeatureId());
+        if (kept == null || matches == null) {
+            return false;
+        }
+        for (TermMatchResult m : matches) {
+            for (TermMatchResult k : kept) {
+                if (k.getTermId().equals(m.getTermId())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static List<TermMatchResult> flattenMatches(GroupEvaluationResult groupResult) {
+        List<TermMatchResult> all = new ArrayList<>();
+        groupResult.getMemberMatches().values().forEach(all::addAll);
+        return all;
     }
 }
