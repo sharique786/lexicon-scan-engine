@@ -1,0 +1,60 @@
+{
+  "results": [
+    {
+      "termId": "lexicon_research_dws_1::2",
+      "termDescription": "(((will change) OR (will adjust) OR (will alter) OR (will redefine) OR (will reconsider) OR (will rethink) OR (will reassess)) FOLLOWEDBY{2} ((rating) OR (forecast) OR (target) OR (recommendation) OR (outlook))) AND NOT(((will change) OR (will adjust) OR (will alter) OR (will redefine) OR (will reconsider) OR (will rethink) OR (will reassess)) FOLLOWEDBY{2} ((rating) OR (forecast) OR (target) OR (recommendation) OR (outlook))) NEAR{1} date)",
+      "compilationStatus": "PASS",
+      "regexPattern": [
+        "(?:\\bwill change\\b|\\bwill adjust\\b|\\bwill alter\\b|\\bwill redefine\\b|\\bwill reconsider\\b|\\bwill rethink\\b|\\bwill reassess\\b)(?:\\s+\\S+){0,2}\\s+(?:\\brating\\b|\\bforecast\\b|\\btarget\\b|\\brecommendation\\b|\\boutlook\\b)"
+      ],
+      "requiresExclusionCheck": true,
+      "exclusionRegex": [
+        "(?:(?:(?:\\bwill change\\b|\\bwill adjust\\b|\\bwill alter\\b|\\bwill redefine\\b|\\bwill reconsider\\b|\\bwill rethink\\b|\\bwill reassess\\b)(?:\\s+\\S+){0,2}\\s+(?:\\brating\\b|\\bforecast\\b|\\btarget\\b|\\brecommendation\\b|\\boutlook\\b)(?:\\s+\\S+){0,1}\\s+\\bdate\\b|\\bdate\\b(?:\\s+\\S+){0,1}\\s+(?:\\bwill change\\b|\\bwill adjust\\b|\\bwill alter\\b|\\bwill redefine\\b|\\bwill reconsider\\b|\\bwill rethink\\b|\\bwill reassess\\b)(?:\\s+\\S+){0,2}\\s+(?:\\brating\\b|\\bforecast\\b|\\btarget\\b|\\brecommendation\\b|\\boutlook\\b)))"
+      ],
+      "resolvedPatterns": "(?:\\bwill change\\b|\\bwill adjust\\b|\\bwill alter\\b|\\bwill redefine\\b|\\bwill reconsider\\b|\\bwill rethink\\b|\\bwill reassess\\b) FOLLOWEDBY{2} (?:\\brating\\b|\\bforecast\\b|\\btarget\\b|\\brecommendation\\b|\\boutlook\\b) AND NOT ((?:\\bwill change\\b|\\bwill adjust\\b|\\bwill alter\\b|\\bwill redefine\\b|\\bwill reconsider\\b|\\bwill rethink\\b|\\bwill reassess\\b) FOLLOWEDBY{2} (?:\\brating\\b|\\bforecast\\b|\\btarget\\b|\\brecommendation\\b|\\boutlook\\b) NEAR{1} \\bdate\\b)",
+      "requiredExpressionIds": [7],
+      "excludedExpressionIds": [8],
+      "patternMapping": "(7&!8)"
+    },
+    {
+      "termId": "lexicon_portuguese_top30_S2T::13",
+      "termDescription": "((entre nos) OR (entre voce e eu)) AND NOT((((entre nos) OR (entre voce e eu))) FOLLOWEDBY{2} (((dividir) OR (conversa) OR (falar) OR (falamos) OR (discutir) OR (trabalhar nisso) OR (resolver) OR (isto e))))",
+      "compilationStatus": "PASS",
+      "regexPattern": [
+        "(?:\\bentre nos\\b|\\bentre voce e eu\\b)"
+      ],
+      "requiresExclusionCheck": true,
+      "exclusionRegex": [
+        "(?:(?:\\bentre nos\\b|\\bentre voce e eu\\b)(?:\\s+\\S+){0,2}\\s+(?:\\bdividir\\b|\\bconversa\\b|\\bfalar\\b|\\bfalamos\\b|\\bdiscutir\\b|\\btrabalhar nisso\\b|\\bresolver\\b|\\bisto e\\b))"
+      ],
+      "resolvedPatterns": "(?:\\bentre nos\\b|\\bentre voce e eu\\b) AND NOT ((?:\\bentre nos\\b|\\bentre voce e eu\\b) FOLLOWEDBY{2} (?:\\bdividir\\b|\\bconversa\\b|\\bfalar\\b|\\bfalamos\\b|\\bdiscutir\\b|\\btrabalhar nisso\\b|\\bresolver\\b|\\bisto e\\b))",
+      "requiredExpressionIds": [
+        54
+      ],
+      "excludedExpressionIds": [
+        55
+      ],
+      "patternMapping": "(54&!55)"
+    },
+    {
+      "termId": "lexicon_research_4::18",
+      "termDescription": "((Against) OR (Contrary to) OR (In opposition to)) NEAR{3} ((Opinion)) AND NOT ((contrary to popular opinion))",
+      "compilationStatus": "PASS",
+      "regexPattern": [
+        "(?:(?:\\bAgainst\\b|\\bContrary to\\b|\\bIn opposition to\\b)(?:\\s+\\S+){0,3}\\s+\\bOpinion\\b|\\bOpinion\\b(?:\\s+\\S+){0,3}\\s+(?:\\bAgainst\\b|\\bContrary to\\b|\\bIn opposition to\\b))"
+      ],
+      "requiresExclusionCheck": true,
+      "exclusionRegex": [
+        "\\bcontrary to popular opinion\\b"
+      ],
+      "resolvedPatterns": "(?:\\bAgainst\\b|\\bContrary to\\b|\\bIn opposition to\\b) NEAR{3} \\bOpinion\\b AND NOT (\\bcontrary to popular opinion\\b)",
+      "requiredExpressionIds": [
+        20
+      ],
+      "excludedExpressionIds": [
+        21
+      ],
+      "patternMapping": "(20&!21)"
+    }
+  ]
+}
