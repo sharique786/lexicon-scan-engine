@@ -10,6 +10,7 @@ import com.db.macs3.ecomms.spectre.model.message.MessageContent;
 import com.db.macs3.ecomms.spectre.model.message.MessageProcessing;
 import com.db.macs3.ecomms.spectre.model.message.MessageSource;
 import com.db.macs3.ecomms.spectre.model.message.ScanMessage;
+import com.db.macs3.ecomms.spectre.model.termmeta.TermExpressionMetadata;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -64,7 +65,9 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <h2>Output</h2>
  * {@code target/lexicon-integration-report/lexicon-term-integration-report.csv} — flattened, one line per
- * (case × matched term × matched span); a case with no match gets one line with empty match columns. UTF-8
+ * (case × matched term × matched span); a case with no match gets one line with empty match columns, except that
+ * {@code message_text}, {@code term_description} and {@code term_regex_pattern} are still filled (the latter two
+ * looked up from the target term's lexicon JSON). UTF-8
  * with BOM so Excel renders non-Latin text.
  */
 @DisplayName("Lexicon term CSV integration test")
@@ -85,6 +88,7 @@ class LexiconTermCsvIntegrationTest {
             "message_text", "matched_term_id", "is_target_term", "term_description", "term_regex_pattern",
             "match_area", "attachment_id", "match_start", "match_end", "matched_text", "error");
 
+    private final Map<String, TermExpressionMetadata> metadataByFeature = new HashMap<>();
     private final List<String[]> reportRows = Collections.synchronizedList(new ArrayList<>());
 
     private List<TestCase> cases;
@@ -358,10 +362,37 @@ class LexiconTermCsvIntegrationTest {
             }
         }
         if (rows.isEmpty()) {
+            // No match at all: nothing came back from the scan, so look the target term up in the lexicon's own
+            // metadata so the report still shows what the term is (description + regex) next to the message text.
+            String[] termInfo = termInfo(feature, testCase.termId());
             rows.add(reportRow(testCase, feature, expectedText, actualText, result,
-                    "", "", "", "", "", "", "", "", "", error));
+                    "", "", termInfo[0], termInfo[1], "", "", "", "", "", error));
         }
         reportRows.addAll(rows);
+    }
+
+    /**
+     * @return {@code {term_description, term_regex_pattern}} for {@code termId} as the engine itself would report
+     * them (same {@link TermExpressionMetadata} parse the scan uses); empty strings when the term or its metadata
+     * cannot be resolved (e.g. an unparseable lexicon JSON — that case already surfaces as an ERROR row).
+     */
+    private String[] termInfo(String feature, String termId) {
+        String[] none = {"", ""};
+        if (feature == null || termId == null) {
+            return none;
+        }
+        try {
+            TermExpressionMetadata metadata = metadataByFeature.computeIfAbsent(feature, f -> TermExpressionMetadata.parse(f,
+                    new String(readClasspath(LEXICON_DIR + TermIdBuilder.termMetadataFileName(f)), StandardCharsets.UTF_8)));
+            int termNumber = Integer.parseInt(termId.substring(termId.lastIndexOf(TERM_SEPARATOR) + TERM_SEPARATOR.length()).trim());
+            TermExpressionMetadata.TermEntry entry = metadata.getByTermNumber().get(termNumber);
+            if (entry == null) {
+                return none;
+            }
+            return new String[]{entry.getTermDescription(), entry.getTermRegexPattern()};
+        } catch (RuntimeException e) {
+            return none;
+        }
     }
 
     private static String[] reportRow(TestCase testCase, String feature, String expected, String actual, String result,
