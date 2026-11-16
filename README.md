@@ -506,7 +506,7 @@ Sized for millions of messages, thousands of lexicon bundles, and a **shared** D
 - **One `Scanner` per partition.** `FeatureScanOrchestrator` owns exactly one native `Scanner` for its lifetime (one instance = one Spark partition = one task thread) and calls `allocScratch(database)` before each scan. Constructing one per scan would waste native resources the wrapper caps at 256 per JVM.
 - **Strip once per message, not per feature.** A message is scanned against dozens of features; its subject, body and attachments are cleaned once and reused. Attachments use the zero-cost `identity` path.
 - **One zip download per feature per partition**, cached in a bounded LRU (native database and metadata together). The same feature may still be downloaded once per partition that needs it — accepted; broadcasting every bundle from the driver was rejected because it risks driver OOM.
-- **Concurrent bundle prefetch.** `PartitionProcessor` peeks at most `PREFETCH_LOOKAHEAD_ROWS` (200) rows to discover the features the start of the partition needs, then `HyperscanBundleLoader.prefetch` loads them concurrently on virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`, stable in JDK 21, no `--enable-preview`), capped at the cache size. Only I/O-bound work (GCS download, unzip, parse) is concurrent; the cache itself is only touched by one thread (concurrent phase first, then a sequential insertion loop). The rest of the partition streams row by row — the partition is never materialised.
+- **Concurrent bundle prefetch.** `PartitionProcessor` peeks at most `PREFETCH_LOOKAHEAD_ROWS` (200) rows to discover the features the start of the partition needs, then `HyperscanBundleLoader.prefetch` loads them concurrently on virtual threads (`Executors.newVirtualThreadPerTaskExecutor()`, stable in JDK 21, no `--enable-preview`), capped at the cache size. Only I/O-bound work (GCS download, unzip, parse) is concurrent; the cache itself is only touched by one thread (concurrent phase first, then a sequential insertion loop). The rest of the partition streams row by row — the partition is never materialised, and results are handed to Spark lazily, one message per `next()`.
 - **Scanning is never parallelised internally.** It is CPU-bound native (JNI) work; virtual threads would pin their carrier and add only overhead, and would take CPU beyond what YARN allocated on a shared cluster. Scanning stays as parallel as Spark's one-task-per-core scheduling.
 - **Two independent skew sources:** attachment/body size, and applicable-feature count per message. `SparkSessionConfig` sets AQE and skew-join thresholds explicitly (see §15) rather than trusting shared-cluster defaults.
 - **Broadcast join** on the view's distinct `message_id`s restricts the AVRO read; the view is cached because it is used twice.
@@ -547,6 +547,25 @@ spark.hadoop.fs.gs.inputstream.buffer.size=8388608   # 8 MB GCS read buffer: few
 ```
 
 Pair these with the cache setting in `application.yml`: lower `max-cached-databases-per-partition` (for example from 20 to 3) until the bundle size is back to normal. Whether the executor survives is governed by that product: `cores x cached bundles x largest .hdb` must fit inside `memoryOverhead` with margin. These values are reasoned, not measured on a live cluster. Also confirm the Dataproc worker machine type has enough physical RAM: `(executor memory + overhead) x executors per node` must fit in YARN's per-node limit (`yarn.nodemanager.resource.memory-mb`).
+
+**Java heap OOM during output building (`OutOfMemoryError: Java heap space` in `OutputRowBuilder.buildMatchedTextJson`).** This is a *heap* failure, the opposite of the native-memory case above, so the fix is more `executor.memory` and fewer concurrent tasks, not more `memoryOverhead`. It is caused by a term that matches a very large number of times (a short or common pattern over a multi-MB attachment), whose hits are held in memory and serialised into one `matched_text` string. The code now bounds this, and the settings below give the remaining headroom:
+
+```
+spark.executor.cores=4                     # drop to 2 if large attachments still exhaust the heap (each task holds its own message + matches)
+spark.executor.memory=20g                  # heap holds the message, its matches and the JSON being built
+spark.executor.memoryOverhead=6g           # 10g is more than the heap-side failure needs; keep the rest for Hyperscan native memory
+spark.executor.memoryOverheadFactor=0.2    # only if you prefer a factor; "spark.yarn.executor.memoryOverheadConfirmFactor" is not a real Spark property and is ignored
+spark.executor.extraJavaOptions=-XX:+ExitOnOutOfMemoryError -XX:ErrorFile=/tmp/hs_err_%p.log
+```
+
+Code-side protections (not configuration):
+
+- `OutputRowBuilder` writes at most `MAX_REPORTED_HITS_PER_TERM` (1,000) hits per term into `matched_text`, each cut to `MAX_REPORTED_MATCH_TEXT_CHARS` (1,000) characters. `regex_match_hit_count` still holds the true count, and each hit keeps its real offset and length.
+- When a term exceeds the cap, a `WARN` line names the message and term: search the executor logs for `Excessive matches for messageId=`. A term that appears there repeatedly is usually a lexicon pattern that is too broad (see the unanchored-pattern note in the known limitations), and is worth raising with the Compile Service owners.
+- `PartitionProcessor` returns a lazy iterator, so only one message's results are on the heap at a time; the partition's Scanner and bundle cache are closed when the iterator is exhausted or a row throws.
+- The `results` dataset is persisted with `StorageLevel.MEMORY_AND_DISK_SER()` (serialised, spilling to disk), not `.cache()`, because five output mappers read it.
+
+These values are reasoned, not measured on a live cluster. Whether the heap suffices depends on the largest message and the most-matching term in the data; use the `Excessive matches` warnings to find both.
 
 **Partitioning and skew (code-enforced)**
 

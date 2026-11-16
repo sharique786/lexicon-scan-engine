@@ -113,9 +113,12 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         // the executor-local copy Spark already delivered via its broadcast mechanism — this does
         // not re-fetch or re-serialize anything per partition/task.
         GcsClient gcsClient = new GcsClient();
-        try (HyperscanBundleLoader bundleLoader = new HyperscanBundleLoader(
-                featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
-             FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes)) {
+        HyperscanBundleLoader bundleLoader = null;
+        FeatureScanOrchestrator orchestrator = null;
+        try {
+            bundleLoader = new HyperscanBundleLoader(
+                    featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
+            orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes);
 
             // Bounded lookahead + concurrent prefetch — see class Javadoc. lookaheadBuffer holds
             // at most PREFETCH_LOOKAHEAD_ROWS raw rows, never the whole partition.
@@ -128,20 +131,14 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             }
             bundleLoader.prefetch(distinctFeatures);
 
-            List<MessageProcessingResult> results = new ArrayList<>();
-            for (Row row : lookaheadBuffer) {
-                results.add(processOneRow(row, orchestrator));
-            }
-            while (partitionRows.hasNext()) {
-                results.add(processOneRow(partitionRows.next(), orchestrator));
-            }
-
-            long failureCount = results.stream().filter(MessageProcessingResult::isError).count();
-            log.info("Partition {}: processing completed in {}ms — {} message(s) processed, {} failed",
-                    partitionId, Duration.between(partitionStart, Instant.now()).toMillis(),
-                    results.size(), failureCount);
-            return results.iterator();
+            // LAZY: one result is built per next() call, so only one message's matches/JSON is on the
+            // heap at a time (Spark consumes/serialises each result before pulling the next). The
+            // orchestrator/loader are closed when the iterator is exhausted or fails.
+            return new StreamingResults(partitionId, partitionStart, lookaheadBuffer.iterator(), partitionRows,
+                    orchestrator, bundleLoader);
         } catch (RuntimeException e) {
+            closeQuietly(orchestrator);
+            closeQuietly(bundleLoader);
             // Per-message failures are already isolated inside processOneRow (see below) — reaching
             // here means something broke at the PARTITION level instead (bundle loader construction,
             // prefetch, or an unanticipated error outside the per-row try/catch), which is fatal to
@@ -151,6 +148,85 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             log.error("Partition {}: processing failed after {}ms: {}",
                     partitionId, Duration.between(partitionStart, Instant.now()).toMillis(), e.getMessage(), e);
             throw e;
+        }
+    }
+
+    private static void closeQuietly(AutoCloseable closeable) {
+        if (closeable != null) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                log.warn("Failed to close {}: {}", closeable.getClass().getSimpleName(), e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Lazily processes the partition one row per {@link #next()}, then closes the partition-scoped
+     * native resources (Scanner, bundle cache) once the input is exhausted or processing throws.
+     */
+    private final class StreamingResults implements Iterator<MessageProcessingResult> {
+        private final int partitionId;
+        private final Instant partitionStart;
+        private final Iterator<Row> lookahead;
+        private final Iterator<Row> rest;
+        private final FeatureScanOrchestrator orchestrator;
+        private final HyperscanBundleLoader bundleLoader;
+        private long processed;
+        private long failed;
+        private boolean closed;
+
+        StreamingResults(int partitionId, Instant partitionStart, Iterator<Row> lookahead, Iterator<Row> rest,
+                         FeatureScanOrchestrator orchestrator, HyperscanBundleLoader bundleLoader) {
+            this.partitionId = partitionId;
+            this.partitionStart = partitionStart;
+            this.lookahead = lookahead;
+            this.rest = rest;
+            this.orchestrator = orchestrator;
+            this.bundleLoader = bundleLoader;
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (closed) {
+                return false;
+            }
+            boolean more = lookahead.hasNext() || rest.hasNext();
+            if (!more) {
+                close();
+                log.info("Partition {}: processing completed in {}ms — {} message(s) processed, {} failed",
+                        partitionId, Duration.between(partitionStart, Instant.now()).toMillis(), processed, failed);
+            }
+            return more;
+        }
+
+        @Override
+        public MessageProcessingResult next() {
+            if (!hasNext()) {
+                throw new java.util.NoSuchElementException();
+            }
+            try {
+                Row row = lookahead.hasNext() ? lookahead.next() : rest.next();
+                MessageProcessingResult result = processOneRow(row, orchestrator);
+                processed++;
+                if (result.isError()) {
+                    failed++;
+                }
+                return result;
+            } catch (RuntimeException | Error e) {
+                close();
+                log.error("Partition {}: processing failed after {}ms: {}",
+                        partitionId, Duration.between(partitionStart, Instant.now()).toMillis(), e.getMessage(), e);
+                throw e;
+            }
+        }
+
+        private void close() {
+            if (!closed) {
+                closed = true;
+                closeQuietly(orchestrator);
+                closeQuietly(bundleLoader);
+            }
         }
     }
 

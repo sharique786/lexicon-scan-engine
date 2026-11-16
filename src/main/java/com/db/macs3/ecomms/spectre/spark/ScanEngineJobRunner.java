@@ -25,6 +25,7 @@ import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
+import org.apache.spark.storage.StorageLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -271,7 +272,7 @@ public class ScanEngineJobRunner {
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
-        ).cache();
+        ).persist(StorageLevel.MEMORY_AND_DISK_SER());
 
         if (log.isDebugEnabled()) {
             long finalMessageCount = results.count();

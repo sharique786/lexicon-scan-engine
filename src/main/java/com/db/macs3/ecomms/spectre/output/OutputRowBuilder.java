@@ -15,6 +15,9 @@ import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -30,7 +33,13 @@ import java.util.Map;
  */
 public final class OutputRowBuilder {
 
+    private static final Logger log = LoggerFactory.getLogger(OutputRowBuilder.class);
     private static final ObjectMapper MATCHED_TEXT_MAPPER = new ObjectMapper();
+
+    /** Max hits written into one term's {@code matched_text} JSON (the true count stays in {@code regex_match_hit_count}). */
+    static final int MAX_REPORTED_HITS_PER_TERM = 1_000;
+    /** Max characters of any single hit's text written into {@code matched_text}. */
+    static final int MAX_REPORTED_MATCH_TEXT_CHARS = 1_000;
 
     /**
      * {@code lexicon-hit-summary} placeholder values for an evaluated group with no matching term.
@@ -217,7 +226,8 @@ public final class OutputRowBuilder {
         for (Map.Entry<Long, List<TermMatchResult>> entry : matchesByFeatureId.entrySet()) {
             List<LexiconHitDetailRow.EvaluatedLexicon.TermDtl> termDtls = new ArrayList<>();
             for (TermMatchResult termMatch : entry.getValue()) {
-                String matchedTextJson = buildMatchedTextJson(messageId, termMatch.getMatches(), attachmentNames);
+                String matchedTextJson = buildMatchedTextJson(
+                        messageId, termMatch.getTermId(), termMatch.getMatches(), attachmentNames);
                 termDtls.add(new LexiconHitDetailRow.EvaluatedLexicon.TermDtl(termMatch.getTermId(), matchedTextJson));
             }
             evaluatedLexicons.add(new LexiconHitDetailRow.EvaluatedLexicon(entry.getKey(), termDtls));
@@ -232,13 +242,42 @@ public final class OutputRowBuilder {
      * {@link MatchedTextJson} for the exact structure.
      */
     static String buildMatchedTextJson(String messageId, List<AreaMatch> matches, Map<String, String> attachmentNames) {
+        return buildMatchedTextJson(messageId, "unknown", matches, attachmentNames);
+    }
+
+    static String buildMatchedTextJson(String messageId, String termId, List<AreaMatch> matches,
+                                       Map<String, String> attachmentNames) {
+        if (matches.size() > MAX_REPORTED_HITS_PER_TERM) {
+            long totalChars = 0;
+            int longestHit = 0;
+            for (AreaMatch m : matches) {
+                String t = m.getSpan().getMatchedText();
+                int len = t == null ? 0 : t.length();
+                totalChars += len;
+                longestHit = Math.max(longestHit, len);
+            }
+            log.warn("Excessive matches for messageId={} termId={}: {} hits ({} matched chars, longest hit {} chars) — "
+                            + "matched_text JSON capped to {} hits of at most {} chars each",
+                    messageId, termId, matches.size(), totalChars, longestHit,
+                    MAX_REPORTED_HITS_PER_TERM, MAX_REPORTED_MATCH_TEXT_CHARS);
+        }
         List<MatchedTextJson.TextHit> msgText = new ArrayList<>();
         List<MatchedTextJson.TextHit> subject = new ArrayList<>();
         Map<String, List<MatchedTextJson.TextHit>> attachmentHits = new LinkedHashMap<>();
 
+        int reported = 0;
         for (AreaMatch areaMatch : matches) {
+            // Bound the JSON: a short/common pattern over a multi-MB attachment can match hundreds of
+            // thousands of times, and each hit's text is serialised into ONE String per term.
+            if (reported++ >= MAX_REPORTED_HITS_PER_TERM) {
+                break;
+            }
+            String text = areaMatch.getSpan().getMatchedText();
+            if (text != null && text.length() > MAX_REPORTED_MATCH_TEXT_CHARS) {
+                text = text.substring(0, MAX_REPORTED_MATCH_TEXT_CHARS);
+            }
             MatchedTextJson.TextHit hit = new MatchedTextJson.TextHit(
-                    areaMatch.getSpan().getMatchedText(), areaMatch.getSpan().getStartCharIndex(), areaMatch.getSpan().length());
+                    text, areaMatch.getSpan().getStartCharIndex(), areaMatch.getSpan().length());
             switch (areaMatch.getArea()) {
                 case MESSAGE_BODY -> msgText.add(hit);
                 case SUBJECT -> subject.add(hit);
