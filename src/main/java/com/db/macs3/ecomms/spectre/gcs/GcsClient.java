@@ -221,6 +221,25 @@ public class GcsClient implements Serializable {
     /**
      * Lists every object (recursively, no delimiter) under {@code prefix} — for locating AVRO files.
      */
+    /**
+     * True iff at least one non-directory object under {@code prefix} has a name ending in {@code suffix}.
+     * Pages lazily and stops at the first match, so a prefix holding millions of objects is not fully listed
+     * just to learn that one exists.
+     */
+    public boolean hasObjectWithSuffix(String bucket, String prefix, String suffix) {
+        try {
+            for (Blob blob : storage().list(bucket, Storage.BlobListOption.prefix(prefix)).iterateAll()) {
+                if (!blob.isDirectory() && blob.getName().endsWith(suffix)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (StorageException e) {
+            log.error("Failed to list objects under gs://{}/{}: {}", bucket, prefix, e.getMessage(), e);
+            throw e;
+        }
+    }
+
     public List<String> listAllObjects(String bucket, String prefix) {
         log.debug("Listing all objects under gs://{}/{}", bucket, prefix);
         Instant callStart = Instant.now();

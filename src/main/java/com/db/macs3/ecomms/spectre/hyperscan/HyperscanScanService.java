@@ -109,6 +109,16 @@ public final class HyperscanScanService {
      */
     public static List<RawExpressionMatch> scan(HtmlStrippingService.StripResult stripResult, Database database,
                                                 MatchArea area, String attachmentId, CollapsingScanner scanner) {
+        return scan(stripResult, null, database, area, attachmentId, scanner);
+    }
+
+    /**
+     * Same as above, but reuses {@code prepared} (the stripped text already UTF-8 encoded once per
+     * message — see {@code PreparedText}) instead of re-encoding it for every feature. May be null.
+     */
+    public static List<RawExpressionMatch> scan(HtmlStrippingService.StripResult stripResult,
+                                                com.gliwka.hyperscan.wrapper.PreparedText prepared, Database database,
+                                                MatchArea area, String attachmentId, CollapsingScanner scanner) {
         String strippedText = stripResult.strippedText();
         if (strippedText == null || strippedText.isBlank()) {
             return List.of();
@@ -117,7 +127,7 @@ public final class HyperscanScanService {
         List<Match> rawMatches;
         try {
             scanner.allocScratch(database);
-            rawMatches = scanner.scan(database, strippedText);
+            rawMatches = prepared != null ? scanner.scan(database, prepared) : scanner.scan(database, strippedText);
         } catch (Exception e) {
             throw new HyperscanScanException("Hyperscan scan failed: " + e.getMessage(), e);
         }

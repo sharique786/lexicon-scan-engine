@@ -261,4 +261,26 @@ class GcsClientTest {
         });
         return writeChannel;
     }
+
+    @Test
+    @DisplayName("hasObjectWithSuffix stops at the first match and ignores directories / other suffixes")
+    void hasObjectWithSuffixFindsMatchOnly() {
+        Blob csv = mock(Blob.class);
+        when(csv.isDirectory()).thenReturn(false);
+        when(csv.getName()).thenReturn("p/restricted/csv/part-0.csv");
+        Blob dir = mock(Blob.class);
+        when(dir.isDirectory()).thenReturn(true);
+        Blob avro = mock(Blob.class);
+        when(avro.isDirectory()).thenReturn(false);
+        when(avro.getName()).thenReturn("p/restricted/a.avro");
+
+        GcsClient gcsClient = new GcsClient(storage);
+        Page<Blob> withoutAvro = fakePage(List.of(csv, dir));
+        Page<Blob> withAvro = fakePage(List.of(csv, avro));
+        when(storage.list(eq("my-bucket"), any(Storage.BlobListOption[].class))).thenReturn(withoutAvro);
+        assertThat(gcsClient.hasObjectWithSuffix("my-bucket", "p/restricted/", ".avro")).isFalse();
+
+        when(storage.list(eq("my-bucket"), any(Storage.BlobListOption[].class))).thenReturn(withAvro);
+        assertThat(gcsClient.hasObjectWithSuffix("my-bucket", "p/restricted/", ".avro")).isTrue();
+    }
 }

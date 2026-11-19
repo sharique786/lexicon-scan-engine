@@ -33,13 +33,8 @@ public final class DetailRowMapper implements MapPartitionsFunction<MessageProce
 
     @Override
     public Iterator<Row> call(Iterator<MessageProcessingResult> input) {
-        List<Row> rows = new ArrayList<>();
-        while (input.hasNext()) {
-            MessageProcessingResult result = input.next();
-            if (!result.isError() && result.isRestricted() == restricted && result.getDetailRow() != null) {
-                rows.add(OutputTableWriter.toRow(result.getDetailRow()));
-            }
-        }
-        return rows.iterator();
+        return StreamingRows.map(input, result ->
+                !result.isError() && result.isRestricted() == restricted && result.getDetailRow() != null
+                        ? OutputTableWriter.toRow(result.getDetailRow()) : null);
     }
 }

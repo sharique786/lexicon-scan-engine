@@ -255,7 +255,7 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         for (Row featureRow : featureRows) {
             try {
                 String featureDefinitionJson = ViewRowConverter.fromRow(featureRow).getFeatureDefinitionJson();
-                distinctFeaturesOut.add(FeatureDefinition.parse(featureDefinitionJson).getBody().getLexiconName());
+                distinctFeaturesOut.add(FeatureDefinition.parseCached(featureDefinitionJson).getBody().getLexiconName());
             } catch (RuntimeException e) {
                 log.debug("Could not parse a feature definition during prefetch lookahead — "
                         + "will be handled normally during real processing: {}", e.getMessage());

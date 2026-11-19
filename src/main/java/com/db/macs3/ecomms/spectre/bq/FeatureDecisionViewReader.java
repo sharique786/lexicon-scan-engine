@@ -58,11 +58,11 @@ public final class FeatureDecisionViewReader {
                                             RuntimeArgs runtimeArgs) {
 
         String datasetPartitionIn = runtimeArgs.datasetDetails().stream()
-                .map(dv -> "'" + dv.datasetPartitionValue() + "'")
+                .map(dv -> sqlLiteral(dv.datasetPartitionValue()))
                 .collect(Collectors.joining(", "));
 
-        String filter = "process_id = '" + runtimeArgs.processId() + "'"
-                + " AND feature_partition_value = '" + runtimeArgs.featurePartitionValue() + "'"
+        String filter = "process_id = " + sqlLiteral(runtimeArgs.processId())
+                + " AND feature_partition_value = " + sqlLiteral(runtimeArgs.featurePartitionValue())
                 + " AND dataset_partition IN (" + datasetPartitionIn + ")"
                 + " AND policy_engine_id = " + runtimeArgs.policyEngineId();
 
@@ -78,6 +78,11 @@ public final class FeatureDecisionViewReader {
 
         log.info("Read {} rows from {}.{} with filter: {}", raw.count(), tableConfig.bqDataset(), tableConfig.bqViewName(), filter);
         return raw;
+    }
+
+    /** Single-quoted SQL string literal with backslashes and single quotes escaped. */
+    static String sqlLiteral(String value) {
+        return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'";
     }
 
     /**

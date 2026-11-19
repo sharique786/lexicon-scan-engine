@@ -162,8 +162,33 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     /**
      * One area's text, stripped exactly once per message — see class Javadoc.
      */
-    private record MessageAreaText(MatchArea area, String attachmentId, String originalText,
-                                   HtmlStrippingService.StripResult stripResult) {
+    private static final class MessageAreaText {
+        private final MatchArea area;
+        private final String attachmentId;
+        private final String originalText;
+        private final HtmlStrippingService.StripResult stripResult;
+        private com.gliwka.hyperscan.wrapper.PreparedText prepared; // lazy, built on first scan
+
+        MessageAreaText(MatchArea area, String attachmentId, String originalText,
+                        HtmlStrippingService.StripResult stripResult) {
+            this.area = area;
+            this.attachmentId = attachmentId;
+            this.originalText = originalText;
+            this.stripResult = stripResult;
+        }
+
+        MatchArea area() { return area; }
+        String attachmentId() { return attachmentId; }
+        String originalText() { return originalText; }
+        HtmlStrippingService.StripResult stripResult() { return stripResult; }
+
+        /** UTF-8 encoding of the stripped text, computed once and reused for every feature scanned. */
+        com.gliwka.hyperscan.wrapper.PreparedText prepared() {
+            if (prepared == null) {
+                prepared = new com.gliwka.hyperscan.wrapper.PreparedText(stripResult.strippedText());
+            }
+            return prepared;
+        }
     }
 
     private List<MessageAreaText> precomputeAreaTexts(ScanMessage message) {
@@ -264,7 +289,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * referenced — see class Javadoc.
      */
     private List<TermMatchResult> scanRow(FeatureDecisionRow row, List<MessageAreaText> areaTexts) {
-        FeatureDefinition definition = FeatureDefinition.parse(row.getFeatureDefinitionJson());
+        FeatureDefinition definition = FeatureDefinition.parseCached(row.getFeatureDefinitionJson());
         String feature = definition.getBody().getLexiconName();
         HyperscanBundleLoader.LexiconBundle bundle = bundleLoader.load(feature);
         Database database = bundle.database();
@@ -277,8 +302,11 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
             if (!definition.getBody().hasScope(scopeFor(areaText.area()))) {
                 continue;
             }
+            String stripped = areaText.stripResult().strippedText();
             List<RawExpressionMatch> matches = HyperscanScanService.scan(
-                    areaText.stripResult(), database, areaText.area(), areaText.attachmentId(), scanner);
+                    areaText.stripResult(),
+                    stripped == null || stripped.isBlank() ? null : areaText.prepared(),
+                    database, areaText.area(), areaText.attachmentId(), scanner);
             allRawMatches.addAll(matches);
             areaScans.add(new AreaScanContext(areaText.area(), areaText.attachmentId(), areaText.originalText(), matches));
         }
@@ -312,14 +340,34 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     }
 
     private boolean withinSizeLimit(MessageAttachment attachment) {
-        if (maxAttachmentSizeBytes == null) {
+        String text = attachment.getAttachmentText();
+        if (maxAttachmentSizeBytes == null || text == null) {
             return true;
         }
-        if (attachment.getAttachmentText() == null) {
-            return true;
+        long limit = maxAttachmentSizeBytes;
+        int chars = text.length();
+        // UTF-8 needs between 1 and 3 bytes per UTF-16 char (a surrogate pair is 2 chars -> 4 bytes), so
+        // chars > limit can never fit and chars <= limit/3 always fits; count exactly (no byte[]) only between.
+        return chars <= limit && (chars <= limit / 3 || utf8Length(text) <= limit);
+    }
+
+    /** Exact UTF-8 byte length, matching {@code String.getBytes(UTF_8)} (unpaired surrogate -> 1 byte '?'). */
+    static long utf8Length(CharSequence s) {
+        long bytes = 0;
+        for (int i = 0, n = s.length(); i < n; ) {
+            int codePoint = Character.codePointAt(s, i);
+            i += Character.charCount(codePoint);
+            bytes += utf8Bytes(codePoint);
         }
-        long byteLength = attachment.getAttachmentText().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
-        return byteLength <= maxAttachmentSizeBytes;
+        return bytes;
+    }
+
+    private static int utf8Bytes(int codePoint) {
+        return codePoint < 0x80 ? 1
+                : codePoint < 0x800 ? 2
+                : codePoint >= 0xD800 && codePoint <= 0xDFFF ? 1 // only an UNPAIRED surrogate reaches here
+                : codePoint < 0x10000 ? 3
+                : 4;
     }
 
     /**

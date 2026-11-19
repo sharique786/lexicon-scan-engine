@@ -164,4 +164,26 @@ class RuntimeArgsTest {
         assertThat(first).isNotEqualTo("not a DatasetDetail");
         assertThat(first.toString()).contains("ds1").contains("p1");
     }
+
+    private static String[] argsWith(String policyEngineId, String datasetDetails) {
+        return new String[]{
+                "--process_id=p", "--pipeline_exec_id=e", "--trigger_type=policy-alert-test",
+                "--policy_engine_id=" + policyEngineId, "--dataset_details=" + datasetDetails,
+                "--feature_partition_value=2026-07-16", "--config_file_path=gs://b/c.yml"};
+    }
+
+    @Test
+    @DisplayName("parseCliArgs rejects a non-numeric policy_engine_id (it is spliced unquoted into the BigQuery filter)")
+    void rejectsNonNumericPolicyEngineId() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> RuntimeArgs.parseCliArgs(argsWith(
+                        "101 OR 1=1", "[{\"dataset_id\":\"d\",\"dataset_partition_value\":\"2026-06-18\"}]")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("policy_engine_id");
+    }
+
+    @Test
+    @DisplayName("parseCliArgs rejects an empty dataset_details list")
+    void rejectsEmptyDatasetDetails() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> RuntimeArgs.parseCliArgs(argsWith("101", "[]")))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("dataset_details");
+    }
 }

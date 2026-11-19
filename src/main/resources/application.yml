@@ -13,6 +13,7 @@
 # via Spring Boot's standard property-source precedence.
 scan-engine:
   max-cached-databases-per-partition: 20
+  sort-partitions-by-feature-set: true
   created-by: SPECTRE-COMPOSER-SA
 
 # Logging levels are NOT configured here — see src/main/resources/log4j2.properties

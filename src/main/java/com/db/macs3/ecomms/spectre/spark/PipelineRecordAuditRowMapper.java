@@ -57,19 +57,16 @@ public final class PipelineRecordAuditRowMapper implements MapPartitionsFunction
 
     @Override
     public Iterator<Row> call(Iterator<MessageProcessingResult> input) {
-        List<Row> rows = new ArrayList<>();
-        while (input.hasNext()) {
-            MessageProcessingResult result = input.next();
+        return StreamingRows.map(input, result -> {
             boolean isError = result.isError();
-            rows.add(OutputTableWriter.toRow(new PipelineRecordAuditRow(
+            return OutputTableWriter.toRow(new PipelineRecordAuditRow(
                     runtimeArgs.processId(), runtimeArgs.triggerType(), null, runtimeArgs.pipelineExecId(),
                     result.getMessageId(), stageName, null, null, null, null, null,
                     isError ? BqColumns.RecordStatus.FAILED : BqColumns.RecordStatus.SUCCESS,
                     isError ? 1 : 0, result.getErrorMessage(), null, 0, null, 0,
                     0, 0, 0, 0, 0, 0,
                     Instant.now(), createdBy, null, executionDate,
-                    result.getSentDate(), result.getRunDate(), result.getSourceName(), null, null, null)));
-        }
-        return rows.iterator();
+                    result.getSentDate(), result.getRunDate(), result.getSourceName(), null, null, null));
+        });
     }
 }

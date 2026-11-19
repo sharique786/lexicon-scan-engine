@@ -307,6 +307,38 @@ public class FeatureDefinition implements Serializable {
         return parsed;
     }
 
+    private static final int PARSE_CACHE_MAX_ENTRIES = 4096;
+
+    /**
+     * Bounded LRU keyed by the raw JSON string. A feature's definition JSON is identical across every
+     * message that uses it, so re-parsing it per message × feature is pure repeated work. Failures are
+     * never cached (they rethrow every time, exactly like {@link #parse}).
+     */
+    private static final java.util.Map<String, FeatureDefinition> PARSE_CACHE =
+            java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, FeatureDefinition> eldest) {
+                    return size() > PARSE_CACHE_MAX_ENTRIES;
+                }
+            });
+
+    /**
+     * Same result and same exceptions as {@link #parse}, but returns a shared, cached instance for a
+     * previously seen JSON string. The returned object MUST be treated as read-only.
+     */
+    public static FeatureDefinition parseCached(String rawJson) {
+        if (rawJson == null) {
+            return parse(null); // throws the usual FeatureDefinitionParseException
+        }
+        FeatureDefinition cached = PARSE_CACHE.get(rawJson);
+        if (cached != null) {
+            return cached;
+        }
+        FeatureDefinition parsed = parse(rawJson);
+        PARSE_CACHE.put(rawJson, parsed);
+        return parsed;
+    }
+
     /**
      * Thrown by {@link #parse} on malformed or incomplete {@code feature_definition} JSON.
      */

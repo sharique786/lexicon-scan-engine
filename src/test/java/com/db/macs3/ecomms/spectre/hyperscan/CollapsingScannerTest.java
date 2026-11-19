@@ -95,4 +95,25 @@ class CollapsingScannerTest {
             assertTrue(scanner.scan(db, "nothing here").isEmpty());
         }
     }
+
+    @Test
+    void preparedTextScan_isIdenticalToStringScan_andReusableAcrossDatabases() throws Exception {
+        String text = "é日本 start B here and again B here";
+        try (Database db1 = compile("B here"); Database db2 = compile("start");
+             CollapsingScanner scanner = new CollapsingScanner()) {
+            com.gliwka.hyperscan.wrapper.PreparedText prepared = new com.gliwka.hyperscan.wrapper.PreparedText(text);
+            for (Database db : List.of(db1, db2, db1)) {
+                scanner.allocScratch(db);
+                scanner.allocScratch(db); // repeat call is a skipped no-op
+                List<Match> viaString = scanner.scan(db, text);
+                List<Match> viaPrepared = scanner.scan(db, prepared);
+                assertEquals(viaString.size(), viaPrepared.size());
+                for (int i = 0; i < viaString.size(); i++) {
+                    assertEquals(viaString.get(i).getStartPosition(), viaPrepared.get(i).getStartPosition());
+                    assertEquals(viaString.get(i).getEndPosition(), viaPrepared.get(i).getEndPosition());
+                    assertEquals(viaString.get(i).getMatchedString(), viaPrepared.get(i).getMatchedString());
+                }
+            }
+        }
+    }
 }

@@ -80,7 +80,7 @@ public final class OutputRowBuilder {
                 // Composite/NoiseReduction group with several features_to_apply: one entry per member
                 // lexicon, so a member with no hit is reported (zero-hit placeholder) alongside the hit ones.
                 for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.getMemberMatches().entrySet()) {
-                    FeatureDefinition.Body body = FeatureDefinition.parse(entry.getKey().getFeatureDefinitionJson()).getBody();
+                    FeatureDefinition.Body body = FeatureDefinition.parseCached(entry.getKey().getFeatureDefinitionJson()).getBody();
                     String memberName = summaryName(entry.getKey(), groupResult);
                     long memberTotal = body.getTotalTermsCount() == null ? 0 : body.getTotalTermsCount();
                     evaluatedLexicons.add(buildEvaluatedLexicon(summaryId(entry.getKey(), groupResult), memberName,
@@ -93,7 +93,7 @@ public final class OutputRowBuilder {
 
             for (Map.Entry<FeatureDecisionRow, List<TermMatchResult>> entry : groupResult.getMemberMatches().entrySet()) {
                 FeatureDecisionRow member = entry.getKey();
-                FeatureDefinition featureDefinition = FeatureDefinition.parse(member.getFeatureDefinitionJson());
+                FeatureDefinition featureDefinition = FeatureDefinition.parseCached(member.getFeatureDefinitionJson());
                 Integer memberTotalTerms = featureDefinition.getBody().getTotalTermsCount();
                 totalTermsCount += memberTotalTerms == null ? 0 : memberTotalTerms;
 

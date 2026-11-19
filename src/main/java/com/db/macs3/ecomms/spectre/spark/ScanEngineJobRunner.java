@@ -93,6 +93,7 @@ public class ScanEngineJobRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ScanEngineJobRunner.class);
 
+    private static final String FEATURES_COLUMN_NAME = "features"; // FeatureDecisionViewReader's grouped column
     private final GcsClient gcsClient;
     private final ScanEngineProperties properties;
     private final SparkSession sparkSession;
@@ -176,6 +177,13 @@ public class ScanEngineJobRunner {
         // table besides pipeline_stage_audit) — an empty view means there is nothing at all to
         // process this run, and the early return just below is what makes that a graceful no-op
         // completion rather than a failure. See that early return for the full rationale.
+        DataprocConfig.CsvConfig csvConfigToCheck = dataprocConfig.csv();
+        if (csvConfigToCheck != null && csvConfigToCheck.writeEnabled()
+                && (csvConfigToCheck.restrictedDataBkt() == null || csvConfigToCheck.restrictedDataBkt().isBlank())) {
+            throw new IllegalArgumentException(
+                    "spectre.engine.csv.restricted-data-bkt is required when spectre.engine.csv.write-toggle is true");
+        }
+
         Dataset<Row> viewRows = FeatureDecisionViewReader.readFiltered(spark, tableConfig, runtimeArgs).cache();
         Dataset<Row> relevantMessageIds = viewRows.select(BqColumns.View.MESSAGE_ID).distinct().cache();
         long viewDistinctMessageCount = relevantMessageIds.count();
@@ -246,7 +254,9 @@ public class ScanEngineJobRunner {
                 messages = messages.unionByName(perDatasetMessages.get(datasetIndex), true);
             }
 
-            long avroDistinctMessageCount = messages.select(BqColumns.View.MESSAGE_ID).distinct().count();
+            // A full extra pass over every AVRO message: only worth paying for when the debug diff will use it.
+            long avroDistinctMessageCount = log.isDebugEnabled()
+                    ? messages.select(BqColumns.View.MESSAGE_ID).distinct().count() : -1L;
 
             if (log.isDebugEnabled()) {
                 log.info("Total unique message count read from AVRO across all dataset(s): {}", avroDistinctMessageCount);
@@ -268,7 +278,13 @@ public class ScanEngineJobRunner {
 
         // mapPartitions — the only place Hyperscan bundles are loaded. Still lazy: scanning happens
         // when .count() below (or, failing that, the writes in step 7) trigger it.
-        Dataset<MessageProcessingResult> results = joined.mapPartitions(
+        // Optional, ordering-only: group messages that need the same Hyperscan bundles so each partition
+        // loads a bundle about once instead of thrashing its bounded LRU. No shuffle (within partition).
+        Dataset<Row> toScan = properties.isSortPartitionsByFeatureSet()
+                ? joined.sortWithinPartitions(functions.expr(
+                        "hash(sort_array(transform(" + FEATURES_COLUMN_NAME + ", f -> f." + BqColumns.View.FEATURE_DEFINITION + ")))"))
+                : joined;
+        Dataset<MessageProcessingResult> results = toScan.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition()),
                 Encoders.kryo(MessageProcessingResult.class)
@@ -288,8 +304,15 @@ public class ScanEngineJobRunner {
 
         // Split and write — each write triggers its own Spark action, executing step 6 above
         // (already materialized/cached by the .count() call, so these reuse it rather than rescanning).
-        runStageVoid("scan messages + write outputs",
-                () -> writeOutputs(tableConfig, runtimeArgs, dataprocConfig.csv(), dataprocConfig.stageName(), results, stats));
+        try {
+            runStageVoid("scan messages + write outputs",
+                    () -> writeOutputs(tableConfig, runtimeArgs, dataprocConfig.csv(), dataprocConfig.stageName(), results, stats));
+        } finally {
+            // Release cached/persisted data deterministically instead of leaving it to application exit.
+            results.unpersist(false);
+            relevantMessageIds.unpersist(false);
+            viewRows.unpersist(false);
+        }
     }
 
     /**
@@ -374,6 +397,7 @@ public class ScanEngineJobRunner {
         OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
 
         long outputRecordCount = summaryRows.count();
+        summaryRows.unpersist(false); // only needed for the write + this count
         stats.outputRecordCount = (int) outputRecordCount;
         log.info("Total message count saved to lexicon-hit-summary: {}", outputRecordCount);
 
@@ -450,7 +474,10 @@ public class ScanEngineJobRunner {
                 .mode("overwrite")
                 .csv(tmpDir);
 
-        try (SparkSession session = restrictedDetailRows.sparkSession()) {
+        try {
+            // NOT try-with-resources: SparkSession.close() stops the whole SparkContext, which would break every
+            // later write (unrestricted/feature/audit tables, final stage audit) of this same job.
+            SparkSession session = restrictedDetailRows.sparkSession();
             Configuration hadoopConf = session.sparkContext().hadoopConfiguration();
             Path tmpPath = new Path(tmpDir);
             FileSystem fs = tmpPath.getFileSystem(hadoopConf);

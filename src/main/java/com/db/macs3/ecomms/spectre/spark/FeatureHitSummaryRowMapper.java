@@ -26,13 +26,7 @@ public final class FeatureHitSummaryRowMapper implements MapPartitionsFunction<M
 
     @Override
     public Iterator<Row> call(Iterator<MessageProcessingResult> input) {
-        List<Row> rows = new ArrayList<>();
-        while (input.hasNext()) {
-            MessageProcessingResult result = input.next();
-            if (!result.isError()) {
-                rows.add(OutputTableWriter.toRow(result.getFeatureHitSummaryRow()));
-            }
-        }
-        return rows.iterator();
+        return StreamingRows.map(input,
+                result -> result.isError() ? null : OutputTableWriter.toRow(result.getFeatureHitSummaryRow()));
     }
 }

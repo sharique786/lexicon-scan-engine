@@ -94,18 +94,31 @@ public class CollapsingScanner implements Closeable {
         if (scratch == null) {
             throw new IllegalStateException("Scratch space has already been deallocated");
         }
+        if (db == lastScratchDb) {
+            return; // scratch already covers this exact database
+        }
         int hsError = hs_alloc_scratch(db.getDatabase(), scratch);
         if (hsError != 0) {
             throw HyperscanException.hsErrorToException(hsError);
         }
+        lastScratchDb = db;
     }
 
+    /** The last database {@link #allocScratch} succeeded for — lets repeat calls for it be skipped. */
+    private Database lastScratchDb;
+
     public List<Match> scan(Database db, String input) {
+        return scan(db, new PreparedText(input));
+    }
+
+    /** Same as {@link #scan(Database, String)} but reuses already-encoded text — see {@link PreparedText}. */
+    public List<Match> scan(Database db, PreparedText prepared) {
         if (scratch == null) {
             throw new IllegalStateException("Scratch space has already been deallocated");
         }
+        String input = prepared.text();
         hs_database_t database = db.getDatabase();
-        byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = prepared.bytes();
         BytePointer bytePointer = new BytePointer(ByteBuffer.wrap(bytes));
 
         collapsed.clear();
@@ -119,10 +132,10 @@ public class CollapsingScanner implements Closeable {
             }
 
             IntUnaryOperator toCharIndex;
-            if (bytes.length == input.length()) {
+            if (prepared.isAscii()) {
                 toCharIndex = p -> p; // pure ASCII
             } else {
-                int[] map = Utf8.byteToStringPositionMap(input, bytes.length);
+                int[] map = prepared.positionMap();
                 toCharIndex = p -> map[p];
             }
 
@@ -207,5 +220,6 @@ public class CollapsingScanner implements Closeable {
             count--;
         }
         scratch = null;
+        lastScratchDb = null;
     }
 }

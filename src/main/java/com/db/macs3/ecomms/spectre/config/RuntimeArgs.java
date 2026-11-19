@@ -105,11 +105,19 @@ public final class RuntimeArgs implements Serializable {
                     "Malformed --dataset_details JSON: " + datasetDetailsJson, e);
         }
 
+        if (datasetDetails == null || datasetDetails.isEmpty()) {
+            throw new IllegalArgumentException("--dataset_details must contain at least one dataset entry");
+        }
+        String policyEngineId = CliArgumentParser.require(parsed, "policy_engine_id");
+        if (!policyEngineId.trim().matches("\\d+")) {
+            throw new IllegalArgumentException("--policy_engine_id must be numeric, got: " + policyEngineId);
+        }
+
         return new RuntimeArgs(
                 datasetDetails,
                 CliArgumentParser.require(parsed, "feature_partition_value"),
                 CliArgumentParser.require(parsed, "pipeline_exec_id"),
-                CliArgumentParser.require(parsed, "policy_engine_id"),
+                policyEngineId.trim(),
                 CliArgumentParser.require(parsed, "process_id"),
                 CliArgumentParser.require(parsed, "trigger_type"),
                 CliArgumentParser.require(parsed, "config_file_path"));

@@ -31,6 +31,21 @@ public class ScanEngineProperties {
     @Value("${created-by: SPECTRE-COMPOSER-SA}")
     private String createdBy;
 
+    /**
+     * Sort each partition's messages by their feature set before scanning, so messages needing the same
+     * Hyperscan bundles run back to back (see {@code ScanEngineJobRunner}). Pure ordering — no effect on results.
+     */
+    @Value("${sort-partitions-by-feature-set:true}")
+    private boolean sortPartitionsByFeatureSet = true;
+
+    public boolean isSortPartitionsByFeatureSet() {
+        return sortPartitionsByFeatureSet;
+    }
+
+    public void setSortPartitionsByFeatureSet(boolean sortPartitionsByFeatureSet) {
+        this.sortPartitionsByFeatureSet = sortPartitionsByFeatureSet;
+    }
+
     public int getMaxCachedDatabasesPerPartition() {
         return maxCachedDatabasesPerPartition;
     }

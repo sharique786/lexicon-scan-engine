@@ -307,4 +307,28 @@ class FeatureDefinitionTest {
                     .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class);
         }
     }
+
+    @Nested
+    @DisplayName("parseCached")
+    class ParseCached {
+        @Test
+        @DisplayName("returns the same shared instance for the same JSON, equal to parse()")
+        void cachesByJson() throws Exception {
+            String json = MAPPER.writeValueAsString(java.util.Map.of("featureId", 1, "body", SAMPLE_BODY));
+            FeatureDefinition first = FeatureDefinition.parseCached(json);
+            assertThat(FeatureDefinition.parseCached(json)).isSameAs(first);
+            assertThat(first.getBody().getLexiconName()).isEqualTo(FeatureDefinition.parse(json).getBody().getLexiconName());
+        }
+
+        @Test
+        @DisplayName("failures are rethrown every time, never cached")
+        void failuresNotCached() {
+            for (int i = 0; i < 2; i++) {
+                assertThatThrownBy(() -> FeatureDefinition.parseCached("not json {{{"))
+                        .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class);
+            }
+            assertThatThrownBy(() -> FeatureDefinition.parseCached(null))
+                    .isInstanceOf(FeatureDefinition.FeatureDefinitionParseException.class);
+        }
+    }
 }

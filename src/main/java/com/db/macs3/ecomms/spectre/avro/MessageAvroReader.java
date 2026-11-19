@@ -59,8 +59,8 @@ public final class MessageAvroReader {
                         + "datasetPartitionValue={}",
                 datasetId, restrictedPath, unrestrictedPath, datasetPartitionValue);
 
-        boolean hasRestrictedFiles = hasAvroFile(gcsClient.listAllObjects(baseBucket, restrictedPrefix));
-        boolean hasUnrestrictedFiles = hasAvroFile(gcsClient.listAllObjects(baseBucket, unrestrictedPrefix));
+        boolean hasRestrictedFiles = gcsClient.hasObjectWithSuffix(baseBucket, restrictedPrefix, ".avro");
+        boolean hasUnrestrictedFiles = gcsClient.hasObjectWithSuffix(baseBucket, unrestrictedPrefix, ".avro");
         log.info("dataset_id='{}': hasRestrictedAvroFiles={}, hasUnrestrictedAvroFiles={}",
                 datasetId, hasRestrictedFiles, hasUnrestrictedFiles);
 
@@ -87,12 +87,15 @@ public final class MessageAvroReader {
             throw new IllegalStateException("MessageAvroReader: combinedMessages in null after reading AVRO files");
         }
 
-        Dataset<Row> result = combinedMessages.join(
-                functions.broadcast(relevantMessageIds.dropDuplicates(BqColumns.View.MESSAGE_ID)),
-                BqColumns.View.MESSAGE_ID).cache();
-        long uniqueMessageCount = result.select(BqColumns.View.MESSAGE_ID).distinct().count();
-        log.info("dataset_id='{}': total unique message count read from AVRO (after matching against the "
-                + "view's message_id set): {}", datasetId, uniqueMessageCount);
+        // left_semi (message_id set membership) instead of a forced broadcast: with millions of ids a
+        // forced broadcast can exhaust executor memory; Spark's AQE still broadcasts it when it is small.
+        // No .cache() and no unconditional distinct().count(): caching every raw AVRO message (attachments
+        // included) and scanning it a second time just for a log line is not worth the memory/time.
+        Dataset<Row> result = combinedMessages.join(relevantMessageIds, BqColumns.View.MESSAGE_ID, "left_semi");
+        if (log.isDebugEnabled()) {
+            log.debug("dataset_id='{}': total unique message count read from AVRO (after matching against the "
+                    + "view's message_id set): {}", datasetId, result.select(BqColumns.View.MESSAGE_ID).distinct().count());
+        }
         return result;
     }
 
@@ -110,20 +113,9 @@ public final class MessageAvroReader {
         return "gs://" + baseBucket + "/" + datasetPathPrefix + "/" + datasetId + "/" + AvroConstants.RESTRICTED_SUBFOLDER;
     }
 
-    /**
-     * {@code gcsClient.listAllObjects} returns every object under the prefix, not just
-     * {@code .avro} files — the {@code restricted/} prefix in particular also holds this job's
-     * own CSV mirror output ({@code ScanEngineJobRunner#writeRestrictedCsvMirror} writes to
-     * {@code restrictedPath + "csv"}, i.e. {@code restricted/csv/part-*.csv} + {@code _SUCCESS}
-     * left behind by a prior run of this same dataset). Without this filter, a rerun with only
-     * {@code unrestricted/} AVRO files present would still see {@code restricted/}'s leftover CSV
-     * objects and wrongly conclude AVRO files exist there, leading {@link #readAndTag} to load a
-     * path with zero files actually matching {@code pathGlobFilter=*.avro} — which Spark's own
-     * AVRO datasource reports as {@code FileNotFoundException: No Avro files found}.
-     */
-    private static boolean hasAvroFile(List<String> objectNames) {
-        return objectNames.stream().anyMatch(name -> name.endsWith(".avro"));
-    }
+    // Note: hasObjectWithSuffix(".avro") — not "any object" — because restricted/ can also hold this job's own
+    // CSV mirror output (restricted/csv/part-*.csv + _SUCCESS) from a prior run; counting those would make a
+    // rerun with only unrestricted/ AVRO files wrongly believe restricted/ has data.
 
     private static Dataset<Row> readAndTag(SparkSession spark, String path, String datasetPartitionValue, boolean restricted) {
         return spark.read()
