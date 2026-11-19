@@ -46,7 +46,8 @@ import static com.gliwka.hyperscan.jni.hyperscan.hs_scan;
  * meaningful hits.
  *
  * <p>Lives in the wrapper's package only because {@link Database#getDatabase()},
- * {@link Database#getExpression(int)} and {@code Utf8} are package-private. Same lifecycle contract as
+ * {@link Database#getExpression(int)} are package-private. Uses only members present in BOTH
+ * hyperscan-java 5.4.0-2.0.0 and 5.4.11-3.1.0. Same lifecycle contract as
  * {@link Scanner}: one instance per thread, {@link #close()} when done, at most 256 live instances.
  */
 public class CollapsingScanner implements Closeable {

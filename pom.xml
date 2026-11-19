@@ -64,6 +64,8 @@
              notes; the spark-4.1-bigquery connector was in preview at the time of this upgrade. -->
         <spark-bigquery-connector.version>0.44.2</spark-bigquery-connector.version>
         <spark-avro.version>${spark.version}</spark-avro.version>
+        <!-- Overridden per OS by the hyperscan-legacy / hyperscan-latest profiles at the end of this file.
+             Force one with -Dhyperscan.version=... (command-line properties win over profile properties). -->
         <hyperscan.version>5.4.0-2.0.0</hyperscan.version>
         <gcs-connector.version>2.2.18</gcs-connector.version>
         <google-cloud-storage.version>2.22.3</google-cloud-storage.version>
@@ -359,5 +361,29 @@
             </plugin>
         </plugins>
     </build>
+
+
+    <!-- hyperscan-java: 5.4.11-3.1.0 dropped Windows natives; 5.4.0-2.0.0 still ships them.
+         The source must compile and pass against BOTH (see CLAUDE.md, "hyperscan-java version compatibility"). -->
+    <profiles>
+        <profile>
+            <id>hyperscan-legacy</id>
+            <activation>
+                <os><family>windows</family></os>
+            </activation>
+            <properties>
+                <hyperscan.version>5.4.0-2.0.0</hyperscan.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>hyperscan-latest</id>
+            <activation>
+                <os><family>unix</family></os> <!-- Linux and macOS -->
+            </activation>
+            <properties>
+                <hyperscan.version>5.4.11-3.1.0</hyperscan.version>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>

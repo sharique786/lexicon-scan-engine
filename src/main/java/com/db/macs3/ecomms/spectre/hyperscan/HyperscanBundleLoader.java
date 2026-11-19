@@ -303,7 +303,7 @@ public final class HyperscanBundleLoader implements AutoCloseable {
             }
             // terms ending in ".*" are recompiled without it; CollapsingScanner re-extends each match to
             // the end of its sentence (one bounded match per occurrence, no per-offset match explosion)
-            database = com.gliwka.hyperscan.wrapper.TrailingDotStarRewriter.apply(database);
+            database = com.gliwka.hyperscan.wrapper.TrailingDotStarRewriter.apply(database, zipEntryBytes.hdbBytes());
             TermExpressionMetadata metadata = TermExpressionMetadata.parse(feature, zipEntryBytes.metadataJson());
             return new LexiconBundle(database, metadata);
         } catch (IOException | RuntimeException e) {
