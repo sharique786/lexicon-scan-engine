@@ -987,7 +987,7 @@ class FeatureScanOrchestratorTest {
                         .isEqualTo("wire the funds");
             }
             // And the two occurrences are genuinely at different positions, not the same one twice.
-            int firstStart = results.getFirst().getMatches().get(0).getSpan().getStartCharIndex();
+            int firstStart = results.getFirst().getMatches().getFirst().getSpan().getStartCharIndex();
             int secondStart = results.getFirst().getMatches().get(1).getSpan().getStartCharIndex();
             assertThat(firstStart).isNotEqualTo(secondStart);
         }

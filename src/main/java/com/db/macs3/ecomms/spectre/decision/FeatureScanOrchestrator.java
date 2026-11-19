@@ -20,6 +20,7 @@ import com.db.macs3.ecomms.spectre.model.termmeta.TermExpressionMetadata;
 import com.db.macs3.ecomms.spectre.model.termmeta.TermExpressionMetadata.TermEntry;
 import com.db.macs3.ecomms.spectre.model.view.FeatureDecisionRow;
 import com.gliwka.hyperscan.wrapper.Database;
+import com.gliwka.hyperscan.wrapper.CollapsingScanner;
 import com.gliwka.hyperscan.wrapper.Scanner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,7 +134,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
 
     private final HyperscanBundleLoader bundleLoader;
     private final Long maxAttachmentSizeBytes;
-    private final Scanner scanner = new Scanner();
+    private final CollapsingScanner scanner = new CollapsingScanner();
 
     /**
      * @param bundleLoader           this partition's shared, cached zip-bundle loader — see

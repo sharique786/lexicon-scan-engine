@@ -307,7 +307,7 @@ class TermExpressionMetadataTest {
             assertThat(outer.getLeaves()).hasSize(2);
             assertThat(outer.getOperators()).containsExactly("NEAR");
             assertThat(outer.getDistances()).containsExactly(5);
-            assertThat(outer.getLeaves().get(0)).isInstanceOf(ResolvedPatternTree.Leaf.class);
+            assertThat(outer.getLeaves().getFirst()).isInstanceOf(ResolvedPatternTree.Leaf.class);
 
             ResolvedPatternTree.Chain nested = (ResolvedPatternTree.Chain) outer.getLeaves().get(1);
             assertThat(nested.getLeaves()).hasSize(2);

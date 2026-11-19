@@ -7,6 +7,7 @@ import com.db.macs3.ecomms.spectre.model.match.MatchSpan;
 import com.db.macs3.ecomms.spectre.model.match.RawExpressionMatch;
 import com.gliwka.hyperscan.wrapper.Database;
 import com.gliwka.hyperscan.wrapper.Match;
+import com.gliwka.hyperscan.wrapper.CollapsingScanner;
 import com.gliwka.hyperscan.wrapper.Scanner;
 
 import java.util.ArrayList;
@@ -107,7 +108,7 @@ public final class HyperscanScanService {
      *                                a corrupted database, etc.)
      */
     public static List<RawExpressionMatch> scan(HtmlStrippingService.StripResult stripResult, Database database,
-                                                MatchArea area, String attachmentId, Scanner scanner) {
+                                                MatchArea area, String attachmentId, CollapsingScanner scanner) {
         String strippedText = stripResult.strippedText();
         if (strippedText == null || strippedText.isBlank()) {
             return List.of();

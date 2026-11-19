@@ -39,7 +39,7 @@ class OutputRowBuilderMatchedTextCapTest {
     private static MatchedTextJson.HitDetail detail(String json) throws Exception {
         MatchedTextJson parsed = parse(json);
         assertThat(parsed.getHitDetailsHs()).hasSize(1);
-        return parsed.getHitDetailsHs().get(0);
+        return parsed.getHitDetailsHs().getFirst();
     }
 
     @Test
@@ -49,7 +49,7 @@ class OutputRowBuilderMatchedTextCapTest {
 
         MatchedTextJson.HitDetail detail = detail(json);
         assertThat(detail.getMsgText()).hasSize(MAX_HITS);
-        assertThat(detail.getMsgText().get(0)).isEqualTo(new MatchedTextJson.TextHit("bomb", 0, 4));
+        assertThat(detail.getMsgText().getFirst()).isEqualTo(new MatchedTextJson.TextHit("bomb", 0, 4));
         assertThat(detail.getMsgText().get(MAX_HITS - 1))
                 .isEqualTo(new MatchedTextJson.TextHit("bomb", (MAX_HITS - 1) * 10, 4));
     }
@@ -61,7 +61,7 @@ class OutputRowBuilderMatchedTextCapTest {
 
         List<MatchedTextJson.TextHit> hits = detail(json).getMsgText();
         assertThat(hits).hasSize(MAX_HITS);
-        assertThat(hits.get(0).getStart()).isEqualTo(0);
+        assertThat(hits.getFirst().getStart()).isEqualTo(0);
         assertThat(hits.get(MAX_HITS - 1).getStart()).isEqualTo((MAX_HITS - 1) * 10);
     }
 
@@ -90,7 +90,7 @@ class OutputRowBuilderMatchedTextCapTest {
         List<AreaMatch> matches = List.of(AreaMatch.messageBody(new MatchSpan(7, 7 + huge.length(), huge)));
 
         MatchedTextJson.TextHit hit = detail(
-                OutputRowBuilder.buildMatchedTextJson("m1", "lex::1", matches, Map.of())).getMsgText().get(0);
+                OutputRowBuilder.buildMatchedTextJson("m1", "lex::1", matches, Map.of())).getMsgText().getFirst();
 
         assertThat(hit.getText()).hasSize(MAX_CHARS).isEqualTo("x".repeat(MAX_CHARS));
         assertThat(hit.getStart()).isEqualTo(7);
@@ -104,7 +104,7 @@ class OutputRowBuilderMatchedTextCapTest {
         List<AreaMatch> matches = List.of(AreaMatch.messageBody(new MatchSpan(0, MAX_CHARS, exact)));
 
         MatchedTextJson.TextHit hit = detail(
-                OutputRowBuilder.buildMatchedTextJson("m1", "lex::1", matches, Map.of())).getMsgText().get(0);
+                OutputRowBuilder.buildMatchedTextJson("m1", "lex::1", matches, Map.of())).getMsgText().getFirst();
 
         assertThat(hit.getText()).isEqualTo(exact);
     }
@@ -115,7 +115,7 @@ class OutputRowBuilderMatchedTextCapTest {
         List<AreaMatch> matches = List.of(AreaMatch.messageBody(new MatchSpan(0, 4, null)));
 
         MatchedTextJson.TextHit hit = detail(
-                OutputRowBuilder.buildMatchedTextJson("m1", "lex::1", matches, Map.of())).getMsgText().get(0);
+                OutputRowBuilder.buildMatchedTextJson("m1", "lex::1", matches, Map.of())).getMsgText().getFirst();
 
         assertThat(hit.getText()).isNull();
         assertThat(hit.getLength()).isEqualTo(4);
@@ -134,7 +134,7 @@ class OutputRowBuilderMatchedTextCapTest {
 
         assertThat(detail.getSubject()).hasSize(1);
         assertThat(detail.getAttachmentText()).hasSize(1);
-        assertThat(detail.getAttachmentText().get(0).getAttachmentName()).isEqualTo("report.pdf");
+        assertThat(detail.getAttachmentText().getFirst().getAttachmentName()).isEqualTo("report.pdf");
         assertThat(detail.getMsgText()).hasSize(MAX_HITS - 2);
     }
 
