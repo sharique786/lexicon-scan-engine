@@ -29,19 +29,42 @@ public final class LruCache<K, V> {
     private final int maxSize;
     private final LinkedHashMap<K, V> delegate;
 
+    private final java.util.function.Consumer<V> onEvict;
+
     public LruCache(int maxSize) {
+        this(maxSize, v -> { });
+    }
+
+    /**
+     * @param onEvict called with each value evicted for capacity, and with every value passed to
+     *                {@link #clear()} — used to release native resources deterministically.
+     */
+    public LruCache(int maxSize, java.util.function.Consumer<V> onEvict) {
         if (maxSize <= 0) {
             throw new IllegalArgumentException("maxSize must be positive, got " + maxSize);
         }
         this.maxSize = maxSize;
+        this.onEvict = onEvict;
         // accessOrder=true: get() moves an entry to "most recently used" position,
         // not just put() — required for genuine LRU (not just insertion-order FIFO) eviction.
         this.delegate = new LinkedHashMap<>(16, 0.75f, true) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-                return size() > LruCache.this.maxSize;
+                boolean evict = size() > LruCache.this.maxSize;
+                if (evict) {
+                    LruCache.this.onEvict.accept(eldest.getValue());
+                }
+                return evict;
             }
         };
+    }
+
+    /** Removes every entry, passing each value to the eviction callback. */
+    public void clear() {
+        for (V value : delegate.values()) {
+            onEvict.accept(value);
+        }
+        delegate.clear();
     }
 
     /**

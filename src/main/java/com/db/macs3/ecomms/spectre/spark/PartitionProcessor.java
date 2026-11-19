@@ -120,6 +120,20 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                     featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
             orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes);
 
+            // Safety net: StreamingResults only closes on exhaustion or an exception thrown from next().
+            // If Spark stops consuming early (task killed/interrupted, downstream failure, speculative
+            // duplicate) the native Scanner scratch and every cached Hyperscan database would leak for
+            // the life of the executor. Task completion always fires; close() is idempotent.
+            TaskContext taskContext = TaskContext.get();
+            if (taskContext != null) {
+                final FeatureScanOrchestrator orchestratorToClose = orchestrator;
+                final HyperscanBundleLoader loaderToClose = bundleLoader;
+                taskContext.addTaskCompletionListener(ctx -> {
+                    closeQuietly(orchestratorToClose);
+                    closeQuietly(loaderToClose);
+                });
+            }
+
             // Bounded lookahead + concurrent prefetch — see class Javadoc. lookaheadBuffer holds
             // at most PREFETCH_LOOKAHEAD_ROWS raw rows, never the whole partition.
             List<Row> lookaheadBuffer = new ArrayList<>(PREFETCH_LOOKAHEAD_ROWS);

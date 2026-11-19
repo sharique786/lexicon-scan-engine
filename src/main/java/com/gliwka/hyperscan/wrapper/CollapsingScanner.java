@@ -80,11 +80,13 @@ public class CollapsingScanner implements Closeable {
     };
 
     public CollapsingScanner() {
-        if (count >= 256) {
-            throw new RuntimeException(
-                    "There can only be 256 non-closed Scanner instances. Create them once per thread!");
+        synchronized (CollapsingScanner.class) { // several Spark tasks share one executor JVM
+            if (count >= 256) {
+                throw new RuntimeException(
+                        "There can only be 256 non-closed Scanner instances. Create them once per thread!");
+            }
+            count++;
         }
-        count++;
     }
 
     /** Must be called at least once per database before {@link #scan}; cheap and idempotent. */
@@ -201,7 +203,9 @@ public class CollapsingScanner implements Closeable {
         }
         scratch.close();
         handler.close();
-        count--;
+        synchronized (CollapsingScanner.class) {
+            count--;
+        }
         scratch = null;
     }
 }

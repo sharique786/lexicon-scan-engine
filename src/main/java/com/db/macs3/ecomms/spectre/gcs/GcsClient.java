@@ -78,9 +78,18 @@ public class GcsClient implements Serializable {
         this.storage = storage;
     }
 
+    /**
+     * One default {@link Storage} per JVM, shared by every {@code GcsClient}. PartitionProcessor builds a
+     * {@code new GcsClient()} per partition; giving each its own Storage would create (and never close)
+     * a fresh HTTP transport/connection pool per partition on a long-lived executor.
+     */
+    private static final class DefaultStorageHolder {
+        static final Storage INSTANCE = StorageOptions.getDefaultInstance().getService();
+    }
+
     private Storage storage() {
         if (storage == null) {
-            storage = StorageOptions.getDefaultInstance().getService();
+            storage = DefaultStorageHolder.INSTANCE;
         }
         return storage;
     }

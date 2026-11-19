@@ -110,7 +110,24 @@ public final class HyperscanBundleLoader implements AutoCloseable {
                                  int maxCachedBundles) {
         this.featureToZipPath = featureToZipPath;
         this.streamer = streamer;
-        this.cache = new LruCache<>(maxCachedBundles);
+        // Evicted/closed bundles free their native Hyperscan database immediately. Safe: scanRow loads a
+        // bundle and finishes with its Database before the next load can evict it (single-threaded per
+        // partition), and match objects hold Expressions, not the native database pointer.
+        this.cache = new LruCache<>(maxCachedBundles, HyperscanBundleLoader::closeBundleQuietly);
+    }
+
+    /** Max concurrent bundle loads during prefetch — each load/recompile peaks in native memory. */
+    private static final int MAX_CONCURRENT_PREFETCH_LOADS = 4;
+
+    private static void closeBundleQuietly(LexiconBundle bundle) {
+        if (bundle == null) {
+            return;
+        }
+        try {
+            bundle.database().close();
+        } catch (RuntimeException e) {
+            log.warn("Failed to close Hyperscan database: {}", e.getMessage());
+        }
     }
 
     /**
@@ -170,8 +187,16 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         Map<String, LexiconBundle> loaded = new LinkedHashMap<>();
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             Map<String, Future<LexiconBundle>> futures = new LinkedHashMap<>();
+            java.util.concurrent.Semaphore permits = new java.util.concurrent.Semaphore(MAX_CONCURRENT_PREFETCH_LOADS);
             for (String feature : distinct) {
-                futures.put(feature, executor.submit(() -> loadFresh(feature)));
+                futures.put(feature, executor.submit(() -> {
+                    permits.acquire();
+                    try {
+                        return loadFresh(feature);
+                    } finally {
+                        permits.release();
+                    }
+                }));
             }
             for (Map.Entry<String, Future<LexiconBundle>> entry : futures.entrySet()) {
                 try {
@@ -192,7 +217,14 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         // is the only place this method ever touches the (deliberately non-thread-safe) cache.
         for (Map.Entry<String, LexiconBundle> entry : loaded.entrySet()) {
             LexiconBundle bundle = entry.getValue();
-            cache.computeIfAbsent(entry.getKey(), unusedFeature -> bundle);
+            boolean[] used = {false};
+            cache.computeIfAbsent(entry.getKey(), unusedFeature -> {
+                used[0] = true;
+                return bundle;
+            });
+            if (!used[0]) {
+                closeBundleQuietly(bundle); // already cached by a concurrent/earlier load — don't leak
+            }
         }
         log.info("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
                 loaded.size(), distinct.size());
@@ -264,8 +296,8 @@ public final class HyperscanBundleLoader implements AutoCloseable {
     }
 
     private LexiconBundle buildBundle(String feature, String path, ZipEntryBytes zipEntryBytes) {
+        Database database = null;
         try {
-            Database database;
             try (InputStream hdbIn = new ByteArrayInputStream(zipEntryBytes.hdbBytes())) {
                 database = Database.load(hdbIn);
             }
@@ -275,6 +307,13 @@ public final class HyperscanBundleLoader implements AutoCloseable {
             TermExpressionMetadata metadata = TermExpressionMetadata.parse(feature, zipEntryBytes.metadataJson());
             return new LexiconBundle(database, metadata);
         } catch (IOException | RuntimeException e) {
+            if (database != null) {
+                try {
+                    database.close(); // metadata parse failed after a successful native load — free it
+                } catch (RuntimeException ignored) {
+                    // best effort
+                }
+            }
             throw new HyperscanFileLoadException(
                     "Failed to load Hyperscan database or term metadata for feature '" + feature
                             + "' extracted from " + path + ": " + e.getMessage(), e);
@@ -304,9 +343,8 @@ public final class HyperscanBundleLoader implements AutoCloseable {
 
     @Override
     public void close() {
-        // Database itself is Closeable (a native resource handle) — but this loader does not
-        // proactively close cached entries on eviction, since a Database evicted from the cache
-        // may still be in use by an in-flight Scanner in a concurrent context; relying on GC +
-        // the native library's own finalisation is the safer default here.
+        // Called at partition end, after the orchestrator (and its Scanner) is done: free every cached
+        // native database now rather than waiting for GC, which does not see off-heap pressure.
+        cache.clear();
     }
 }
