@@ -31,6 +31,42 @@ class CollapsingScannerTest {
     }
 
     @Test
+    void liveCount_tracksOpenScanners_andCloseIsIdempotent() {
+        int before = CollapsingScanner.liveCount();
+        CollapsingScanner scanner = new CollapsingScanner();
+        assertEquals(before + 1, CollapsingScanner.liveCount());
+
+        scanner.close();
+        scanner.close(); // second close must not decrement again
+        assertEquals(before, CollapsingScanner.liveCount());
+    }
+
+    @Test
+    void scanAfterClose_failsInsteadOfTouchingFreedNativeMemory() throws Exception {
+        try (Database db = compile("abc")) {
+            CollapsingScanner scanner = new CollapsingScanner();
+            scanner.allocScratch(db);
+            scanner.close();
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> scanner.scan(db, "abc"));
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () -> scanner.allocScratch(db));
+        }
+    }
+
+    @Test
+    void repeatedScansOfManyTexts_reuseOneScanner() throws Exception {
+        // the per-scan native text copy is freed after every scan; a long loop must keep returning correct hits
+        try (Database db = compile("needle");
+             CollapsingScanner scanner = new CollapsingScanner()) {
+            scanner.allocScratch(db);
+            for (int i = 0; i < 2_000; i++) {
+                List<Match> matches = scanner.scan(db, "hay " + i + " needle hay");
+                assertEquals(1, matches.size());
+                assertEquals("needle", matches.getFirst().getMatchedString());
+            }
+        }
+    }
+
+    @Test
     void repeatedDisclaimer_threeOccurrences_threeShortMatches() throws Exception {
         String text = FILLER + DISCLAIMER + " " + FILLER + DISCLAIMER + " " + FILLER + DISCLAIMER;
 

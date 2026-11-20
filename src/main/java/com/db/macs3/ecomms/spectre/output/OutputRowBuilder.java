@@ -247,37 +247,17 @@ public final class OutputRowBuilder {
 
     static String buildMatchedTextJson(String messageId, String termId, List<AreaMatch> matches,
                                        Map<String, String> attachmentNames) {
-        if (matches.size() > MAX_REPORTED_HITS_PER_TERM) {
-            long totalChars = 0;
-            int longestHit = 0;
-            for (AreaMatch m : matches) {
-                String t = m.getSpan().getMatchedText();
-                int len = t == null ? 0 : t.length();
-                totalChars += len;
-                longestHit = Math.max(longestHit, len);
-            }
-            log.warn("Excessive matches for messageId={} termId={}: {} hits ({} matched chars, longest hit {} chars) — "
-                            + "matched_text JSON capped to {} hits of at most {} chars each",
-                    messageId, termId, matches.size(), totalChars, longestHit,
-                    MAX_REPORTED_HITS_PER_TERM, MAX_REPORTED_MATCH_TEXT_CHARS);
-        }
+        warnIfExcessive(messageId, termId, matches);
+
         List<MatchedTextJson.TextHit> msgText = new ArrayList<>();
         List<MatchedTextJson.TextHit> subject = new ArrayList<>();
         Map<String, List<MatchedTextJson.TextHit>> attachmentHits = new LinkedHashMap<>();
 
-        int reported = 0;
-        for (AreaMatch areaMatch : matches) {
-            // Bound the JSON: a short/common pattern over a multi-MB attachment can match hundreds of
-            // thousands of times, and each hit's text is serialised into ONE String per term.
-            if (reported++ >= MAX_REPORTED_HITS_PER_TERM) {
-                break;
-            }
-            String text = areaMatch.getSpan().getMatchedText();
-            if (text != null && text.length() > MAX_REPORTED_MATCH_TEXT_CHARS) {
-                text = text.substring(0, MAX_REPORTED_MATCH_TEXT_CHARS);
-            }
-            MatchedTextJson.TextHit hit = new MatchedTextJson.TextHit(
-                    text, areaMatch.getSpan().getStartCharIndex(), areaMatch.getSpan().length());
+        // Bound the JSON: a short/common pattern over a multi-MB attachment can match hundreds of
+        // thousands of times, and each hit's text is serialised into ONE String per term.
+        int reportable = Math.min(matches.size(), MAX_REPORTED_HITS_PER_TERM);
+        for (AreaMatch areaMatch : matches.subList(0, reportable)) {
+            MatchedTextJson.TextHit hit = toTextHit(areaMatch);
             switch (areaMatch.getArea()) {
                 case MESSAGE_BODY -> msgText.add(hit);
                 case SUBJECT -> subject.add(hit);
@@ -287,16 +267,50 @@ public final class OutputRowBuilder {
             }
         }
 
+        MatchedTextJson.HitDetail detail = new MatchedTextJson.HitDetail(
+                messageId, msgText, subject, toAttachmentHits(attachmentHits, attachmentNames));
+        return serializeMatchedText(messageId, new MatchedTextJson(List.of(detail)));
+    }
+
+    private static void warnIfExcessive(String messageId, String termId, List<AreaMatch> matches) {
+        if (matches.size() <= MAX_REPORTED_HITS_PER_TERM) {
+            return;
+        }
+        long totalChars = 0;
+        int longestHit = 0;
+        for (AreaMatch m : matches) {
+            String t = m.getSpan().getMatchedText();
+            int len = t == null ? 0 : t.length();
+            totalChars += len;
+            longestHit = Math.max(longestHit, len);
+        }
+        log.warn("Excessive matches for messageId={} termId={}: {} hits ({} matched chars, longest hit {} chars) — "
+                        + "matched_text JSON capped to {} hits of at most {} chars each",
+                messageId, termId, matches.size(), totalChars, longestHit,
+                MAX_REPORTED_HITS_PER_TERM, MAX_REPORTED_MATCH_TEXT_CHARS);
+    }
+
+    private static MatchedTextJson.TextHit toTextHit(AreaMatch areaMatch) {
+        String text = areaMatch.getSpan().getMatchedText();
+        if (text != null && text.length() > MAX_REPORTED_MATCH_TEXT_CHARS) {
+            text = text.substring(0, MAX_REPORTED_MATCH_TEXT_CHARS);
+        }
+        return new MatchedTextJson.TextHit(
+                text, areaMatch.getSpan().getStartCharIndex(), areaMatch.getSpan().length());
+    }
+
+    private static List<MatchedTextJson.AttachmentTextHit> toAttachmentHits(
+            Map<String, List<MatchedTextJson.TextHit>> attachmentHits, Map<String, String> attachmentNames) {
         List<MatchedTextJson.AttachmentTextHit> attachmentText = new ArrayList<>();
         for (Map.Entry<String, List<MatchedTextJson.TextHit>> attachmentEntry : attachmentHits.entrySet()) {
             String attachmentName = attachmentNames.get(attachmentEntry.getKey());
             attachmentText.add(new MatchedTextJson.AttachmentTextHit(
                     attachmentEntry.getKey(), attachmentName == null ? "" : attachmentName, attachmentEntry.getValue()));
         }
+        return attachmentText;
+    }
 
-        MatchedTextJson.HitDetail detail = new MatchedTextJson.HitDetail(messageId, msgText, subject, attachmentText);
-        MatchedTextJson wrapper = new MatchedTextJson(List.of(detail));
-
+    private static String serializeMatchedText(String messageId, MatchedTextJson wrapper) {
         try {
             return MATCHED_TEXT_MAPPER.writeValueAsString(wrapper);
         } catch (JsonProcessingException e) {
@@ -326,33 +340,16 @@ public final class OutputRowBuilder {
                                                                  MessageEvaluationResult evaluation,
                                                                  String createdBy, Instant createdTs) {
         List<FeatureHitSummaryRow.Feature> features = new ArrayList<>();
-
         for (GroupEvaluationResult groupResult : evaluation.getEvaluatedGroups()) {
-            List<FeatureHitSummaryRow.SubFeature> subFeatures = new ArrayList<>();
-            // NoiseReduction and composite groups always report their members as sub_features, even a
-            // single-member one; only a plain lexicon/disclaimer group with one row has none.
             FeatureGroup group = groupResult.getGroup();
-            if (group.isMultiMember() || group.isNoiseReduction()
-                    || BqColumns.FeatureType.COMPOSITE.equalsIgnoreCase(group.getFeatureType())) {
-                for (Map.Entry<FeatureDecisionRow, Boolean> entry : groupResult.getMemberHit().entrySet()) {
-                    FeatureDecisionRow member = entry.getKey();
-                    String subType = member.getSubFeatureType() == null || member.getSubFeatureType().isBlank()
-                            ? BqColumns.FeatureType.LEXICON : member.getSubFeatureType();
-                    boolean memberHit = entry.getValue() && (!isStandardLexicon(group)
-                            || survives(evaluation, group, groupResult.getMemberMatches().get(member)));
-                    subFeatures.add(new FeatureHitSummaryRow.SubFeature(
-                            subType, member.getFeaturesToApply(), memberHit));
-                }
-            }
-
             features.add(new FeatureHitSummaryRow.Feature(
-                    groupResult.getGroup().getFeatureId(),
-                    groupResult.getGroup().getFeatureName(),
-                    groupResult.getGroup().getFeatureType(),
-                    groupResult.getGroup().isNoiseReduction(),
+                    group.getFeatureId(),
+                    group.getFeatureName(),
+                    group.getFeatureType(),
+                    group.isNoiseReduction(),
                     groupResult.isHit() && (!isStandardLexicon(group)
                             || survives(evaluation, group, flattenMatches(groupResult))),
-                    subFeatures));
+                    buildSubFeatures(evaluation, groupResult)));
         }
 
         // FeatureHitSummaryRow's constructor argument order matches the delivered schema's field
@@ -360,6 +357,31 @@ public final class OutputRowBuilder {
         return new FeatureHitSummaryRow(
                 messageId, features, datasetPartitionValue, featureTaggingType,
                 createdBy, createdTs, processId, pipelineExecId);
+    }
+
+    private static List<FeatureHitSummaryRow.SubFeature> buildSubFeatures(MessageEvaluationResult evaluation,
+                                                                          GroupEvaluationResult groupResult) {
+        FeatureGroup group = groupResult.getGroup();
+        // NoiseReduction and composite groups always report their members as sub_features, even a
+        // single-member one; only a plain lexicon/disclaimer group with one row has none.
+        if (!listsMembersAsSubFeatures(group)) {
+            return new ArrayList<>();
+        }
+        List<FeatureHitSummaryRow.SubFeature> subFeatures = new ArrayList<>();
+        for (Map.Entry<FeatureDecisionRow, Boolean> entry : groupResult.getMemberHit().entrySet()) {
+            FeatureDecisionRow member = entry.getKey();
+            String subType = member.getSubFeatureType() == null || member.getSubFeatureType().isBlank()
+                    ? BqColumns.FeatureType.LEXICON : member.getSubFeatureType();
+            boolean memberHit = entry.getValue() && (!isStandardLexicon(group)
+                    || survives(evaluation, group, groupResult.getMemberMatches().get(member)));
+            subFeatures.add(new FeatureHitSummaryRow.SubFeature(subType, member.getFeaturesToApply(), memberHit));
+        }
+        return subFeatures;
+    }
+
+    private static boolean listsMembersAsSubFeatures(FeatureGroup group) {
+        return group.isMultiMember() || group.isNoiseReduction()
+                || BqColumns.FeatureType.COMPOSITE.equalsIgnoreCase(group.getFeatureType());
     }
 
     private static boolean isStandardLexicon(FeatureGroup group) {

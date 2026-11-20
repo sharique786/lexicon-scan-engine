@@ -520,4 +520,77 @@ class ResolvedPatternAreaEvaluatorTest {
             assertThat(evaluate(outerChain(5), text)).isEmpty();
         }
     }
+
+    @Nested
+    @DisplayName("Word index (wordStarts) and the shared per-area AreaText")
+    class WordIndex {
+
+        @Test
+        @DisplayName("whitespace-delimited words: one start per run, any whitespace (incl. tabs/newlines) separates")
+        void latinWordStarts() {
+            assertThat(ResolvedPatternAreaEvaluator.wordStarts("  ab cd\t\nef "))
+                    .containsExactly(2, 5, 9);
+        }
+
+        @Test
+        @DisplayName("every CJK character is its own word, and it closes a preceding Latin run")
+        void cjkWordStarts() {
+            // "ab" | U+7532 | U+4E59 | "cd"   (indices 0, 2, 3, 4)
+            assertThat(ResolvedPatternAreaEvaluator.wordStarts("ab甲乙cd")).containsExactly(0, 2, 3, 4);
+        }
+
+        @Test
+        @DisplayName("a supplementary-plane CJK character counts as ONE word, though it is two chars")
+        void supplementaryPlaneCjkIsOneWord() {
+            String text = "𠀀x"; // U+20000 (CJK Ext. B) then 'x'
+            assertThat(ResolvedPatternAreaEvaluator.wordStarts(text)).containsExactly(0, 2);
+        }
+
+        @Test
+        @DisplayName("empty and whitespace-only text have no words")
+        void noWords() {
+            assertThat(ResolvedPatternAreaEvaluator.wordStarts("")).isEmpty();
+            assertThat(ResolvedPatternAreaEvaluator.wordStarts(" \n\t ")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a long text grows the index past its initial capacity correctly")
+        void growsBeyondInitialCapacity() {
+            String text = "a ".repeat(5_000);
+            int[] starts = ResolvedPatternAreaEvaluator.wordStarts(text);
+            assertThat(starts).hasSize(5_000);
+            assertThat(starts[4_999]).isEqualTo(9_998);
+        }
+
+        @Test
+        @DisplayName("one AreaText reused across several terms gives exactly the results of fresh per-call evaluation")
+        void sharedAreaTextMatchesFreshEvaluation() {
+            String text = "please keep your mouth shut about the price, 甲乙丙 and keep it quiet";
+            List<ResolvedPatternTree> terms = List.of(
+                    twoLeafChain("keep", "FOLLOWEDBY", 3, "mouth shut"),
+                    twoLeafChain("price", "NEAR", 1, "about"),
+                    twoLeafChain("甲", "FOLLOWEDBY", 1, "丙"),
+                    twoLeafChain("absent", "NEAR", 2, "keep"),
+                    singleLeafChain("quiet"));
+
+            ResolvedPatternAreaEvaluator.AreaText shared = new ResolvedPatternAreaEvaluator.AreaText(text);
+            for (ResolvedPatternTree term : terms) {
+                assertThat(ResolvedPatternAreaEvaluator.findMatchingSpans(term, shared))
+                        .as("term %s", term)
+                        .isEqualTo(evaluate(term, text));
+            }
+            assertThat(ResolvedPatternAreaEvaluator.findMatchingSpans(terms.getFirst(), shared))
+                    .as("sanity: the reused index still finds the real hit").isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("a null or blank area text yields no matches")
+        void blankAreaText() {
+            ResolvedPatternTree term = singleLeafChain("x");
+            assertThat(ResolvedPatternAreaEvaluator.findMatchingSpans(term,
+                    new ResolvedPatternAreaEvaluator.AreaText(null))).isEmpty();
+            assertThat(ResolvedPatternAreaEvaluator.findMatchingSpans(term,
+                    new ResolvedPatternAreaEvaluator.AreaText("   "))).isEmpty();
+        }
+    }
 }

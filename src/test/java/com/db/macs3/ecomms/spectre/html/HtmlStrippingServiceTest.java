@@ -303,6 +303,7 @@ class HtmlStrippingServiceTest {
             // Position in the ORIGINAL document (offset 100 + extractedText's own local offset),
             // not in extractedText itself.
             assertThat(originalStart).isEqualTo(100 + extractedText.indexOf("market"));
+            assertThat(originalEnd).isGreaterThan(originalStart);
         }
     }
 }

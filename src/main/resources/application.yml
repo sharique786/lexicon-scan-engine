@@ -13,6 +13,10 @@
 # via Spring Boot's standard property-source precedence.
 scan-engine:
   max-cached-databases-per-partition: 20
+  # One copy of each Hyperscan bundle per executor, shared by its tasks (SharedBundleCache).
+  shared-bundle-cache-enabled: true
+  # Bundles no task is using that an executor keeps open (native memory - size memoryOverhead for it).
+  max-shared-idle-bundles-per-executor: 32
   sort-partitions-by-feature-set: true
   created-by: SPECTRE-COMPOSER-SA
 

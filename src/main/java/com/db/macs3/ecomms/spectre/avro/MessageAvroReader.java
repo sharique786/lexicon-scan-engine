@@ -2,6 +2,7 @@ package com.db.macs3.ecomms.spectre.avro;
 
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.gcs.GcsClient;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -9,7 +10,10 @@ import org.apache.spark.sql.functions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Reads the AVRO message files of one dataset from its {@code restricted/} and {@code unrestricted/} GCS subfolders
@@ -117,11 +121,32 @@ public final class MessageAvroReader {
     // CSV mirror output (restricted/csv/part-*.csv + _SUCCESS) from a prior run; counting those would make a
     // rerun with only unrestricted/ AVRO files wrongly believe restricted/ has data.
 
+    /**
+     * The only top-level AVRO fields this job ever reads ({@code MessageRowConverter}). Everything else is dropped
+     * right after the read: the rows go through the message/view join SHUFFLE and the Kryo-encoded scan, and Spark
+     * cannot prune columns that only an opaque {@code mapPartitions} reads — it would otherwise carry every other
+     * field of every message through the shuffle.
+     */
+    static final List<String> SCANNED_TOP_LEVEL_FIELDS = List.of(
+            AvroConstants.FIELD_MESSAGE_ID, AvroConstants.FIELD_SOURCE, AvroConstants.FIELD_MESSAGE,
+            AvroConstants.FIELD_ATTACHMENTS, AvroConstants.FIELD_PROCESSING);
+
+    /** Keeps only {@link #SCANNED_TOP_LEVEL_FIELDS} that exist in {@code messages} (a missing one stays missing). */
+    static Dataset<Row> projectScannedFields(Dataset<Row> messages) {
+        Set<String> present = new HashSet<>(Arrays.asList(messages.columns()));
+        Column[] keep = SCANNED_TOP_LEVEL_FIELDS.stream()
+                .filter(present::contains)
+                .map(functions::col)
+                .toArray(Column[]::new);
+        return keep.length == present.size() ? messages : messages.select(keep);
+    }
+
     private static Dataset<Row> readAndTag(SparkSession spark, String path, String datasetPartitionValue, boolean restricted) {
-        return spark.read()
+        Dataset<Row> raw = spark.read()
                 .format(AvroConstants.FORMAT)
                 .option("pathGlobFilter", "*.avro")
-                .load(path)
+                .load(path);
+        return projectScannedFields(raw)
                 .withColumn(AvroConstants.COLUMN_DATASET_PARTITION_VALUE, functions.lit(datasetPartitionValue))
                 .withColumn(AvroConstants.COLUMN_RESTRICTED, functions.lit(restricted));
     }

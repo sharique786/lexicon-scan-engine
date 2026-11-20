@@ -310,17 +310,13 @@ public class FeatureDefinition implements Serializable {
     private static final int PARSE_CACHE_MAX_ENTRIES = 4096;
 
     /**
-     * Bounded LRU keyed by the raw JSON string. A feature's definition JSON is identical across every
+     * Lock-free cache keyed by the raw JSON string, shared by every task thread of an executor (cleared if it ever
+     * reaches {@code PARSE_CACHE_MAX_ENTRIES} - a safety net only). A feature's definition JSON is identical across every
      * message that uses it, so re-parsing it per message × feature is pure repeated work. Failures are
      * never cached (they rethrow every time, exactly like {@link #parse}).
      */
-    private static final java.util.Map<String, FeatureDefinition> PARSE_CACHE =
-            java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>(256, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(java.util.Map.Entry<String, FeatureDefinition> eldest) {
-                    return size() > PARSE_CACHE_MAX_ENTRIES;
-                }
-            });
+    private static final java.util.concurrent.ConcurrentHashMap<String, FeatureDefinition> PARSE_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>(256);
 
     /**
      * Same result and same exceptions as {@link #parse}, but returns a shared, cached instance for a
@@ -335,6 +331,9 @@ public class FeatureDefinition implements Serializable {
             return cached;
         }
         FeatureDefinition parsed = parse(rawJson);
+        if (PARSE_CACHE.size() >= PARSE_CACHE_MAX_ENTRIES) {
+            PARSE_CACHE.clear(); // safety net only: a job has ~hundreds of distinct definitions, so this never fires normally
+        }
         PARSE_CACHE.put(rawJson, parsed);
         return parsed;
     }

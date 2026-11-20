@@ -52,6 +52,12 @@ class SparkSessionConfigTest {
     }
 
     @Test
+    @DisplayName("raises the Kryo buffer ceiling so a hit-heavy message's result cannot overflow it")
+    void raisesKryoBufferMax() {
+        assertThat(spark.sparkContext().getConf().get("spark.kryoserializer.buffer.max")).isEqualTo("512m");
+    }
+
+    @Test
     @DisplayName("enables AQE, coalescePartitions, and skewJoin — never left to the shared cluster's defaults")
     void enablesAdaptiveQueryExecution() {
         assertThat(spark.conf().get("spark.sql.adaptive.enabled")).isEqualTo("true");
@@ -68,11 +74,11 @@ class SparkSessionConfigTest {
     }
 
     @Test
-    @DisplayName("floors shuffle.partitions at 200 even under local[2]'s low default parallelism")
-    void floorsShufflePartitionsAt200() {
-        // defaultParallelism (2 under local[2]) * 3 = 6, well under the 200 floor — this
+    @DisplayName("floors shuffle.partitions at MIN_SHUFFLE_PARTITIONS even under local[2]'s low default parallelism")
+    void floorsShufflePartitionsAtMinimum() {
+        // defaultParallelism (2 under local[2]) * 3 = 6, well under the floor — this
         // asserts the floor branch, not the "high-parallelism cluster" branch.
-        assertThat(spark.conf().get("spark.sql.shuffle.partitions")).isEqualTo("200");
+        assertThat(spark.conf().get("spark.sql.shuffle.partitions")).isEqualTo(String.valueOf(SparkSessionConfig.MIN_SHUFFLE_PARTITIONS));
     }
 
     @Test

@@ -46,7 +46,7 @@ public class LexiconScanEngineApplication {
      *             {@code --spring.*} style properties) — they are read
      *             directly from {@code args} after the Spring context starts.
      */
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws java.io.IOException {
         ConfigurableApplicationContext context = SpringApplication.run(LexiconScanEngineApplication.class, args);
 
         try (context) {

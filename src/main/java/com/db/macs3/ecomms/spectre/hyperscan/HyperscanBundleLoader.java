@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +22,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -96,7 +96,16 @@ public final class HyperscanBundleLoader implements AutoCloseable {
 
     private final Map<String, String> featureToZipPath;
     private final GcsByteStreamer streamer;
-    private final LruCache<String, LexiconBundle> cache;
+    private final LruCache<String, Held> cache;
+    /** Executor-wide shared cache, or null to load privately per partition (the pre-v3.28 behaviour). */
+    private final SharedBundleCache shared;
+
+    /**
+     * A bundle this partition holds, plus how to give it back: close the native database (private load) or release
+     * the lease (shared load). {@code release} runs exactly once — on LRU eviction, prefetch-race loss or close().
+     */
+    private record Held(LexiconBundle bundle, Runnable release) {
+    }
 
     /**
      * @param featureToZipPath resolved feature → {@code .zip} GCS path — the small,
@@ -108,18 +117,33 @@ public final class HyperscanBundleLoader implements AutoCloseable {
      */
     public HyperscanBundleLoader(Map<String, String> featureToZipPath, GcsByteStreamer streamer,
                                  int maxCachedBundles) {
+        this(featureToZipPath, streamer, maxCachedBundles, null, "");
+    }
+
+    /**
+     * @param shared   executor-wide cache to lease bundles from (see {@link SharedBundleCache}); null = load privately
+     * @param cacheKeyPrefix prepended to the zip path to form the shared-cache key — a per-job run id, so two jobs
+     *                 (e.g. tests) in one JVM never share a bundle that merely has the same path
+     */
+    public HyperscanBundleLoader(Map<String, String> featureToZipPath, GcsByteStreamer streamer,
+                                 int maxCachedBundles, SharedBundleCache shared, String cacheKeyPrefix) {
         this.featureToZipPath = featureToZipPath;
         this.streamer = streamer;
-        // Evicted/closed bundles free their native Hyperscan database immediately. Safe: scanRow loads a
-        // bundle and finishes with its Database before the next load can evict it (single-threaded per
-        // partition), and match objects hold Expressions, not the native database pointer.
-        this.cache = new LruCache<>(maxCachedBundles, HyperscanBundleLoader::closeBundleQuietly);
+        this.shared = shared;
+        this.cacheKeyPrefix = cacheKeyPrefix == null ? "" : cacheKeyPrefix;
+        // Evicted bundles are given back immediately (database closed, or shared lease released). Safe: scanRow
+        // loads a bundle and finishes with its Database before the next load can evict it (single-threaded per
+        // partition), and match objects hold Expressions, not the native database pointer. A shared bundle is
+        // only closed once NO task holds a lease on it.
+        this.cache = new LruCache<>(maxCachedBundles, held -> held.release().run());
     }
+
+    private final String cacheKeyPrefix;
 
     /** Max concurrent bundle loads during prefetch — each load/recompile peaks in native memory. */
     private static final int MAX_CONCURRENT_PREFETCH_LOADS = 4;
 
-    private static void closeBundleQuietly(LexiconBundle bundle) {
+    static void closeBundleQuietly(LexiconBundle bundle) {
         if (bundle == null) {
             return;
         }
@@ -139,7 +163,18 @@ public final class HyperscanBundleLoader implements AutoCloseable {
      *                                                              or {@link TermExpressionMetadata#parse} call fails
      */
     public LexiconBundle load(String feature) {
-        return cache.computeIfAbsent(feature, this::loadFresh);
+        return cache.computeIfAbsent(feature, this::acquire).bundle();
+    }
+
+    /** Loads {@code feature} privately, or leases it from the executor-wide cache when one is configured. */
+    private Held acquire(String feature) {
+        if (shared == null) {
+            LexiconBundle bundle = loadFresh(feature);
+            return new Held(bundle, () -> closeBundleQuietly(bundle));
+        }
+        String key = cacheKeyPrefix + "|" + resolveZipPath(feature);
+        SharedBundleCache.Lease lease = shared.acquire(key, () -> loadFresh(feature));
+        return new Held(lease.bundle(), lease::close);
     }
 
     /**
@@ -179,55 +214,85 @@ public final class HyperscanBundleLoader implements AutoCloseable {
         if (features == null || features.isEmpty()) {
             return;
         }
-        List<String> distinct = features.stream().distinct().limit(cache.maxSize()).toList();
+        // Already-cached features are skipped: re-loading them would only be thrown away again.
+        List<String> distinct = features.stream().distinct().filter(f -> !cache.containsKey(f))
+                .limit((long) cache.maxSize() - cache.size()).toList();
         if (distinct.isEmpty()) {
             return;
         }
 
-        Map<String, LexiconBundle> loaded = new LinkedHashMap<>();
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            Map<String, Future<LexiconBundle>> futures = new LinkedHashMap<>();
-            java.util.concurrent.Semaphore permits = new java.util.concurrent.Semaphore(MAX_CONCURRENT_PREFETCH_LOADS);
-            for (String feature : distinct) {
-                futures.put(feature, executor.submit(() -> {
-                    permits.acquire();
-                    try {
-                        return loadFresh(feature);
-                    } finally {
-                        permits.release();
-                    }
-                }));
-            }
-            for (Map.Entry<String, Future<LexiconBundle>> entry : futures.entrySet()) {
-                try {
-                    loaded.put(entry.getKey(), entry.getValue().get());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.debug("Prefetch interrupted for feature '{}' — will load synchronously when actually needed",
-                            entry.getKey());
-                } catch (ExecutionException e) {
-                    Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    log.debug("Prefetch failed for feature '{}' — will retry synchronously when actually needed: {}",
-                            entry.getKey(), cause.getMessage());
-                }
+        Map<String, Future<Held>> futures = loadConcurrently(distinct);
+
+        // The executor is closed, so every task has ended. Collect EVERY successful load — including ones that
+        // finished after an interrupt (killed/speculative task) cut the wait loop short — so each native Database
+        // either enters the cache or is closed below, never dropped.
+        Map<String, Held> loaded = new LinkedHashMap<>();
+        for (Map.Entry<String, Future<Held>> entry : futures.entrySet()) {
+            if (entry.getValue().state() == Future.State.SUCCESS) {
+                loaded.put(entry.getKey(), entry.getValue().resultNow());
             }
         }
 
         // Sequential insertion, entirely on the calling thread — see class Javadoc for why this
         // is the only place this method ever touches the (deliberately non-thread-safe) cache.
-        for (Map.Entry<String, LexiconBundle> entry : loaded.entrySet()) {
-            LexiconBundle bundle = entry.getValue();
-            boolean[] used = {false};
-            cache.computeIfAbsent(entry.getKey(), unusedFeature -> {
-                used[0] = true;
-                return bundle;
-            });
-            if (!used[0]) {
-                closeBundleQuietly(bundle); // already cached by a concurrent/earlier load — don't leak
-            }
+        for (Map.Entry<String, Held> entry : loaded.entrySet()) {
+            insertOrClose(entry.getKey(), entry.getValue());
         }
         log.info("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
                 loaded.size(), distinct.size());
+    }
+
+    /** Caches {@code held}, or gives it back if the feature was already cached (never leak a native database). */
+    private void insertOrClose(String feature, Held held) {
+        boolean[] used = {false};
+        cache.computeIfAbsent(feature, unusedFeature -> {
+            used[0] = true;
+            return held;
+        });
+        if (!used[0]) {
+            held.release().run();
+        }
+    }
+
+    /**
+     * Runs {@link #loadFresh} for every feature on virtual threads (at most
+     * {@link #MAX_CONCURRENT_PREFETCH_LOADS} at once) and returns once ALL tasks have ended — also after an
+     * interrupt, since closing the executor waits for them. Touches no cache.
+     */
+    private Map<String, Future<Held>> loadConcurrently(List<String> features) {
+        Map<String, Future<Held>> futures = new LinkedHashMap<>();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Semaphore permits = new Semaphore(MAX_CONCURRENT_PREFETCH_LOADS);
+            for (String feature : features) {
+                futures.put(feature, executor.submit(() -> {
+                    permits.acquire();
+                    try {
+                        return acquire(feature);
+                    } finally {
+                        permits.release();
+                    }
+                }));
+            }
+            awaitAll(futures);
+        }
+        return futures;
+    }
+
+    /** Waits for each future (results are collected later); stops early, re-flagging the interrupt, if interrupted. */
+    private void awaitAll(Map<String, Future<Held>> futures) {
+        for (Map.Entry<String, Future<Held>> entry : futures.entrySet()) {
+            try {
+                entry.getValue().get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.debug("Prefetch interrupted — will load synchronously when actually needed");
+                return;
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                log.debug("Prefetch failed for feature '{}' — will retry synchronously when actually needed: {}",
+                        entry.getKey(), cause.getMessage());
+            }
+        }
     }
 
     private LexiconBundle loadFresh(String feature) {
@@ -329,9 +394,7 @@ public final class HyperscanBundleLoader implements AutoCloseable {
     }
 
     private static byte[] readAllBytes(ZipInputStream zip) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        zip.transferTo(out);
-        return out.toByteArray();
+        return zip.readAllBytes(); // reads the current entry only; no intermediate copy
     }
 
     /**

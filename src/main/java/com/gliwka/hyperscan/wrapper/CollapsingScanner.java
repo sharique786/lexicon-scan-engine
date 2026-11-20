@@ -10,9 +10,11 @@ import java.io.Closeable;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.IntUnaryOperator;
 
 import static com.gliwka.hyperscan.jni.hyperscan.hs_alloc_scratch;
@@ -54,39 +56,83 @@ public class CollapsingScanner implements Closeable {
 
     private static int count = 0;
 
-    private static class NativeScratch extends hs_scratch_t {
+    private static final class NativeScratch extends hs_scratch_t {
         private NativeScratch() {
             super();
-            this.deallocator(() -> hs_free_scratch(this));
+        }
+
+        /** Registers the deallocator after construction (calling the overridable method from the constructor is unsafe). */
+        static NativeScratch create() {
+            NativeScratch created = new NativeScratch();
+            created.deallocator(() -> hs_free_scratch(created));
+            return created;
         }
     }
 
-    private NativeScratch scratch = new NativeScratch();
+    /** Thrown when more than {@link #MAX_LIVE_SCANNERS} scanners are open at once. */
+    public static final class TooManyScannersException extends IllegalStateException {
+        public TooManyScannersException(String message) {
+            super(message);
+        }
+    }
+
+    private static final int MAX_LIVE_SCANNERS = 256;
+
+    // Both native; allocated in the constructor only AFTER the live-instance check, so a rejected construction
+    // leaks nothing (as field initialisers they ran first and were never freed when the check threw).
+    private NativeScratch scratch;
 
     /** key = (expressionId << 32 | startByteOffset) -> {id, fromByte, toByte (max)}; insertion-ordered. */
     private final Map<Long, long[]> collapsed = new LinkedHashMap<>();
 
-    private final match_event_handler handler = new match_event_handler() {
-        @Override
-        public int call(int id, long from, long to, int flags, Pointer context) {
-            long key = ((long) id << 32) | (from & 0xFFFFFFFFL);
-            long[] entry = collapsed.get(key);
-            if (entry == null) {
-                collapsed.put(key, new long[]{id, from, to});
-            } else if (to > entry[2]) {
-                entry[2] = to;
+    private final match_event_handler handler;
+
+    private match_event_handler newHandler() {
+        return new match_event_handler() {
+            @Override
+            public int call(int id, long from, long to, int flags, Pointer context) {
+                long key = ((long) id << 32) | (from & 0xFFFFFFFFL);
+                long[] entry = collapsed.get(key);
+                if (entry == null) {
+                    collapsed.put(key, new long[]{id, from, to});
+                } else if (to > entry[2]) {
+                    entry[2] = to;
+                }
+                return 0; // keep scanning
             }
-            return 0; // keep scanning
-        }
-    };
+        };
+    }
 
     public CollapsingScanner() {
         synchronized (CollapsingScanner.class) { // several Spark tasks share one executor JVM
-            if (count >= 256) {
-                throw new RuntimeException(
+            if (count >= MAX_LIVE_SCANNERS) {
+                throw new TooManyScannersException(
                         "There can only be 256 non-closed Scanner instances. Create them once per thread!");
             }
             count++;
+        }
+        boolean constructed = false;
+        try {
+            this.scratch = NativeScratch.create();
+            this.handler = newHandler();
+            constructed = true;
+        } finally {
+            if (!constructed) {
+                if (scratch != null) {
+                    scratch.close();
+                    scratch = null;
+                }
+                synchronized (CollapsingScanner.class) {
+                    count--;
+                }
+            }
+        }
+    }
+
+    /** Number of scanners currently open in this JVM (diagnostics/tests). */
+    public static int liveCount() {
+        synchronized (CollapsingScanner.class) {
+            return count;
         }
     }
 
@@ -95,7 +141,7 @@ public class CollapsingScanner implements Closeable {
         if (scratch == null) {
             throw new IllegalStateException("Scratch space has already been deallocated");
         }
-        if (db == lastScratchDb) {
+        if (db == lastScratchDb) { // NOSONAR identity on purpose: scratch belongs to this exact native database
             return; // scratch already covers this exact database
         }
         int hsError = hs_alloc_scratch(db.getDatabase(), scratch);
@@ -117,63 +163,98 @@ public class CollapsingScanner implements Closeable {
         if (scratch == null) {
             throw new IllegalStateException("Scratch space has already been deallocated");
         }
-        String input = prepared.text();
-        hs_database_t database = db.getDatabase();
-        byte[] bytes = prepared.bytes();
-        BytePointer bytePointer = new BytePointer(ByteBuffer.wrap(bytes));
-
         collapsed.clear();
+        try {
+            runNativeScan(db, prepared.bytes());
+            if (collapsed.isEmpty()) {
+                return List.of();
+            }
+            return buildMatches(db, prepared);
+        } finally {
+            collapsed.clear(); // never retain a large map between scans
+        }
+    }
+
+    private void runNativeScan(Database db, byte[] bytes) {
+        hs_database_t database = db.getDatabase();
+        // Wrapping a heap array makes JavaCPP copy it into a fresh NATIVE allocation. Free it as soon as the scan
+        // is done instead of leaving it to GC, which cannot see off-heap pressure.
+        BytePointer bytePointer = new BytePointer(ByteBuffer.wrap(bytes));
         try {
             int hsError = hs_scan(database, bytePointer, bytes.length, 0, scratch, handler, null);
             if (hsError != 0) {
                 throw HyperscanException.hsErrorToException(hsError);
             }
-            if (collapsed.isEmpty()) {
-                return List.of();
-            }
-
-            IntUnaryOperator toCharIndex;
-            if (prepared.isAscii()) {
-                toCharIndex = p -> p; // pure ASCII
-            } else {
-                int[] map = prepared.positionMap();
-                toCharIndex = p -> map[p];
-            }
-
-            java.util.Set<Integer> tailIds = TrailingDotStarRewriter.tailIds(db);
-            // per tail-id: sorted start offsets, so a tail never runs into the next occurrence
-            Map<Integer, int[]> startsById = new java.util.HashMap<>();
-            if (!tailIds.isEmpty()) {
-                Map<Integer, List<Integer>> tmp = new java.util.HashMap<>();
-                for (long[] t : collapsed.values()) {
-                    if (tailIds.contains((int) t[0])) {
-                        tmp.computeIfAbsent((int) t[0], k -> new ArrayList<>())
-                                .add(toCharIndex.applyAsInt((int) t[1]));
-                    }
-                }
-                tmp.forEach((k, v) -> startsById.put(k, v.stream().mapToInt(Integer::intValue).sorted().toArray()));
-            }
-
-            List<Match> matches = new ArrayList<>(collapsed.size());
-            for (long[] t : collapsed.values()) {
-                int id = (int) t[0];
-                long to = t[2] < 1 ? 1 : t[2];
-                Expression expression = db.getExpression(id);
-                int startIndex = toCharIndex.applyAsInt((int) t[1]);
-                int endIndex = toCharIndex.applyAsInt((int) to - 1);
-                if (tailIds.contains(id)) {
-                    endIndex = extendToSentenceEnd(input, startIndex, endIndex, startsById.get(id));
-                }
-                String matched = expression.getFlags().contains(ExpressionFlag.SOM_LEFTMOST)
-                        ? input.substring(startIndex, endIndex + 1) : "";
-                matches.add(bytes.length > 0
-                        ? new Match(startIndex, endIndex, matched, expression)
-                        : new Match(0, 0, matched, expression));
-            }
-            return matches;
         } finally {
-            collapsed.clear(); // never retain a large map between scans
+            bytePointer.close();
         }
+    }
+
+    private List<Match> buildMatches(Database db, PreparedText prepared) {
+        String input = prepared.text();
+        boolean emptyInput = prepared.bytes().length == 0;
+        IntUnaryOperator toCharIndex = toCharIndex(prepared);
+        Set<Integer> tailIds = tailIdsFor(db);
+        Map<Integer, int[]> startsById = sortedStartsByTailId(tailIds, toCharIndex);
+
+        List<Match> matches = new ArrayList<>(collapsed.size());
+        for (long[] t : collapsed.values()) {
+            int id = (int) t[0];
+            long to = Math.max(t[2], 1);
+            Expression expression = db.getExpression(id);
+            int startIndex = toCharIndex.applyAsInt((int) t[1]);
+            int endIndex = toCharIndex.applyAsInt((int) to - 1);
+            if (tailIds.contains(id)) {
+                endIndex = extendToSentenceEnd(input, endIndex, startsById.get(id));
+            }
+            String matched = expression.getFlags().contains(ExpressionFlag.SOM_LEFTMOST)
+                    ? input.substring(startIndex, endIndex + 1) : "";
+            matches.add(emptyInput
+                    ? new Match(0, 0, matched, expression)
+                    : new Match(startIndex, endIndex, matched, expression));
+        }
+        return matches;
+    }
+
+    private static IntUnaryOperator toCharIndex(PreparedText prepared) {
+        if (prepared.isAscii()) {
+            return p -> p; // pure ASCII
+        }
+        int[] map = prepared.positionMap();
+        return p -> map[p];
+    }
+
+    /** Per tail-id: sorted start offsets, so a tail never runs into the next occurrence. */
+    private Map<Integer, int[]> sortedStartsByTailId(Set<Integer> tailIds, IntUnaryOperator toCharIndex) {
+        if (tailIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Integer, List<Integer>> grouped = new HashMap<>();
+        for (long[] t : collapsed.values()) {
+            if (tailIds.contains((int) t[0])) {
+                grouped.computeIfAbsent((int) t[0], k -> new ArrayList<>())
+                        .add(toCharIndex.applyAsInt((int) t[1]));
+            }
+        }
+        Map<Integer, int[]> result = new HashMap<>();
+        grouped.forEach((k, v) -> result.put(k, v.stream().mapToInt(Integer::intValue).sorted().toArray()));
+        return result;
+    }
+
+    private Database lastTailDb;
+    private Set<Integer> lastTailIds = Set.of();
+
+    /**
+     * {@link TrailingDotStarRewriter#tailIds} allocates a weak-reference key per call; a scanner scans the same
+     * database for many consecutive texts, so remember the last answer. A database's tail ids never change once
+     * it is built, and the reference is dropped in {@link #close()}.
+     */
+    private Set<Integer> tailIdsFor(Database db) {
+        if (db != lastTailDb) { // NOSONAR identity on purpose: Database.equals compares content, see TrailingDotStarRewriter.TAIL_IDS
+            lastTailIds = TrailingDotStarRewriter.tailIds(db);
+            lastTailDb = db;
+        }
+        return lastTailIds;
     }
 
     /** A rewritten trailing {@code .*} never extends a match by more than this many characters. */
@@ -186,7 +267,7 @@ public class CollapsingScanner implements Closeable {
      *
      * @return the new INCLUSIVE end index
      */
-    private static int extendToSentenceEnd(String text, int start, int prefixEndInclusive, int[] sortedStarts) {
+    private static int extendToSentenceEnd(String text, int prefixEndInclusive, int[] sortedStarts) {
         int limit = Math.min(text.length(), prefixEndInclusive + 1 + MAX_TAIL_CHARS); // exclusive
         if (sortedStarts != null) {
             for (int s : sortedStarts) {
@@ -222,5 +303,7 @@ public class CollapsingScanner implements Closeable {
         }
         scratch = null;
         lastScratchDb = null;
+        lastTailDb = null;
+        lastTailIds = Set.of();
     }
 }

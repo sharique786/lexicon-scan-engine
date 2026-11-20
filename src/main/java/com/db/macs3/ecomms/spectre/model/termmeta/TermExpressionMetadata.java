@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -61,7 +62,7 @@ import java.util.regex.Pattern;
  * instance after it is handed to {@code HyperscanBundleLoader}'s cache — this class and {@link TermEntry} are mutable POJOs
  * (setters included), not immutable records.
  */
-public class TermExpressionMetadata implements Serializable {
+public final class TermExpressionMetadata implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -93,14 +94,22 @@ public class TermExpressionMetadata implements Serializable {
      * such a term is ever discovered. See class Javadoc.
      */
     public List<TermEntry> mandatoryPerAreaTerms() {
-        List<TermEntry> result = new ArrayList<>();
-        for (TermEntry entry : byTermNumber.values()) {
-            if (entry.requiresPerAreaEvaluation() && !entry.hasCoarseExpressionId()) {
-                result.add(entry);
+        List<TermEntry> cached = mandatoryPerAreaTermsCache;
+        if (cached == null) {
+            List<TermEntry> result = new ArrayList<>();
+            for (TermEntry entry : byTermNumber.values()) {
+                if (entry.requiresPerAreaEvaluation() && !entry.hasCoarseExpressionId()) {
+                    result.add(entry);
+                }
             }
+            cached = Collections.unmodifiableList(result);
+            mandatoryPerAreaTermsCache = cached; // benign race: concurrent callers compute the same list
         }
-        return result;
+        return cached;
     }
+
+    /** Computed on first use (was recomputed per message x feature); reset when {@code byTermNumber} is replaced. */
+    private transient volatile List<TermEntry> mandatoryPerAreaTermsCache;
 
     /**
      * @return the feature these terms belong to (verbatim {@code body.lexiconName}).
@@ -127,6 +136,7 @@ public class TermExpressionMetadata implements Serializable {
 
     public void setByTermNumber(Map<Integer, TermEntry> byTermNumber) {
         this.byTermNumber = byTermNumber;
+        this.mandatoryPerAreaTermsCache = null;
     }
 
     /**
@@ -151,7 +161,9 @@ public class TermExpressionMetadata implements Serializable {
         private boolean requiresExclusionCheck;
         private List<Integer> requiredExpressionIds;
         private List<Integer> excludedExpressionIds;
-        private ResolvedPatternTree resolvedPatternTree;
+        // transient: ResolvedPatternTree is deliberately not Serializable (see its class Javadoc) — entries are
+        // built executor-local per partition and never shipped across the wire.
+        private transient ResolvedPatternTree resolvedPatternTree;
 
         /**
          * @param termNumber             parsed from {@code termId}'s {@code ::<n>} suffix —
@@ -291,11 +303,18 @@ public class TermExpressionMetadata implements Serializable {
                 return false;
             }
             TermEntry other = (TermEntry) obj;
+            return sameScalarsAs(other) && sameCollectionsAs(other);
+        }
+
+        private boolean sameScalarsAs(TermEntry other) {
             return termNumber == other.termNumber
                     && requiresExclusionCheck == other.requiresExclusionCheck
                     && Objects.equals(termDescription, other.termDescription)
-                    && Objects.equals(termRegexPattern, other.termRegexPattern)
-                    && Objects.equals(requiredExpressionIds, other.requiredExpressionIds)
+                    && Objects.equals(termRegexPattern, other.termRegexPattern);
+        }
+
+        private boolean sameCollectionsAs(TermEntry other) {
+            return Objects.equals(requiredExpressionIds, other.requiredExpressionIds)
                     && Objects.equals(excludedExpressionIds, other.excludedExpressionIds)
                     && Objects.equals(resolvedPatternTree, other.resolvedPatternTree);
         }
@@ -371,21 +390,25 @@ public class TermExpressionMetadata implements Serializable {
         boolean inlineProximity = inlineAndNot || isInlineCompiledProximity(termResult, leaves, requiresExclusion);
         if (inlineAndNot) {
             validateAndNotShapeHasNoNativeCombination(feature, termResult);
-        } else if (!inlineProximity && termResult.getResolvedPatterns() != null
-                && !termResult.getResolvedPatterns().isBlank()) {
+        } else if (!inlineProximity && !isNullOrBlank(termResult.getResolvedPatterns())) {
             List<String> treeLeaves = withExclusionLeaves(leaves, termResult.getExclusionRegex());
             tree = ResolvedPatternTree.build(feature, termResult.getTermId(), termResult.getResolvedPatterns(), treeLeaves);
             validateShapeAgreement(feature, termResult, tree, requiresExclusion);
         }
 
-        String termRegexPattern = tree != null || inlineProximity
-                ? termResult.getResolvedPatterns()
-                : (leaves == null ? null : String.join(" & ", leaves));
+        String termRegexPattern = displayPattern(termResult, leaves, tree != null || inlineProximity);
 
         RequiredExcludedIds ids = resolveIds(feature, termResult, tree);
 
         return new TermEntry(termNumber, termResult.getTermDescription(), termRegexPattern, requiresExclusion,
                 ids.getRequired(), ids.getExcluded(), tree);
+    }
+
+    private static String displayPattern(TermResultJson termResult, List<String> leaves, boolean useResolved) {
+        if (useResolved) {
+            return termResult.getResolvedPatterns();
+        }
+        return leaves == null ? null : String.join(" & ", leaves);
     }
 
     private static final Pattern PROXIMITY_MARKER = Pattern.compile("\\b(?:NEAR|FOLLOWEDBY)\\{\\d+\\}");
@@ -402,14 +425,28 @@ public class TermExpressionMetadata implements Serializable {
     private static boolean isInlineCompiledProximity(TermResultJson termResult, List<String> leaves,
                                                      boolean requiresExclusion) {
         String resolved = termResult.getResolvedPatterns();
-        return !requiresExclusion
-                && resolved != null && !resolved.isBlank()
-                && leaves != null && leaves.size() == 1
-                && !resolved.trim().equals(leaves.getFirst())
-                && (termResult.getPatternMapping() == null || termResult.getPatternMapping().isBlank())
-                && (termResult.getExclusionRegex() == null || termResult.getExclusionRegex().isEmpty())
-                && termResult.getHyperscanExpressionId() != null
-                && PROXIMITY_MARKER.matcher(resolved).find();
+        if (requiresExclusion || isNullOrBlank(resolved) || !hasSize(leaves, 1)) {
+            return false;
+        }
+        if (resolved.trim().equals(leaves.getFirst())
+                || !isNullOrBlank(termResult.getPatternMapping())
+                || !isNullOrEmpty(termResult.getExclusionRegex())) {
+            return false;
+        }
+        return termResult.getHyperscanExpressionId() != null && PROXIMITY_MARKER.matcher(resolved).find();
+    }
+
+    private static boolean isNullOrBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private static boolean isNullOrEmpty(List<?> list) {
+        return list == null || list.isEmpty();
+    }
+
+    /** True iff {@code list} is non-null and has exactly {@code size} elements. */
+    private static boolean hasSize(List<?> list, int size) {
+        return list != null && list.size() == size;
     }
 
     /**
@@ -428,14 +465,14 @@ public class TermExpressionMetadata implements Serializable {
     private static boolean isInlineCompiledAndNot(String feature, TermResultJson termResult, List<String> leaves,
                                                   boolean requiresExclusion) {
         String resolved = termResult.getResolvedPatterns();
-        if (!requiresExclusion || resolved == null || resolved.isBlank()
+        if (!requiresExclusion || isNullOrBlank(resolved)
                 || ResolvedPatternTree.findTopLevel(resolved.trim(), ResolvedPatternTree.AND_NOT_MARKER) < 0) {
             return false;
         }
-        if (leaves == null || leaves.size() != 1
-                || termResult.getExclusionRegex() == null || termResult.getExclusionRegex().size() != 1
-                || termResult.getRequiredExpressionIds() == null || termResult.getRequiredExpressionIds().size() != 1
-                || termResult.getExcludedExpressionIds() == null || termResult.getExcludedExpressionIds().size() != 1) {
+        if (!hasSize(leaves, 1) || !hasSize(termResult.getExclusionRegex(), 1)) {
+            return false;
+        }
+        if (!hasSize(termResult.getRequiredExpressionIds(), 1) || !hasSize(termResult.getExcludedExpressionIds(), 1)) {
             return false;
         }
         ResolvedPatternTree.ShapeNode shape =

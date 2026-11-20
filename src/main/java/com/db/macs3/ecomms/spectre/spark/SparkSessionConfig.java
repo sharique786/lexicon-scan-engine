@@ -33,6 +33,10 @@ public class SparkSessionConfig {
         SparkSession spark = SparkSession.builder()
                 .appName("spectre-lexicon-tagging-engine")
                 .config(SparkConfigKeys.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+                // Static, so set on the builder. MessageProcessingResult is Kryo-encoded and carries every hit's
+                // matched_text JSON; a message with a large, hit-heavy attachment can exceed Kryo's 64m default
+                // buffer and fail its whole task with "Buffer overflow". 512m is still well under the 2g hard cap.
+                .config(SparkConfigKeys.KRYO_BUFFER_MAX, "512m")
                 .getOrCreate();
         applyJobSpecificSparkConf(spark);
         return spark;
@@ -64,6 +68,8 @@ public class SparkSessionConfig {
      * config that must be set on the builder before {@code getOrCreate()} —
      * see {@link #sparkSession}).
      */
+    static final int MIN_SHUFFLE_PARTITIONS = 1000;
+
     private void applyJobSpecificSparkConf(SparkSession spark) {
         RuntimeConfig conf = spark.conf();
 
@@ -89,8 +95,13 @@ public class SparkSessionConfig {
         // job start instead, floored at 200 so a slow dynamic-allocation ramp-up at startup
         // never produces an under-parallelised shuffle. AQE's coalescePartitions still merges
         // this back down post-shuffle as actual data volume allows.
+        // Floor raised from 200 to 1000 (v3.28): the message<->view join shuffles every message WITH its attachments
+        // (10M messages can be hundreds of GB). Under dynamic allocation defaultParallelism is often tiny at
+        // startup, and 200 partitions then means ~1GB+ per partition — heavy spill and very long scan tasks. AQE
+        // only MERGES partitions after the shuffle (never splits them, except skewed join sides), so starting
+        // higher is safe: small runs are coalesced back down to ~advisoryPartitionSize.
         int defaultParallelism = spark.sparkContext().defaultParallelism();
-        conf.set(SparkConfigKeys.SHUFFLE_PARTITIONS, String.valueOf(Math.max(200, defaultParallelism * 3)));
+        conf.set(SparkConfigKeys.SHUFFLE_PARTITIONS, String.valueOf(Math.max(MIN_SHUFFLE_PARTITIONS, defaultParallelism * 3)));
 
         // Smaller AVRO read-side partitions: the default 128MB max-partition-bytes groups
         // messages into a read partition purely by source-file byte range, with no awareness

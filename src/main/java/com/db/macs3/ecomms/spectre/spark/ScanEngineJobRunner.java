@@ -120,7 +120,7 @@ public class ScanEngineJobRunner {
      *             {@link DataprocConfig} YAML file, read here to obtain the {@link BqTableConfig}
      *             plus the Hyperscan/message GCS locations.
      */
-    public void run(String[] args) throws Exception {
+    public void run(String[] args) throws IOException {
         log.info("Stage [parse arguments/config]: starting");
         Instant stageStart = Instant.now();
         RuntimeArgs runtimeArgs;
@@ -286,7 +286,9 @@ public class ScanEngineJobRunner {
                 : joined;
         Dataset<MessageProcessingResult> results = toScan.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
-                        messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition()),
+                        messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition(),
+                        properties.isSharedBundleCacheEnabled() ? properties.getMaxSharedIdleBundlesPerExecutor() : -1,
+                        java.util.UUID.randomUUID().toString()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).persist(StorageLevel.MEMORY_AND_DISK_SER());
 
@@ -312,6 +314,8 @@ public class ScanEngineJobRunner {
             results.unpersist(false);
             relevantMessageIds.unpersist(false);
             viewRows.unpersist(false);
+            // Free the broadcast copy on every executor too; nothing reads it after the writes.
+            broadcastFeatureToZipPath.destroy();
         }
     }
 
@@ -428,8 +432,14 @@ public class ScanEngineJobRunner {
         Dataset<Row> dedupedRecordAuditRows = recordAuditRows.dropDuplicates(
                 BqColumns.PipelineRecordAudit.RECORD_ID, BqColumns.PipelineRecordAudit.STAGE_NAME,
                 BqColumns.PipelineRecordAudit.EXECUTION_DATE, BqColumns.PipelineRecordAudit.PIPELINE_EXEC_ID);
-        if (!dedupedRecordAuditRows.isEmpty()) {
-            OutputTableWriter.writePipelineRecordAudit(tableConfig, dedupedRecordAuditRows);
+        // Persisted: isEmpty() and the write would otherwise each run the dropDuplicates shuffle over every record.
+        dedupedRecordAuditRows.persist(StorageLevel.MEMORY_AND_DISK());
+        try {
+            if (!dedupedRecordAuditRows.isEmpty()) {
+                OutputTableWriter.writePipelineRecordAudit(tableConfig, dedupedRecordAuditRows);
+            }
+        } finally {
+            dedupedRecordAuditRows.unpersist(false);
         }
     }
 

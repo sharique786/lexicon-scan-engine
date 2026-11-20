@@ -50,13 +50,26 @@ public final class PreparedText {
         int b = 0;
         for (int i = 0, n = s.length(); i < n; ) {
             int cp = s.codePointAt(i);
-            int width = cp < 0x80 ? 1 : cp < 0x800 ? 2
-                    : cp >= 0xD800 && cp <= 0xDFFF ? 1
-                    : cp < 0x10000 ? 3 : 4;
+            int width = utf8Width(cp);
             Arrays.fill(map, b, b + width, i);
             b += width;
             i += Character.charCount(cp);
         }
         return map;
+    }
+
+    /** UTF-8 byte width of a code point; an unpaired surrogate is one '?' byte, like {@code getBytes}. */
+    private static int utf8Width(int cp) {
+        if (cp < 0x80 || isSurrogate(cp)) {
+            return 1;
+        }
+        if (cp < 0x800) {
+            return 2;
+        }
+        return cp < 0x10000 ? 3 : 4;
+    }
+
+    private static boolean isSurrogate(int cp) {
+        return cp >= 0xD800 && cp <= 0xDFFF;
     }
 }

@@ -38,6 +38,34 @@ public class ScanEngineProperties {
     @Value("${sort-partitions-by-feature-set:true}")
     private boolean sortPartitionsByFeatureSet = true;
 
+    /**
+     * Share loaded Hyperscan bundles between all tasks of one executor (see {@code SharedBundleCache}) instead of
+     * every task loading its own copy. False restores per-partition private loading.
+     */
+    private boolean sharedBundleCacheEnabled = true;
+
+    /**
+     * How many bundles NO running task currently uses an executor keeps open for the next task. Each costs native
+     * (off-heap) memory — budget it in {@code spark.executor.memoryOverhead}. Only used when the shared cache is on.
+     */
+    private int maxSharedIdleBundlesPerExecutor = 32;
+
+    public boolean isSharedBundleCacheEnabled() {
+        return sharedBundleCacheEnabled;
+    }
+
+    public void setSharedBundleCacheEnabled(boolean sharedBundleCacheEnabled) {
+        this.sharedBundleCacheEnabled = sharedBundleCacheEnabled;
+    }
+
+    public int getMaxSharedIdleBundlesPerExecutor() {
+        return maxSharedIdleBundlesPerExecutor;
+    }
+
+    public void setMaxSharedIdleBundlesPerExecutor(int maxSharedIdleBundlesPerExecutor) {
+        this.maxSharedIdleBundlesPerExecutor = maxSharedIdleBundlesPerExecutor;
+    }
+
     public boolean isSortPartitionsByFeatureSet() {
         return sortPartitionsByFeatureSet;
     }

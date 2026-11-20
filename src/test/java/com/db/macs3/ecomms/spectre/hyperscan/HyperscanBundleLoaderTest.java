@@ -33,7 +33,7 @@ class HyperscanBundleLoaderTest {
      * not raw native bytes), so a placeholder byte array does not stand in
      * for one; only genuinely compiled+serialized bytes parse successfully.
      */
-    private static byte[] realDbBytes() {
+    static byte[] realDbBytes() {
         try (Database database = Database.compile(new Expression("placeholder", 1))) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             database.save(out);
@@ -43,7 +43,7 @@ class HyperscanBundleLoaderTest {
         }
     }
 
-    private static String simpleMetadataJson(String feature) {
+    static String simpleMetadataJson(String feature) {
         return """
             {"results": [
               {"termId": "%s::1", "compilationStatus": "PASS", "translatedPattern": ["placeholder"],
@@ -53,7 +53,7 @@ class HyperscanBundleLoaderTest {
     }
 
     /** Builds a real zip bundle: {@code <feature>.hdb} + {@code <feature>-compile-results.json} entries. */
-    private static byte[] zipOf(String feature, byte[] hdbBytes, String metadataJson) {
+    static byte[] zipOf(String feature, byte[] hdbBytes, String metadataJson) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try (ZipOutputStream zip = new ZipOutputStream(out)) {
@@ -392,6 +392,55 @@ class HyperscanBundleLoaderTest {
         assertThat(loader.cachedCount()).isEqualTo(1);
         assertThat(callCounts.values()).as("the same feature repeated 3x in the input must download only once")
                 .containsExactly(1);
+    }
+
+    @Test
+    @DisplayName("prefetch() skips features already cached — never downloads one just to throw it away")
+    void prefetchSkipsAlreadyCachedFeatures() {
+        byte[] dbBytes = realDbBytes();
+        String feature = "feat-cached";
+        byte[] zip = zipOf(feature, dbBytes, simpleMetadataJson(feature));
+        List<String> streamOpenCalls = new CopyOnWriteArrayList<>();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            streamOpenCalls.add(path);
+            return new ByteArrayInputStream(zip);
+        };
+        try (HyperscanBundleLoader loader = new HyperscanBundleLoader(
+                Map.of(feature, "gs://bucket/" + feature + ".zip"), streamer, 10)) {
+            Database loaded = loader.loadDatabase(feature);
+
+            loader.prefetch(List.of(feature));
+
+            assertThat(streamOpenCalls).hasSize(1);
+            assertThat(loader.loadDatabase(feature)).isSameAs(loaded);
+        }
+    }
+
+    @Test
+    @DisplayName("prefetch() only fills the cache's remaining free slots, so it never evicts what is already cached")
+    void prefetchFillsOnlyFreeSlots() {
+        byte[] dbBytes = realDbBytes();
+        String[] features = {"slot-1", "slot-2", "slot-3"};
+        Map<String, byte[]> zips = zipsFor(dbBytes, features);
+        Map<String, String> pathMap = new HashMap<>();
+        for (String f : features) pathMap.put(f, "gs://bucket/" + f + ".zip");
+        List<String> streamOpenCalls = new CopyOnWriteArrayList<>();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            streamOpenCalls.add(path);
+            for (String f : features) {
+                if (path.contains(f)) return new ByteArrayInputStream(zips.get(f));
+            }
+            throw new IOException("no fixture for " + path);
+        };
+        try (HyperscanBundleLoader loader = new HyperscanBundleLoader(pathMap, streamer, 2)) {
+            Database first = loader.loadDatabase("slot-1");
+
+            loader.prefetch(List.of("slot-2", "slot-3"));
+
+            assertThat(loader.cachedCount()).isEqualTo(2);
+            assertThat(streamOpenCalls).as("one free slot -> only slot-2 is prefetched").hasSize(2);
+            assertThat(loader.loadDatabase("slot-1")).as("slot-1 was not evicted by prefetch").isSameAs(first);
+        }
     }
 
     @Test

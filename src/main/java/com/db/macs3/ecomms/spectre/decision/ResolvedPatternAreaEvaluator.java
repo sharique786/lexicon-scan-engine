@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 /**
  * Evaluates one {@link ResolvedPatternTree} against ONE scanned area's real
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
  *
  * <h2>Algorithm</h2>
  * <p>Each leaf is matched via {@code Matcher.find()} against the real text;
- * occurrences are mapped to word indices via {@link #wordSpans}. NEAR
+ * occurrences are mapped to word indices via {@link #wordStarts}. NEAR
  * allows either direction while FOLLOWEDBY requires strictly increasing
  * indices; gap is the count of whole "words" strictly between two chosen
  * indices. Every satisfying leaf-occurrence combination is enumerated (not
@@ -50,7 +51,7 @@ import java.util.regex.Pattern;
  * fail {@code gap >= 0}) and {@code FOLLOWEDBY}'s strict-increase check fail
  * outright — a term whose two halves sit right next to each other in the
  * same sentence, the closest possible proximity, would be reported as NOT
- * matching. {@link #wordSpans} instead gives every individual Han
+ * matching. {@link #wordStarts} instead gives every individual Han
  * (Chinese/Japanese Kanji)/Hiragana/Katakana/Hangul (Korean) codepoint its
  * OWN word-span, so {@code NEAR{n}}/{@code FOLLOWEDBY{n}}'s {@code n} counts
  * actual CJK CHARACTERS strictly between two matches, exactly as it counts
@@ -92,20 +93,55 @@ final class ResolvedPatternAreaEvaluator {
      * satisfied anywhere in this text
      */
     static List<MatchSpan> findMatchingSpans(ResolvedPatternTree tree, String areaOriginalText) {
+        return findMatchingSpans(tree, new AreaText(areaOriginalText));
+    }
+
+    /**
+     * Same as {@link #findMatchingSpans(ResolvedPatternTree, String)}, reusing {@code area}'s word index. Build ONE
+     * {@link AreaText} per scanned area and pass it for every term evaluated against that area.
+     */
+    static List<MatchSpan> findMatchingSpans(ResolvedPatternTree tree, AreaText area) {
+        String areaOriginalText = area.text();
         if (areaOriginalText == null || areaOriginalText.isBlank()) {
             return List.of();
         }
         if (tree instanceof ResolvedPatternTree.AndNot andNot) {
-            List<MatchSpan> excludedSpans = findMatchingSpans(andNot.getExcluded(), areaOriginalText);
+            List<MatchSpan> excludedSpans = findMatchingSpans(andNot.getExcluded(), area);
             if (!excludedSpans.isEmpty()) {
                 return List.of();
             }
-            return findMatchingSpans(andNot.getRequired(), areaOriginalText);
+            return findMatchingSpans(andNot.getRequired(), area);
         }
         if (tree instanceof ResolvedPatternTree.And and) {
-            return matchesAnd(and, areaOriginalText);
+            return matchesAnd(and, area);
         }
-        return matchesChain((ResolvedPatternTree.Chain) tree, areaOriginalText);
+        return matchesChain((ResolvedPatternTree.Chain) tree, area);
+    }
+
+    /**
+     * One area's text plus its word index. The index is built lazily (only once some leaf actually occurs in the
+     * text) and then reused by every term and nested group evaluated against the same text. It used to be rebuilt,
+     * as one int[] per word, for every proximity term. Not thread-safe: one per area per message, one task thread.
+     */
+    static final class AreaText {
+        private final String text;
+        private int[] wordStarts; // lazily built; start offset of each word, strictly increasing
+
+        AreaText(String text) {
+            this.text = text;
+        }
+
+        String text() {
+            return text;
+        }
+
+        /** Index of the LAST word whose start is before {@code charOffset}, or -1. */
+        int wordIndexAtOrBefore(int charOffset) {
+            if (wordStarts == null) {
+                wordStarts = wordStarts(text);
+            }
+            return ResolvedPatternAreaEvaluator.wordIndexAtOrBefore(wordStarts, charOffset);
+        }
     }
 
     /**
@@ -115,12 +151,12 @@ final class ResolvedPatternAreaEvaluator {
      * path here), not just one synthetic "matched" span — same
      * {@code regex_match_hit_count}-completeness reasoning as {@link #matchesChain}.
      */
-    private static List<MatchSpan> matchesAnd(ResolvedPatternTree.And and, String areaOriginalText) {
-        List<MatchSpan> leftSpans = findMatchingSpans(and.getLeft(), areaOriginalText);
+    private static List<MatchSpan> matchesAnd(ResolvedPatternTree.And and, AreaText area) {
+        List<MatchSpan> leftSpans = findMatchingSpans(and.getLeft(), area);
         if (leftSpans.isEmpty()) {
             return List.of();
         }
-        List<MatchSpan> rightSpans = findMatchingSpans(and.getRight(), areaOriginalText);
+        List<MatchSpan> rightSpans = findMatchingSpans(and.getRight(), area);
         if (rightSpans.isEmpty()) {
             return List.of();
         }
@@ -130,12 +166,12 @@ final class ResolvedPatternAreaEvaluator {
         return result.size() > MAX_HITS_PER_AREA ? result.subList(0, MAX_HITS_PER_AREA) : result;
     }
 
-    private static List<MatchSpan> matchesChain(ResolvedPatternTree.Chain chain, String areaOriginalText) {
-        List<int[]> words = wordSpans(areaOriginalText);
+    private static List<MatchSpan> matchesChain(ResolvedPatternTree.Chain chain, AreaText area) {
+        String areaOriginalText = area.text();
         List<ResolvedPatternTree> elements = chain.getLeaves();
         List<List<LeafOccurrence>> occurrencesPerElement = new ArrayList<>(elements.size());
         for (ResolvedPatternTree element : elements) {
-            List<LeafOccurrence> occurrences = occurrencesFor(element, areaOriginalText, words);
+            List<LeafOccurrence> occurrences = occurrencesFor(element, area);
             if (occurrences.isEmpty()) {
                 return List.of(); // this element never occurs at all — the whole chain cannot match here
             }
@@ -162,16 +198,15 @@ final class ResolvedPatternAreaEvaluator {
      * its own gap the same way — from the near boundary of one occurrence to the near boundary of the
      * next — regardless of whether that occurrence came from a single leaf or a whole inner group.
      */
-    private static List<LeafOccurrence> occurrencesFor(ResolvedPatternTree element, String areaOriginalText,
-                                                        List<int[]> words) {
+    private static List<LeafOccurrence> occurrencesFor(ResolvedPatternTree element, AreaText area) {
         if (element instanceof ResolvedPatternTree.Leaf leaf) {
-            return findOccurrences(leaf.getPattern(), areaOriginalText, words);
+            return findOccurrences(leaf.getPattern(), area);
         }
-        List<MatchSpan> nestedSpans = findMatchingSpans(element, areaOriginalText);
+        List<MatchSpan> nestedSpans = findMatchingSpans(element, area);
         List<LeafOccurrence> occurrences = new ArrayList<>(nestedSpans.size());
         for (MatchSpan span : nestedSpans) {
-            int startWordIndex = wordIndexAtOrBefore(words, span.getStartCharIndex() + 1);
-            int endWordIndex = wordIndexAtOrBefore(words, span.getEndCharIndex());
+            int startWordIndex = area.wordIndexAtOrBefore(span.getStartCharIndex() + 1);
+            int endWordIndex = area.wordIndexAtOrBefore(span.getEndCharIndex());
             if (startWordIndex >= 0 && endWordIndex >= 0) {
                 occurrences.add(new LeafOccurrence(
                         span.getStartCharIndex(), span.getEndCharIndex(), startWordIndex, endWordIndex));
@@ -240,12 +275,12 @@ final class ResolvedPatternAreaEvaluator {
      * multi-word leaf actually faces the other occurrence, rather than always its END (see that
      * method's Javadoc for why using END on both sides double-counts a multi-word leaf's own words).
      */
-    private static List<LeafOccurrence> findOccurrences(Pattern leaf, String areaOriginalText, List<int[]> words) {
+    private static List<LeafOccurrence> findOccurrences(Pattern leaf, AreaText area) {
         List<LeafOccurrence> occurrences = new ArrayList<>();
-        Matcher matcher = leaf.matcher(areaOriginalText);
+        Matcher matcher = leaf.matcher(area.text());
         while (matcher.find()) {
-            int startWordIndex = wordIndexAtOrBefore(words, matcher.start() + 1);
-            int endWordIndex = wordIndexAtOrBefore(words, matcher.end());
+            int startWordIndex = area.wordIndexAtOrBefore(matcher.start() + 1);
+            int endWordIndex = area.wordIndexAtOrBefore(matcher.end());
             if (startWordIndex >= 0 && endWordIndex >= 0) {
                 occurrences.add(new LeafOccurrence(matcher.start(), matcher.end(), startWordIndex, endWordIndex));
             }
@@ -266,47 +301,41 @@ final class ResolvedPatternAreaEvaluator {
      * character (a surrogate pair — rare, but real) is counted as the ONE
      * character it actually is, not two.
      */
-    private static List<int[]> wordSpans(String text) {
-        List<int[]> spans = new ArrayList<>();
-        int length = text.length();
-        int tokenStart = -1;
-        int index = 0;
-
-        while (index < length) {
+    static int[] wordStarts(String text) {
+        IntStream.Builder starts = IntStream.builder(); // primitive ints, no boxing
+        CharKind previous = CharKind.WHITESPACE;
+        for (int index = 0; index < text.length(); ) {
             int codePoint = text.codePointAt(index);
-            int codePointWidth = Character.charCount(codePoint);
-            tokenStart = addSpans(spans, codePoint, tokenStart, index, codePointWidth);
-            index += codePointWidth;
+            CharKind current = CharKind.of(codePoint);
+            if (current.startsWordAfter(previous)) {
+                starts.add(index);
+            }
+            previous = current;
+            index += Character.charCount(codePoint);
         }
-
-        if (tokenStart >= 0) {
-            spans.add(new int[]{tokenStart, length});
-        }
-        return spans;
+        return starts.build().toArray();
     }
 
-    private static int addSpans(List<int[]> spans, int codePoint, int tokenStart, int index, int codePointWidth) {
-        if (Character.isWhitespace(codePoint)) {
-            tokenStart = closeOpenToken(spans, tokenStart, index);
-        } else if (isCjkCodePoint(codePoint)) {
-            tokenStart = closeOpenToken(spans, tokenStart, index);
-            spans.add(new int[]{index, index + codePointWidth});
-        } else if (tokenStart < 0) {
-            tokenStart = index;
+    /** How one code point takes part in word segmentation — see {@link #wordStarts}. */
+    private enum CharKind {
+        /** Separates words; never part of one. */
+        WHITESPACE,
+        /** A word on its own, one character wide; also ends any open run before it. */
+        CJK,
+        /** Part of a whitespace-delimited run; only the first of a run starts a word. */
+        OTHER;
+
+        static CharKind of(int codePoint) {
+            if (Character.isWhitespace(codePoint)) {
+                return WHITESPACE;
+            }
+            return isCjkCodePoint(codePoint) ? CJK : OTHER;
         }
 
-        return tokenStart;
-    }
-
-    /**
-     * If a word run is currently open ({@code tokenStart >= 0}), closes it as a span ending at
-     * {@code endExclusive}. @return the new {@code tokenStart} value (always {@code -1}).
-     */
-    private static int closeOpenToken(List<int[]> spans, int tokenStart, int endExclusive) {
-        if (tokenStart >= 0) {
-            spans.add(new int[]{tokenStart, endExclusive});
+        /** True iff a code point of this kind, following one of kind {@code previous}, starts a new word. */
+        boolean startsWordAfter(CharKind previous) {
+            return this == CJK || (this == OTHER && previous != OTHER);
         }
-        return -1;
     }
 
     /**
@@ -318,6 +347,9 @@ final class ResolvedPatternAreaEvaluator {
      * counting.
      */
     private static boolean isCjkCodePoint(int codePoint) {
+        if (codePoint < 0x1100) {
+            return false; // no HAN/HIRAGANA/KATAKANA/HANGUL block starts below U+1100 (Hangul Jamo) — skip the script lookup
+        }
         Character.UnicodeScript script = Character.UnicodeScript.of(codePoint);
         return script == Character.UnicodeScript.HAN
                 || script == Character.UnicodeScript.HIRAGANA
@@ -327,20 +359,20 @@ final class ResolvedPatternAreaEvaluator {
 
     /**
      * Binary search (not a linear scan) for the LAST word whose start is
-     * {@code < charOffset} — {@link #wordSpans} always returns spans in
+     * {@code < charOffset} — {@link #wordStarts} always returns spans in
      * increasing start-offset order, so this is safe. Matters more now than
      * it used to: a long CJK message body's {@code words} list has roughly
      * one entry PER CHARACTER (see class Javadoc "CJK"), not per
      * whitespace-token, so a linear scan here would be O(text length) per
      * leaf occurrence rather than O(log text length).
      */
-    private static int wordIndexAtOrBefore(List<int[]> words, int charOffset) {
+    private static int wordIndexAtOrBefore(int[] wordStarts, int charOffset) {
         int low = 0;
-        int high = words.size() - 1;
+        int high = wordStarts.length - 1;
         int result = -1;
         while (low <= high) {
             int mid = (low + high) >>> 1;
-            if (words.get(mid)[0] < charOffset) {
+            if (wordStarts[mid] < charOffset) {
                 result = mid;
                 low = mid + 1;
             } else {

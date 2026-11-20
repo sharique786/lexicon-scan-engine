@@ -26,12 +26,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Scans one {@link FeatureDecisionRow} (one lexicon feature applied to one
@@ -168,6 +168,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         private final String originalText;
         private final HtmlStrippingService.StripResult stripResult;
         private com.gliwka.hyperscan.wrapper.PreparedText prepared; // lazy, built on first scan
+        private ResolvedPatternAreaEvaluator.AreaText evaluatorText; // lazy, shared by every proximity term
 
         MessageAreaText(MatchArea area, String attachmentId, String originalText,
                         HtmlStrippingService.StripResult stripResult) {
@@ -181,6 +182,14 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         String attachmentId() { return attachmentId; }
         String originalText() { return originalText; }
         HtmlStrippingService.StripResult stripResult() { return stripResult; }
+
+        /** The original text with its word index, shared by every proximity term of every feature this message. */
+        ResolvedPatternAreaEvaluator.AreaText evaluatorText() {
+            if (evaluatorText == null) {
+                evaluatorText = new ResolvedPatternAreaEvaluator.AreaText(originalText);
+            }
+            return evaluatorText;
+        }
 
         /** UTF-8 encoding of the stripped text, computed once and reused for every feature scanned. */
         com.gliwka.hyperscan.wrapper.PreparedText prepared() {
@@ -308,7 +317,8 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
                     stripped == null || stripped.isBlank() ? null : areaText.prepared(),
                     database, areaText.area(), areaText.attachmentId(), scanner);
             allRawMatches.addAll(matches);
-            areaScans.add(new AreaScanContext(areaText.area(), areaText.attachmentId(), areaText.originalText(), matches));
+            areaScans.add(new AreaScanContext(areaText.area(), areaText.attachmentId(), areaText.originalText(), matches,
+                    areaText));
         }
 
         return resolveAndEvaluate(feature, metadata, allRawMatches, areaScans);
@@ -325,7 +335,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * than one area.
      */
     private record AreaScanContext(MatchArea area, String attachmentId, String originalText,
-                                   List<RawExpressionMatch> rawMatches) {
+                                   List<RawExpressionMatch> rawMatches, MessageAreaText source) {
     }
 
     /**
@@ -363,11 +373,14 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     }
 
     private static int utf8Bytes(int codePoint) {
-        return codePoint < 0x80 ? 1
-                : codePoint < 0x800 ? 2
-                : codePoint >= 0xD800 && codePoint <= 0xDFFF ? 1 // only an UNPAIRED surrogate reaches here
-                : codePoint < 0x10000 ? 3
-                : 4;
+        boolean unpairedSurrogate = codePoint >= 0xD800 && codePoint <= 0xDFFF; // 1 '?' byte, like getBytes
+        if (codePoint < 0x80 || unpairedSurrogate) {
+            return 1;
+        }
+        if (codePoint < 0x800) {
+            return 2;
+        }
+        return codePoint < 0x10000 ? 3 : 4;
     }
 
     /**
@@ -400,10 +413,28 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
         Set<Integer> matchedExpressionIds = matchesByExpressionId.keySet();
         Map<Integer, TermEntry> termsToEvaluate = collectTermsToEvaluate(feature, metadata, matchedExpressionIds);
 
+        // Each area's matched-id set is needed by every per-area term; build it once per area here (only if some
+        // term needs it), not once per term x area. Index-aligned with areaScans.
+        List<Set<Integer>> idsByArea = null;
+        for (TermEntry entry : termsToEvaluate.values()) {
+            if (entry.requiresPerAreaEvaluation()) {
+                idsByArea = new ArrayList<>(areaScans.size());
+                for (AreaScanContext areaScan : areaScans) {
+                    Set<Integer> ids = new HashSet<>();
+                    for (RawExpressionMatch raw : areaScan.rawMatches()) {
+                        ids.add(raw.getExpressionId());
+                    }
+                    idsByArea.add(ids);
+                }
+                break;
+            }
+        }
+
         List<TermMatchResult> results = new ArrayList<>();
         for (TermEntry entry : termsToEvaluate.values()) {
             TermMatchResult termMatchResult = buildTermMatchResult(
-                    feature, entry, matchedExpressionIds, matchesByExpressionId, patternTextByExpressionId, areaScans);
+                    feature, entry, matchedExpressionIds, matchesByExpressionId, patternTextByExpressionId, areaScans,
+                    idsByArea);
             if (termMatchResult != null) {
                 results.add(termMatchResult);
             }
@@ -447,9 +478,10 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     private TermMatchResult buildTermMatchResult(String feature, TermEntry entry, Set<Integer> matchedExpressionIds,
                                                  Map<Integer, List<AreaMatch>> matchesByExpressionId,
                                                  Map<Integer, String> patternTextByExpressionId,
-                                                 List<AreaScanContext> areaScans) {
+                                                 List<AreaScanContext> areaScans,
+                                                 List<Set<Integer>> idsByArea) {
         List<AreaMatch> combined = entry.requiresPerAreaEvaluation()
-                ? resolveAndEvaluatePerArea(entry, matchedExpressionIds, areaScans)
+                ? resolveAndEvaluatePerArea(entry, matchedExpressionIds, areaScans, idsByArea)
                 : resolveAndEvaluateCrossArea(feature, entry, matchedExpressionIds, matchesByExpressionId);
         if (combined.isEmpty()) {
             return null;
@@ -512,18 +544,20 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      */
     private List<AreaMatch> resolveAndEvaluatePerArea(TermEntry entry,
                                                       Set<Integer> matchedExpressionIds,
-                                                      List<AreaScanContext> areaScans) {
+                                                      List<AreaScanContext> areaScans,
+                                                      List<Set<Integer>> idsByArea) {
         if (entry.hasCoarseExpressionId() && !matchedExpressionIds.containsAll(entry.getRequiredExpressionIds())) {
             return List.of(); // global pre-filter: at least one required leaf never matched anywhere at all
         }
 
         List<AreaMatch> combined = new ArrayList<>();
-        for (AreaScanContext areaScan : areaScans) {
-            if (!canSatisfyCondition(entry, areaScan)) {
+        for (int i = 0; i < areaScans.size(); i++) {
+            AreaScanContext areaScan = areaScans.get(i);
+            if (!canSatisfyCondition(entry, areaScan, idsByArea.get(i))) {
                 continue;
             }
             List<MatchSpan> spans = ResolvedPatternAreaEvaluator.findMatchingSpans(
-                    entry.getResolvedPatternTree(), areaScan.originalText());
+                    entry.getResolvedPatternTree(), areaScan.source().evaluatorText());
             for (MatchSpan span : spans) {
                 combined.add(new AreaMatch(areaScan.area(), areaScan.attachmentId(), span));
             }
@@ -534,16 +568,14 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
     /**
      * @return false if this area's text is empty, or (pre-filter) is missing a required leaf entirely.
      */
-    private static boolean canSatisfyCondition(TermEntry entry, AreaScanContext areaScan) {
+    private static boolean canSatisfyCondition(TermEntry entry, AreaScanContext areaScan,
+                                               Set<Integer> areaExpressionIds) {
         if (areaScan.originalText() == null || areaScan.originalText().isBlank()) {
             return false;
         }
         if (!entry.hasCoarseExpressionId()) {
             return true;
         }
-        Set<Integer> areaExpressionIds = areaScan.rawMatches().stream()
-                .map(RawExpressionMatch::getExpressionId)
-                .collect(Collectors.toSet());
         return areaExpressionIds.containsAll(entry.getRequiredExpressionIds());
     }
 }

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -402,6 +404,29 @@ class TermExpressionMetadataTest {
             assertThat(entry.getTermNumber()).isEqualTo(8);
             assertThat(entry.hasCoarseExpressionId()).isFalse();
             assertThat(entry.requiresPerAreaEvaluation()).isTrue();
+        }
+
+        @Test
+        @DisplayName("mandatoryPerAreaTerms() is computed once, read-only, and recomputed after setByTermNumber")
+        void mandatoryPerAreaTermsIsCachedAndResetOnReplace() {
+            String json = """
+                {"results": [
+                  {"termId": "%s::8", "compilationStatus": "PASS",
+                   "regexPattern": ["reqleaf", "exclleaf"],
+                   "requiresExclusionCheck": true,
+                   "resolvedPatterns": "reqleaf AND NOT (exclleaf)"}
+                ]}
+                """.formatted(FEATURE);
+            TermExpressionMetadata meta = TermExpressionMetadata.parse(FEATURE, json);
+
+            List<TermEntry> first = meta.mandatoryPerAreaTerms();
+            assertThat(meta.mandatoryPerAreaTerms()).as("same cached list on the second call").isSameAs(first);
+            assertThatThrownBy(() -> first.add(first.getFirst()))
+                    .as("callers share the cached list, so it must be read-only")
+                    .isInstanceOf(UnsupportedOperationException.class);
+
+            meta.setByTermNumber(java.util.Map.of());
+            assertThat(meta.mandatoryPerAreaTerms()).as("cache dropped when the term map is replaced").isEmpty();
         }
 
         private int anythingUnused() {

@@ -9,6 +9,7 @@ final class SparkConfigKeys {
     }
 
     static final String SERIALIZER = "spark.serializer";
+    static final String KRYO_BUFFER_MAX = "spark.kryoserializer.buffer.max";
     static final String ADAPTIVE_ENABLED = "spark.sql.adaptive.enabled";
     static final String ADAPTIVE_COALESCE_PARTITIONS_ENABLED = "spark.sql.adaptive.coalescePartitions.enabled";
     static final String ADAPTIVE_SKEW_JOIN_ENABLED = "spark.sql.adaptive.skewJoin.enabled";

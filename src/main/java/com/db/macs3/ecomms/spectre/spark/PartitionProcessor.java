@@ -7,6 +7,7 @@ import com.db.macs3.ecomms.spectre.decision.FeatureGroupingService;
 import com.db.macs3.ecomms.spectre.decision.FeatureScanOrchestrator;
 import com.db.macs3.ecomms.spectre.gcs.GcsClient;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader;
+import com.db.macs3.ecomms.spectre.hyperscan.SharedBundleCache;
 import com.db.macs3.ecomms.spectre.model.decision.FeatureGroup;
 import com.db.macs3.ecomms.spectre.model.decision.MessageEvaluationResult;
 import com.db.macs3.ecomms.spectre.model.feature.FeatureDefinition;
@@ -85,11 +86,17 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     /**
      * See class Javadoc "Bounded lookahead prefetch" — deliberately small and fixed, not partition-sized.
      */
-    private static final int PREFETCH_LOOKAHEAD_ROWS = 200;
+    // 64, not more: every buffered row holds its whole message (attachments included) on the heap at once, and
+    // after the feature-set sort the first rows of a partition mostly share one feature set anyway.
+    private static final int PREFETCH_LOOKAHEAD_ROWS = 64;
 
     private final org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast;
     private final Long maxAttachmentSizeBytes;
     private final int maxCachedDatabasesPerPartition;
+    /** Idle-bundle cap of the executor-wide {@code SharedBundleCache}; negative = no sharing (private loads). */
+    private final int maxSharedIdleBundles;
+    /** Unique per job run — namespaces shared-cache keys so two runs in one JVM never mix bundles. */
+    private final String runId;
 
     /**
      * @param featureToZipPathBroadcast a Spark {@link org.apache.spark.broadcast.Broadcast} of the
@@ -99,9 +106,22 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
      */
     public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
                               Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition) {
+        this(featureToZipPathBroadcast, maxAttachmentSizeBytes, maxCachedDatabasesPerPartition, -1, "");
+    }
+
+    /**
+     * @param maxSharedIdleBundles &gt;= 0 shares bundles between the executor's tasks through
+     *                             {@link SharedBundleCache#forExecutor}; negative loads privately per partition
+     * @param runId                unique per job run (see field)
+     */
+    public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
+                              Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition,
+                              int maxSharedIdleBundles, String runId) {
         this.featureToZipPathBroadcast = featureToZipPathBroadcast;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
         this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
+        this.maxSharedIdleBundles = maxSharedIdleBundles;
+        this.runId = runId;
     }
 
     @Override
@@ -116,8 +136,10 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         HyperscanBundleLoader bundleLoader = null;
         FeatureScanOrchestrator orchestrator = null;
         try {
-            bundleLoader = new HyperscanBundleLoader(
-                    featureToZipPathBroadcast.value(), gcsClient::openStream, maxCachedDatabasesPerPartition);
+            SharedBundleCache sharedCache = maxSharedIdleBundles >= 0
+                    ? SharedBundleCache.forExecutor(maxSharedIdleBundles) : null;
+            bundleLoader = new HyperscanBundleLoader(featureToZipPathBroadcast.value(), gcsClient::openStream,
+                    maxCachedDatabasesPerPartition, sharedCache, runId);
             orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes);
 
             // Safety net: StreamingResults only closes on exhaustion or an exception thrown from next().
