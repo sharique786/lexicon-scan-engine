@@ -50,6 +50,20 @@ public class ScanEngineProperties {
      */
     private int maxSharedIdleBundlesPerExecutor = 32;
 
+    /**
+     * Maximum number of characters a disclaimer-style term ending in {@code .*} is extended by after its matched
+     * prefix (the tail otherwise runs to the end of the line) — see {@code CollapsingScanner}.
+     */
+    private int maxTailChars = com.gliwka.hyperscan.wrapper.CollapsingScanner.DEFAULT_MAX_TAIL_CHARS;
+
+    public int getMaxTailChars() {
+        return maxTailChars;
+    }
+
+    public void setMaxTailChars(int maxTailChars) {
+        this.maxTailChars = maxTailChars;
+    }
+
     public boolean isSharedBundleCacheEnabled() {
         return sharedBundleCacheEnabled;
     }

@@ -68,7 +68,8 @@ class CollapsingScannerTest {
 
     @Test
     void repeatedDisclaimer_threeOccurrences_threeShortMatches() throws Exception {
-        String text = FILLER + DISCLAIMER + " " + FILLER + DISCLAIMER + " " + FILLER + DISCLAIMER;
+        // each disclaimer ends its line, so each tail stops at the newline
+        String text = FILLER + DISCLAIMER + "\n" + FILLER + DISCLAIMER + "\n" + FILLER + DISCLAIMER;
 
         try (Database db = compile("This email may contain confidential.*");
              CollapsingScanner scanner = new CollapsingScanner()) {
@@ -87,7 +88,7 @@ class CollapsingScannerTest {
     void hugeBodyWithManyDisclaimers_staysBounded() throws Exception {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 2_000; i++) {
-            sb.append(FILLER.repeat(20)).append(DISCLAIMER).append(' ');
+            sb.append(FILLER.repeat(20)).append(DISCLAIMER).append('\n');
         }
         try (Database db = compile("This email may contain confidential.*");
              CollapsingScanner scanner = new CollapsingScanner()) {
@@ -99,6 +100,76 @@ class CollapsingScannerTest {
     }
 
     @Test
+    void tail_doesNotStopAtSentencePunctuation_onlyAtNewline() throws Exception {
+        String text = "Hi. This email may contain confidential information. Do not forward! Ok? Thanks\nNext line.";
+        try (Database db = compile("This email may contain confidential.*");
+             CollapsingScanner scanner = new CollapsingScanner()) {
+            scanner.allocScratch(db);
+            List<Match> matches = scanner.scan(db, text);
+            assertEquals(1, matches.size());
+            assertEquals("This email may contain confidential information. Do not forward! Ok? Thanks",
+                    matches.get(0).getMatchedString());
+        }
+    }
+
+    @Test
+    void tail_stopsAtCarriageReturn() throws Exception {
+        String text = "This email may contain confidential information.\r\nRegards";
+        try (Database db = compile("This email may contain confidential.*");
+             CollapsingScanner scanner = new CollapsingScanner()) {
+            scanner.allocScratch(db);
+            List<Match> matches = scanner.scan(db, text);
+            assertEquals(1, matches.size());
+            assertEquals(DISCLAIMER, matches.get(0).getMatchedString());
+        }
+    }
+
+    @Test
+    void tail_runsToEndOfText_whenNoNewline() throws Exception {
+        String text = "This email may contain confidential information. Please delete it. Thank you";
+        try (Database db = compile("This email may contain confidential.*");
+             CollapsingScanner scanner = new CollapsingScanner()) {
+            scanner.allocScratch(db);
+            assertEquals(text, scanner.scan(db, text).get(0).getMatchedString());
+        }
+    }
+
+    @Test
+    void defaultMaxTailChars_is1000() {
+        assertEquals(1000, CollapsingScanner.DEFAULT_MAX_TAIL_CHARS);
+        try (CollapsingScanner scanner = new CollapsingScanner()) {
+            assertEquals(1000, scanner.maxTailChars());
+        }
+    }
+
+    @Test
+    void configuredMaxTailChars_capsTheTail() throws Exception {
+        String prefix = "This email may contain confidential";
+        String text = prefix + " " + "x".repeat(2_000);
+        try (Database db = compile("This email may contain confidential.*")) {
+            try (CollapsingScanner scanner = new CollapsingScanner(10)) {
+                scanner.allocScratch(db);
+                assertEquals(prefix + " xxxxxxxxx", scanner.scan(db, text).get(0).getMatchedString());
+            }
+            try (CollapsingScanner scanner = new CollapsingScanner(0)) {
+                scanner.allocScratch(db);
+                assertEquals(prefix, scanner.scan(db, text).get(0).getMatchedString());
+            }
+            try (CollapsingScanner scanner = new CollapsingScanner()) {
+                scanner.allocScratch(db);
+                assertEquals(prefix.length() + 1000, scanner.scan(db, text).get(0).getMatchedString().length());
+            }
+        }
+    }
+
+    @Test
+    void negativeMaxTailChars_isRejected() {
+        int before = CollapsingScanner.liveCount();
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> new CollapsingScanner(-1));
+        assertEquals(before, CollapsingScanner.liveCount()); // nothing allocated/counted
+    }
+
+    @Test
     void unterminatedTail_isCappedAndStopsAtNextOccurrence() throws Exception {
         String text = "This email may contain confidential " + "x".repeat(2_000)
                 + " This email may contain confidential tail";
@@ -107,7 +178,7 @@ class CollapsingScannerTest {
             scanner.allocScratch(db);
             List<Match> matches = scanner.scan(db, text);
             assertEquals(2, matches.size());
-            assertTrue(matches.get(0).getMatchedString().length() <= 36 + CollapsingScanner.MAX_TAIL_CHARS);
+            assertTrue(matches.get(0).getMatchedString().length() <= 36 + CollapsingScanner.DEFAULT_MAX_TAIL_CHARS);
             assertEquals("This email may contain confidential tail", matches.get(1).getMatchedString());
         }
     }

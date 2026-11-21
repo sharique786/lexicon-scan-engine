@@ -1135,9 +1135,115 @@ class FeatureScanOrchestratorTest {
             // Same values HtmlStrippingServiceTest.WorkedExample derives and asserts independently
             // via java.util.regex against HtmlStrippingService.strip directly — reproduced here
             // end-to-end through the real orchestrator + real Hyperscan.
-            assertThat(span.getMatchedText()).isEqualTo("Enjoy Happy");
+            // the "</p>\n<p>" run keeps its line break, collapsed to one "\n"
+            assertThat(span.getMatchedText()).isEqualTo("Enjoy\nHappy");
             assertThat(span.getStartCharIndex()).isEqualTo(3);
             assertThat(span.getEndCharIndex()).isEqualTo(21);
+        }
+    }
+
+    // ── matched_text positions with retained (collapsed) newlines / whitespace ───
+    //
+    // matched_text's {"text","start","length"} for the detail tables comes from MatchSpan:
+    // text = the CLEAN (stripped) matched string, start/length = the ORIGINAL-text span via the
+    // OffsetMap. These tests pin that a collapsed newline/whitespace run never shifts start/length.
+
+    private static Expression somExpr(String pattern, int id) {
+        return new Expression(pattern,
+                EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.CASELESS, ExpressionFlag.UTF8), id);
+    }
+
+    private static Map<String, com.db.macs3.ecomms.spectre.model.match.MatchSpan> spansByTermId(
+            List<TermMatchResult> results) {
+        Map<String, com.db.macs3.ecomms.spectre.model.match.MatchSpan> byTerm = new java.util.TreeMap<>();
+        for (TermMatchResult r : results) {
+            assertThat(r.getMatches()).as(r.getTermId()).hasSize(1);
+            byTerm.put(r.getTermId(), r.getMatches().getFirst().getSpan());
+        }
+        return byTerm;
+    }
+
+    @Test
+    void emailChannel_multiLineBody_matchPositionsResolveToOriginalText() {
+        String feature = "lex_lines";
+        String msgText = "Hello \u00A0 team,\r\n\r\n<p>Please   review.</p>\n\n\n"
+                + "This email may contain confidential information. Do not forward!\n \n"
+                + "Regards";
+        String p1 = "Please\\s+review";
+        String p2 = "This email may contain confidential.*";
+        String p3 = "team\\s+Please";
+        byte[] dbBytes = compileAndSerialize(somExpr(p1, 1), somExpr(p2, 2), somExpr(p3, 3));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_lines.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, p1.replace("\\", "\\\\")),
+                        simpleTermJson(feature, 2, p2),
+                        simpleTermJson(feature, 3, p3.replace("\\", "\\\\"))));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-201",
+                    new MessageSource("email", "src", "sys", "conv-1"),
+                    new MessageContent(null, msgText, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            var spans = spansByTermId(orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body"))));
+            assertThat(spans).hasSize(3);
+
+            // whitespace run collapsed inside the match: text is clean, start/length cover the original
+            var review = spans.get(feature + "::1");
+            assertThat(review.getMatchedText()).isEqualTo("Please review");
+            assertThat(review.getStartCharIndex()).isEqualTo(msgText.indexOf("Please"));
+            assertThat(msgText.substring(review.getStartCharIndex(), review.getEndCharIndex()))
+                    .isEqualTo("Please   review");
+
+            // disclaimer tail stops at the retained newline; start AND length are exact in the original,
+            // even though two collapsed newline runs ("\r\n\r\n<p>", "</p>\n\n\n") precede it
+            var disclaimer = spans.get(feature + "::2");
+            String expected = "This email may contain confidential information. Do not forward!";
+            assertThat(disclaimer.getMatchedText()).isEqualTo(expected);
+            assertThat(disclaimer.getStartCharIndex()).isEqualTo(msgText.indexOf(expected));
+            assertThat(disclaimer.length()).isEqualTo(expected.length());
+            assertThat(msgText.substring(disclaimer.getStartCharIndex(), disclaimer.getEndCharIndex()))
+                    .isEqualTo(expected);
+
+            // a match spanning a collapsed newline run: text holds ONE "\n", the original span holds the whole run
+            var crossLine = spans.get(feature + "::3");
+            assertThat(crossLine.getMatchedText()).isEqualTo("team\nPlease");
+            assertThat(crossLine.getStartCharIndex()).isEqualTo(msgText.indexOf("team"));
+            assertThat(msgText.substring(crossLine.getStartCharIndex(), crossLine.getEndCharIndex()))
+                    .isEqualTo("team,\r\n\r\n<p>Please");
+        }
+    }
+
+    @Test
+    void chatChannel_cellsOnSeparateLines_matchPositionsResolveToMsgText() {
+        String feature = "lex_chat_lines";
+        String msgText = "<table>"
+                + "<tr><td class=\"company_name\">This email may contain confidential X</td></tr>"
+                + "<tr><td class=\"message-text-cell message_text\">Hi   there\n\n</td></tr>"
+                + "<tr><td class=\"message-text-cell message_text\">This email may contain confidential info. Bye</td></tr>"
+                + "<tr><td class=\"message-text-cell message_text\">next message</td></tr>"
+                + "</table>";
+        String p1 = "This email may contain confidential.*";
+        byte[] dbBytes = compileAndSerialize(somExpr(p1, 1));
+        HyperscanBundleLoader loader = bundleLoader(feature, "gs://bucket/lex_chat_lines.zip", dbBytes,
+                wrapResults(simpleTermJson(feature, 1, p1)));
+
+        try (FeatureScanOrchestrator orchestrator = new FeatureScanOrchestrator(loader, null)) {
+            ScanMessage message = new ScanMessage("msg-202",
+                    new MessageSource("chat", "src", "sys", "conv-1"),
+                    new MessageContent(null, msgText, null),
+                    List.of(), new MessageProcessing(LocalDate.of(2026, 8, 16), "10"), "ds1", true);
+            var spans = spansByTermId(orchestrator.scannerFor(message)
+                    .scan(row("1", feature, defJson(feature, "Message Body"))));
+
+            // only the message_text cell matches (company_name is never scanned); the tail stops at the
+            // newline inserted between cells instead of running into "next message"
+            var disclaimer = spans.get(feature + "::1");
+            String expected = "This email may contain confidential info. Bye";
+            assertThat(disclaimer.getMatchedText()).isEqualTo(expected);
+            int expectedStart = msgText.indexOf(expected, msgText.indexOf("message_text"));
+            assertThat(disclaimer.getStartCharIndex()).isEqualTo(expectedStart);
+            assertThat(msgText.substring(disclaimer.getStartCharIndex(), disclaimer.getEndCharIndex()))
+                    .isEqualTo(expected);
         }
     }
 

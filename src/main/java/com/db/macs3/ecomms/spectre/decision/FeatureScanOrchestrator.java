@@ -134,7 +134,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
 
     private final HyperscanBundleLoader bundleLoader;
     private final Long maxAttachmentSizeBytes;
-    private final CollapsingScanner scanner = new CollapsingScanner();
+    private final CollapsingScanner scanner;
 
     /**
      * @param bundleLoader           this partition's shared, cached zip-bundle loader — see
@@ -144,8 +144,17 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      *                               skipped entirely (not scanned, not an error)
      */
     public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes) {
+        this(bundleLoader, maxAttachmentSizeBytes, CollapsingScanner.DEFAULT_MAX_TAIL_CHARS);
+    }
+
+    /**
+     * @param maxTailChars cap on how far a term ending in {@code .*} (e.g. a disclaimer) is extended past its
+     *                     prefix; the tail otherwise stops at the end of the line — see {@link CollapsingScanner}
+     */
+    public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes, int maxTailChars) {
         this.bundleLoader = bundleLoader;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
+        this.scanner = new CollapsingScanner(maxTailChars);
     }
 
     /**

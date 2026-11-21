@@ -25,8 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * offset (memory blow-up) and (b) attribute the whole tail of the text to the FIRST occurrence's start, so
  * a second/third occurrence of the same disclaimer is never reported separately. The fix is to compile the
  * pattern WITHOUT the trailing {@code .*}: Hyperscan then reports exactly one match per occurrence of the
- * prefix. {@link CollapsingScanner} extends each such match to the end of its sentence (see
- * {@link CollapsingScanner#MAX_TAIL_CHARS}) — it knows which ids to extend from {@link #tailIds}.
+ * prefix. {@link CollapsingScanner} extends each such match to the end of its line (see
+ * {@link CollapsingScanner#DEFAULT_MAX_TAIL_CHARS}) — it knows which ids to extend from {@link #tailIds}.
  *
  * <p>Only plain (non-{@code COMBINATION}, non-{@code QUIET}) expressions are rewritten; their pattern text
  * as seen on a {@link Match} no longer carries the {@code .*}.

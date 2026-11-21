@@ -24,19 +24,20 @@ class HtmlStrippingServiceTest {
         private final Pattern PATTERN = Pattern.compile("Enjoy(?:\\s+\\S+){0,2}\\s+Happy");
 
         @Test
-        @DisplayName("strips to ' Enjoy Happy Birthday ' — tags/whitespace runs collapse to one space each")
+        @DisplayName("strips to ' Enjoy\\nHappy Birthday ' — each tag/whitespace run collapses to one space, "
+                     + "or one newline when it contains a line break")
         void stripsCorrectly() {
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(ORIGINAL);
-            assertThat(result.strippedText()).isEqualTo(" Enjoy Happy Birthday ");
+            assertThat(result.strippedText()).isEqualTo(" Enjoy\nHappy Birthday ");
         }
 
         @Test
-        @DisplayName("matchedText is 'Enjoy Happy', matching the requirement exactly")
+        @DisplayName("matchedText is 'Enjoy\\nHappy' — \\s still matches the retained newline")
         void matchedTextIsCorrect() {
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(ORIGINAL);
             Matcher matcher = PATTERN.matcher(result.strippedText());
             assertThat(matcher.find()).isTrue();
-            assertThat(matcher.group()).isEqualTo("Enjoy Happy");
+            assertThat(matcher.group()).isEqualTo("Enjoy\nHappy");
         }
 
         @Test
@@ -63,21 +64,71 @@ class HtmlStrippingServiceTest {
     }
 
     @Nested
-    @DisplayName("clean-text normalisation: newlines, tabs, commas and repeated whitespace -> one space")
+    @DisplayName("clean-text normalisation: tabs, commas and repeated whitespace -> one space; line breaks -> one newline")
     class AttachmentTextNormalisation {
 
         @Test
-        @DisplayName("newlines, tabs, CRLF and runs of spaces each collapse to exactly one space")
+        @DisplayName("tabs and runs of spaces collapse to one space; any run with a line break collapses to one newline")
         void whitespaceKindsCollapse() {
             assertThat(HtmlStrippingService.strip("a\nb\tc\r\nd   e \n\t f").strippedText())
-                    .isEqualTo("a b c d e f");
+                    .isEqualTo("a\nb c\nd e\nf");
+        }
+
+        @Test
+        @DisplayName("multiple whitespace characters (spaces, tabs, form feeds, no-break spaces) become ONE space")
+        void multipleWhitespacesCollapseToOne() {
+            assertThat(HtmlStrippingService.strip("a     b").strippedText()).isEqualTo("a b");
+            assertThat(HtmlStrippingService.strip("a \t \t b").strippedText()).isEqualTo("a b");
+            assertThat(HtmlStrippingService.strip("a\f\u000Bb").strippedText()).isEqualTo("a b");
+            assertThat(HtmlStrippingService.strip("a  b").strippedText()).isEqualTo("a b");   // no-break space
+            assertThat(HtmlStrippingService.strip("a    b").strippedText()).isEqualTo("a b"); // figure/narrow/em
+            assertThat(HtmlStrippingService.strip("   leading and trailing   ").strippedText())
+                    .isEqualTo(" leading and trailing ");
+        }
+
+        @Test
+        @DisplayName("a no-break space next to a newline merges into the ONE newline")
+        void noBreakSpaceMergesWithNewline() {
+            assertThat(HtmlStrippingService.strip("end \n \nnext").strippedText()).isEqualTo("end\nnext");
+        }
+
+        @Test
+        @DisplayName("consecutive newlines (with or without whitespace/CR between them) become ONE newline")
+        void consecutiveNewlinesCollapseToOne() {
+            assertThat(HtmlStrippingService.strip("line1\n\n\nline2").strippedText()).isEqualTo("line1\nline2");
+            assertThat(HtmlStrippingService.strip("line1\r\n\r\nline2").strippedText()).isEqualTo("line1\nline2");
+            assertThat(HtmlStrippingService.strip("line1 \n \t\n  line2").strippedText()).isEqualTo("line1\nline2");
+            assertThat(HtmlStrippingService.strip("line1\rline2").strippedText()).isEqualTo("line1\nline2");
+            assertThat(HtmlStrippingService.strip("\n\nline1\n").strippedText()).isEqualTo("\nline1\n");
+        }
+
+        @Test
+        @DisplayName("a newline merges with adjacent tags/commas into one newline; tags alone still become a space")
+        void newlineMergesWithTagsAndCommas() {
+            assertThat(HtmlStrippingService.strip("<p>Hello</p>\n\n<p>world</p>").strippedText())
+                    .isEqualTo(" Hello\nworld ");
+            assertThat(HtmlStrippingService.strip("one,\n,two").strippedText()).isEqualTo("one\ntwo");
+            assertThat(HtmlStrippingService.strip("Hello<br>world").strippedText()).isEqualTo("Hello world");
+            // a newline INSIDE a tag (between attributes) is not a line break of the text
+            assertThat(HtmlStrippingService.strip("Hello<span\nclass=\"x\">world").strippedText())
+                    .isEqualTo("Hello world");
+        }
+
+        @Test
+        @DisplayName("an email disclaimer keeps its own line, so a following line stays separate")
+        void disclaimerLineStaysSeparate() {
+            String body = "Hi Bob,\n\nSee attached.\n\n\nThis email may contain confidential information. Do not forward.\n"
+                    + "Deutsche Bank AG";
+            assertThat(HtmlStrippingService.strip(body).strippedText()).isEqualTo(
+                    "Hi Bob\nSee attached.\nThis email may contain confidential information. Do not forward.\n"
+                            + "Deutsche Bank AG");
         }
 
         @Test
         @DisplayName("a comma becomes a space, and merges with adjacent whitespace/commas/tags into ONE space")
         void commasCollapse() {
             assertThat(HtmlStrippingService.strip("keep,in,the market").strippedText()).isEqualTo("keep in the market");
-            assertThat(HtmlStrippingService.strip("one,\n  two ,, three").strippedText()).isEqualTo("one two three");
+            assertThat(HtmlStrippingService.strip("one,  two ,, three").strippedText()).isEqualTo("one two three");
             assertThat(HtmlStrippingService.strip("<p>Hello</p>, <p>world</p>").strippedText())
                     .isEqualTo(" Hello world ");
         }
@@ -92,11 +143,19 @@ class HtmlStrippingServiceTest {
         }
 
         @Test
-        @DisplayName("a term needing a space between words now matches across a comma or newline")
+        @DisplayName("a \\s-based proximity term still matches across a comma or newline")
         void proximityPatternMatchesAcrossCommaAndNewline() {
-            Pattern pattern = Pattern.compile("keep(?:\\s+\\S+){0,3}\\s+mouth shut");
+            Pattern pattern = Pattern.compile("keep(?:\\s+\\S+){0,3}\\s+mouth\\s+shut");
             assertThat(pattern.matcher(HtmlStrippingService.strip("keep,\nin the market, mouth\nshut").strippedText())
                     .find()).isTrue();
+        }
+
+        @Test
+        @DisplayName("a leaf written with a LITERAL space no longer matches words split across two lines")
+        void literalSpaceLeafDoesNotMatchAcrossNewline() {
+            Pattern pattern = Pattern.compile("mouth shut");
+            assertThat(pattern.matcher(HtmlStrippingService.strip("mouth\nshut").strippedText()).find()).isFalse();
+            assertThat(pattern.matcher(HtmlStrippingService.strip("mouth,\tshut").strippedText()).find()).isTrue();
         }
 
         @Test
@@ -104,7 +163,10 @@ class HtmlStrippingServiceTest {
         void offsetMapStaysCorrect() {
             String original = "alpha,,  beta\n\ngamma";
             HtmlStrippingService.StripResult result = HtmlStrippingService.strip(original);
-            assertThat(result.strippedText()).isEqualTo("alpha beta gamma");
+            assertThat(result.strippedText()).isEqualTo("alpha beta\ngamma");
+            // the collapsed newline maps to the start of its run in the original
+            assertThat(result.offsetMap().toOriginal(result.strippedText().indexOf('\n')))
+                    .isEqualTo(original.indexOf('\n'));
             int betaStart = result.strippedText().indexOf("beta");
             int betaEnd = betaStart + "beta".length();
             assertThat(original.substring(result.offsetMap().toOriginal(betaStart),
@@ -122,7 +184,7 @@ class HtmlStrippingServiceTest {
 
             HtmlStrippingService.StripResult result =
                     HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap());
-            assertThat(result.strippedText()).isEqualTo("keep in the market");
+            assertThat(result.strippedText()).isEqualTo("keep\nin the market");
             int marketStart = result.strippedText().indexOf("market");
             assertThat(raw.substring(result.offsetMap().toOriginal(marketStart),
                     result.offsetMap().toOriginal(marketStart + "market".length()))).isEqualTo("market");

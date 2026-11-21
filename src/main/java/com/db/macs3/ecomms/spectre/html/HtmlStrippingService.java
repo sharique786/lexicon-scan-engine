@@ -6,7 +6,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Turns message text into the normalised "clean text" Hyperscan scans — HTML tags removed, whitespace and commas collapsed —
+ * Turns message text into the normalised "clean text" Hyperscan scans — HTML tags removed, whitespace and commas collapsed
+ * (line breaks kept, see below) —
  * while preserving the ability to report a match's position against the
  * ORIGINAL (un-stripped) text.
  *
@@ -16,9 +17,18 @@ import java.util.regex.Pattern;
  * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} would never match that
  * pattern as written, because the two words are separated by HTML markup,
  * not whitespace. This service replaces every contiguous run of HTML tags,
- * whitespace (newlines, tabs, repeated spaces) and/or commas with exactly ONE space, so
- * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} becomes
- * {@code " Enjoy Happy Birthday "}, which the pattern matches correctly.
+ * whitespace (newlines, tabs, repeated spaces, no-break spaces) and/or commas with exactly ONE character: a
+ * newline ({@code \n}) if the run contains a line break ({@code \n} or {@code \r}), otherwise a
+ * space. So {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} becomes
+ * {@code " Enjoy\nHappy Birthday "}, which the pattern matches correctly ({@code \s} matches the newline).
+ *
+ * <h2>Line breaks are kept (collapsed to one)</h2>
+ * <p>Consecutive line breaks — {@code "\n\n\n"}, {@code "\r\n"}, {@code "\n  \n"}, {@code "</p>\n\n<p>"} —
+ * become a single {@code \n}. This keeps the text's line structure so a disclaimer term ending in {@code .*}
+ * (see {@code CollapsingScanner}) extends to the end of its own line rather than into the rest of the
+ * message. Only literal line-break characters count: a tag such as {@code <br>} or {@code </p>} with no
+ * newline next to it still becomes a space. Consequence: a term written with a literal space (e.g.
+ * {@code mouth shut}) does not match words split across two lines; a term using {@code \s} does.
  *
  * <h2>Original-text coordinates, not stripped-text coordinates</h2>
  * <p>Hyperscan reports a match's position in terms of the STRIPPED text
@@ -37,7 +47,7 @@ import java.util.regex.Pattern;
  * is always the clean, stripped-text form of what actually matched. For
  * {@code "<p>Enjoy</p>\n<p>Happy Birthday</p>"} matched against
  * {@code Enjoy(?:\s+\S+){0,2}\s+Happy}, the result is
- * {@code {startCharIndex: 3, endCharIndex: 21, matchedText: "Enjoy Happy"}} —
+ * {@code {startCharIndex: 3, endCharIndex: 21, matchedText: "Enjoy\nHappy"}} —
  * {@code original.substring(3, 21)} is {@code "Enjoy</p>\n<p>Happy"}, which
  * spans the same real-world content as {@code matchedText} once its HTML is
  * mentally stripped back out, not a literal character-for-character match.
@@ -69,7 +79,8 @@ public final class HtmlStrippingService {
          * Result of {@link #strip}.
          *
          * @param strippedText the text with every HTML-tag/whitespace/comma run
-         *                     collapsed to exactly one space — what Hyperscan
+         *                     collapsed to exactly one space (one newline if the
+         *                     run contained a line break) — what Hyperscan
          *                     actually scans
          * @param offsetMap    translates a stripped-text position back to its
          *                     original-text position — see {@link OffsetMap}
@@ -235,6 +246,7 @@ public final class HtmlStrippingService {
         // One boundary entry per emitted stripped character, plus a final entry
         // for the end-of-string boundary — appended after the loop.
         int[] boundariesBuf = new int[originalText.length() + 1];
+        boolean[] runHasLineBreak = new boolean[1]; // out-parameter of consumeTagOrWhitespaceRun
         int strippedLen = 0;
 
         int originalIndex = 0;
@@ -246,10 +258,12 @@ public final class HtmlStrippingService {
             boolean isTagStart = currentChar == '<' && tagMatcher.region(originalIndex, textLength).lookingAt();
 
             if (isTagStart || isSeparator(currentChar)) {
-                // Consume this whole contiguous run of tags, whitespace and/or commas as ONE unit.
+                // Consume this whole contiguous run of tags, whitespace and/or commas as ONE unit:
+                // a single newline if the run holds a line break, else a single space.
                 int runStart = originalIndex;
-                int scanIndex = consumeTagOrWhitespaceRun(originalText, originalIndex, textLength, tagMatcher);
-                stripped.append(' ');
+                int scanIndex = consumeTagOrWhitespaceRun(originalText, originalIndex, textLength, tagMatcher,
+                        runHasLineBreak);
+                stripped.append(runHasLineBreak[0] ? '\n' : ' ');
                 boundariesBuf[strippedLen] = runStart;
                 strippedLen++;
                 originalIndex = scanIndex;
@@ -270,25 +284,39 @@ public final class HtmlStrippingService {
     }
 
     /**
-     * True for a character that is replaced by (and merged into) a single space: any whitespace
-     * (space, tab, newline, carriage return, form feed, ...) or a comma — ASCII {@code ,}, fullwidth
-     * {@code U+FF0C} (CJK text) or Arabic {@code U+060C}.
+     * True for a character that is replaced by (and merged into) a single space (or a single newline, see
+     * {@link #isLineBreak}): any whitespace (space, tab, newline, carriage return, form feed, ...), any Unicode
+     * space separator — including the no-break spaces {@code U+00A0}, {@code U+2007}, {@code U+202F} that
+     * {@link Character#isWhitespace} excludes but HTML email bodies use heavily — or a comma: ASCII {@code ,},
+     * fullwidth {@code U+FF0C} (CJK text) or Arabic {@code U+060C}.
      */
     static boolean isSeparator(char c) {
-        return Character.isWhitespace(c) || c == ',' || c == '\uFF0C' || c == '\u060C';
+        return Character.isWhitespace(c) || Character.isSpaceChar(c) || c == ',' || c == '\uFF0C' || c == '\u060C';
+    }
+
+    /** True for a line-break character; a separator run containing one collapses to {@code \n}, not a space. */
+    static boolean isLineBreak(char c) {
+        return c == '\n' || c == '\r';
     }
 
     /**
+     * @param hasLineBreak out-parameter: {@code hasLineBreak[0]} is set to whether the run contains a line-break
+     *                     character outside a tag (a newline inside a tag's attributes does not count)
      * @return the index one past the end of the contiguous run of HTML tags, whitespace and/or commas
      *         starting at {@code start}.
      */
-    private static int consumeTagOrWhitespaceRun(String originalText, int start, int textLength, Matcher tagMatcher) {
+    private static int consumeTagOrWhitespaceRun(String originalText, int start, int textLength, Matcher tagMatcher,
+                                                 boolean[] hasLineBreak) {
+        hasLineBreak[0] = false;
         int scanIndex = start;
         while (scanIndex < textLength) {
             char scanChar = originalText.charAt(scanIndex);
             if (scanChar == '<' && tagMatcher.region(scanIndex, textLength).lookingAt()) {
                 scanIndex = tagMatcher.end();
             } else if (isSeparator(scanChar)) {
+                if (isLineBreak(scanChar)) {
+                    hasLineBreak[0] = true;
+                }
                 scanIndex++;
             } else {
                 break;

@@ -56,15 +56,15 @@ class ChatVoiceMessageTextExtractorTest {
         }
 
         @Test
-        @DisplayName("extractedText, once further stripped, is 'Hi There Can you share market price?' "
-                     + "— company_name/email/evt_id/etc. never appear")
+        @DisplayName("extractedText, once further stripped, is 'Hi There\\nCan you share market price?' "
+                     + "— one line per message, company_name/email/evt_id/etc. never appear")
         void extractedAndStrippedTextMatchesRequirement() {
             ChatVoiceMessageTextExtractor.ExtractionResult extraction =
                     ChatVoiceMessageTextExtractor.extract(RAW_TEXT);
             String attachmentText = HtmlStrippingService.stripExtracted(
                     extraction.extractedText(), extraction.offsetMap()).strippedText();
 
-            assertThat(attachmentText).contains("Hi There Can you share market price?");
+            assertThat(attachmentText).isEqualTo("\nHi There\nCan you share market price? ");
             assertThat(attachmentText).doesNotContain("DEUTSCHE BANK", "aakanksha", "34644ea1", "File_0.xlsx");
         }
 
@@ -124,14 +124,42 @@ class ChatVoiceMessageTextExtractorTest {
     class MultipleCells {
 
         @Test
-        @DisplayName("concatenates every matching cell's content, in document order, separated by a space")
+        @DisplayName("concatenates every matching cell's content, in document order, separated by a newline")
         void concatenatesInDocumentOrder() {
             String msgText = "<table>"
                     + "<tr><td class=\"message_text\">This is very strong language</td></tr>"
                     + "<tr><td class=\"message_text\">Cats and dogs hate each other</td></tr>"
                     + "</table>";
             ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
-            assertThat(extraction.extractedText()).isEqualTo("This is very strong language Cats and dogs hate each other");
+            assertThat(extraction.extractedText()).isEqualTo("This is very strong language\nCats and dogs hate each other");
+            assertThat(HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap())
+                    .strippedText()).isEqualTo("This is very strong language\nCats and dogs hate each other");
+        }
+
+        @Test
+        @DisplayName("the newline between cells merges with whitespace/newlines at the cell edges into ONE newline")
+        void separatorMergesWithCellEdgeWhitespace() {
+            String msgText = "<table>"
+                    + "<tr><td class=\"message_text\">first line \n\n</td></tr>"
+                    + "<tr><td class=\"message_text\">\n  second line</td></tr>"
+                    + "<tr><td class=\"message_text\">third, line</td></tr>"
+                    + "</table>";
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
+            assertThat(HtmlStrippingService.stripExtracted(extraction.extractedText(), extraction.offsetMap())
+                    .strippedText()).isEqualTo("first line\nsecond line\nthird line");
+        }
+
+        @Test
+        @DisplayName("the inserted newline maps back to the end of the previous cell's content in msg_text")
+        void separatorMapsToPreviousCellEnd() {
+            String msgText = "<table>"
+                    + "<tr><td class=\"message_text\">alpha</td></tr>"
+                    + "<tr><td class=\"message_text\">beta</td></tr>"
+                    + "</table>";
+            ChatVoiceMessageTextExtractor.ExtractionResult extraction = ChatVoiceMessageTextExtractor.extract(msgText);
+            int separator = extraction.extractedText().indexOf('\n');
+            assertThat(separator).isEqualTo("alpha".length());
+            assertThat(extraction.offsetMap().toOriginal(separator)).isEqualTo(msgText.indexOf("alpha") + "alpha".length());
         }
 
         @Test

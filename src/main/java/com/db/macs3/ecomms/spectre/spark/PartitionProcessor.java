@@ -97,6 +97,8 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     private final int maxSharedIdleBundles;
     /** Unique per job run — namespaces shared-cache keys so two runs in one JVM never mix bundles. */
     private final String runId;
+    /** Cap on a trailing-{@code .*} term's tail, passed to the partition's {@code CollapsingScanner}. */
+    private final int maxTailChars;
 
     /**
      * @param featureToZipPathBroadcast a Spark {@link org.apache.spark.broadcast.Broadcast} of the
@@ -117,11 +119,22 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
                               Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition,
                               int maxSharedIdleBundles, String runId) {
+        this(featureToZipPathBroadcast, maxAttachmentSizeBytes, maxCachedDatabasesPerPartition, maxSharedIdleBundles,
+                runId, com.gliwka.hyperscan.wrapper.CollapsingScanner.DEFAULT_MAX_TAIL_CHARS);
+    }
+
+    /**
+     * @param maxTailChars cap on how far a term ending in {@code .*} is extended — see {@code CollapsingScanner}
+     */
+    public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
+                              Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition,
+                              int maxSharedIdleBundles, String runId, int maxTailChars) {
         this.featureToZipPathBroadcast = featureToZipPathBroadcast;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
         this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
         this.maxSharedIdleBundles = maxSharedIdleBundles;
         this.runId = runId;
+        this.maxTailChars = maxTailChars;
     }
 
     @Override
@@ -140,7 +153,7 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                     ? SharedBundleCache.forExecutor(maxSharedIdleBundles) : null;
             bundleLoader = new HyperscanBundleLoader(featureToZipPathBroadcast.value(), gcsClient::openStream,
                     maxCachedDatabasesPerPartition, sharedCache, runId);
-            orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes);
+            orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes, maxTailChars);
 
             // Safety net: StreamingResults only closes on exhaustion or an exception thrown from next().
             // If Spark stops consuming early (task killed/interrupted, downstream failure, speculative

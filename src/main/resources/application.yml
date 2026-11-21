@@ -18,6 +18,9 @@ scan-engine:
   # Bundles no task is using that an executor keeps open (native memory - size memoryOverhead for it).
   max-shared-idle-bundles-per-executor: 32
   sort-partitions-by-feature-set: true
+  # Max characters a term ending in ".*" (e.g. a disclaimer) is extended by after its prefix; the tail
+  # otherwise stops at the end of the line (CollapsingScanner).
+  max-tail-chars: 1000
   created-by: SPECTRE-COMPOSER-SA
 
 # Logging levels are NOT configured here — see src/main/resources/log4j2.properties

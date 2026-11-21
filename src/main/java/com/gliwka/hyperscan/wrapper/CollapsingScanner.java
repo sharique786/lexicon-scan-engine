@@ -87,6 +87,9 @@ public class CollapsingScanner implements Closeable {
 
     private final match_event_handler handler;
 
+    /** Upper bound on how far a rewritten trailing {@code .*} extends a match — see {@link #extendToSentenceEnd}. */
+    private final int maxTailChars;
+
     private match_event_handler newHandler() {
         return new match_event_handler() {
             @Override
@@ -103,7 +106,20 @@ public class CollapsingScanner implements Closeable {
         };
     }
 
+    /** A scanner whose trailing-{@code .*} tails are capped at {@link #DEFAULT_MAX_TAIL_CHARS}. */
     public CollapsingScanner() {
+        this(DEFAULT_MAX_TAIL_CHARS);
+    }
+
+    /**
+     * @param maxTailChars upper bound, in characters, on how far a rewritten trailing {@code .*} extends a match
+     *                     (see {@link #extendToSentenceEnd}); must be &gt;= 0
+     */
+    public CollapsingScanner(int maxTailChars) {
+        if (maxTailChars < 0) {
+            throw new IllegalArgumentException("maxTailChars must be >= 0, was " + maxTailChars);
+        }
+        this.maxTailChars = maxTailChars;
         synchronized (CollapsingScanner.class) { // several Spark tasks share one executor JVM
             if (count >= MAX_LIVE_SCANNERS) {
                 throw new TooManyScannersException(
@@ -257,18 +273,25 @@ public class CollapsingScanner implements Closeable {
         return lastTailIds;
     }
 
-    /** A rewritten trailing {@code .*} never extends a match by more than this many characters. */
-    public static final int MAX_TAIL_CHARS = 500;
+    /** Default for {@link #maxTailChars}: a rewritten trailing {@code .*} never extends a match by more than this. */
+    public static final int DEFAULT_MAX_TAIL_CHARS = 1000;
+
+    /** The configured cap on how far a rewritten trailing {@code .*} extends a match. */
+    public int maxTailChars() {
+        return maxTailChars;
+    }
 
     /**
-     * Emulates the removed {@code .*} as "to the end of the sentence": through the first {@code . ! ?} or
-     * line break after the prefix (inclusive), else to end of text — never beyond {@link #MAX_TAIL_CHARS},
-     * and never into the next occurrence of the same expression.
+     * Emulates the removed {@code .*} as "to the end of the line": up to (excluding) the first line break
+     * ({@code \n} or {@code \r}) after the prefix, else to end of text — never beyond {@link #maxTailChars}
+     * characters, and never into the next occurrence of the same expression. Sentence punctuation
+     * ({@code . ! ?}) does NOT stop the tail.
      *
      * @return the new INCLUSIVE end index
      */
-    private static int extendToSentenceEnd(String text, int prefixEndInclusive, int[] sortedStarts) {
-        int limit = Math.min(text.length(), prefixEndInclusive + 1 + MAX_TAIL_CHARS); // exclusive
+    private int extendToSentenceEnd(String text, int prefixEndInclusive, int[] sortedStarts) {
+        // long arithmetic: prefixEndInclusive + 1 + maxTailChars can overflow int for a huge configured cap
+        int limit = (int) Math.min(text.length(), (long) prefixEndInclusive + 1 + maxTailChars); // exclusive
         if (sortedStarts != null) {
             for (int s : sortedStarts) {
                 if (s > prefixEndInclusive) {
@@ -284,9 +307,6 @@ public class CollapsingScanner implements Closeable {
                 break; // line break is excluded, exactly like ".*"
             }
             end = i;
-            if (c == '.' || c == '!' || c == '?') {
-                break;
-            }
         }
         return end;
     }

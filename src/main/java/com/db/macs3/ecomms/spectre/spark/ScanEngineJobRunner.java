@@ -288,7 +288,7 @@ public class ScanEngineJobRunner {
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition(),
                         properties.isSharedBundleCacheEnabled() ? properties.getMaxSharedIdleBundlesPerExecutor() : -1,
-                        java.util.UUID.randomUUID().toString()),
+                        java.util.UUID.randomUUID().toString(), properties.getMaxTailChars()),
                 Encoders.kryo(MessageProcessingResult.class)
         ).persist(StorageLevel.MEMORY_AND_DISK_SER());
 

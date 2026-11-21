@@ -26,12 +26,13 @@ import java.util.regex.Pattern;
  * <p>{@link #extract} pulls every matching {@code <td>}'s raw inner HTML
  * (which can itself carry tags, e.g. {@code <td class="...message_text">
  * <p>Can you share market price?</p></td>}) out of {@code msg_text},
- * concatenated with a single space between cells, together with an
+ * concatenated with a single newline ({@code \n}) between cells, together with an
  * {@link HtmlStrippingService.OffsetMap} that maps every position in that
  * concatenated text back to its real position in {@code msg_text}. The
  * caller then runs {@link HtmlStrippingService#stripExtracted} over the
  * result, which performs the SAME tag/whitespace/comma normalisation {@link HtmlStrippingService#strip}
- * always has, but composes this extraction's own offset map with the
+ * always has (the newline between cells survives it, merged with any line break/whitespace at the cell
+ * edges), but composes this extraction's own offset map with the
  * stripping pass's own, so a Hyperscan match's position resolves straight
  * back to {@code msg_text} — never to this class's own intermediate,
  * cells-only text.
@@ -69,8 +70,14 @@ public final class ChatVoiceMessageTextExtractor {
     }
 
     /**
+     * Inserted between two consecutive extracted cells, so each chat/voice message line stays its own line
+     * (a disclaimer's {@code .*} tail stops at it — see {@code CollapsingScanner}).
+     */
+    static final char CELL_SEPARATOR = '\n';
+
+    /**
      * @param extractedText every matched cell's raw inner HTML, in document order, joined by a
-     *                      single space — never itself scanned directly; run it through
+     *                      single newline ({@link #CELL_SEPARATOR}) — never itself scanned directly; run it through
      *                      {@link HtmlStrippingService#stripExtracted} first
      * @param offsetMap     maps a position in {@code extractedText} back to its real position in
      *                      the {@code msg_text} {@link #extract} was called with
@@ -109,7 +116,7 @@ public final class ChatVoiceMessageTextExtractor {
                 // monotonically-increasing msg_text position (see HtmlStrippingService class
                 // Javadoc "original-text coordinates" — a span may legitimately cover markup
                 // that isn't part of matchedText itself).
-                extracted.append(' ');
+                extracted.append(CELL_SEPARATOR);
                 boundariesBuf[extractedLen] = previousCellEnd;
                 extractedLen++;
             }
