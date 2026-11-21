@@ -1,0 +1,12 @@
+lexicon_term_id,message_text,expected_outcome
+lexicon_research_1::9,"The desk will keep in the market mouth shut",HIT
+lexicon_research_1::9,"keep one two three four mouth shut",NO_HIT
+lexicon_research_1::9,"nothing relevant in this message",NO_HIT
+lexicon_research_1::10,"Review the account during trading Off shore",HIT
+lexicon_research_1::10,"Off shore one two three account",NO_HIT
+lexicon_research_1::22,"מניפולציה בשוק יכולה להניב רווחים גדולים. we should launder the funds",HIT
+lexicon_research_1::22,"המסר הזה אינו מכיל מילת מפתח",NO_HIT
+lexicon_research_1::2,"The insider shared a view on trading volumes",HIT
+lexicon_research_1::2,"Only the insider is mentioned here",NO_HIT
+lexicon_research_1::25,"They discussed the contraband shipment",HIT
+lexicon_research_1::25,"A perfectly ordinary message",NO_HIT

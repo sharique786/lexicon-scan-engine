@@ -1,0 +1,413 @@
+package com.db.macs3.ecomms.spectre.hyperscan;
+
+import com.db.macs3.ecomms.spectre.gcs.HyperscanPathResolver;
+import com.db.macs3.ecomms.spectre.model.termmeta.TermExpressionMetadata;
+import com.db.macs3.ecomms.spectre.util.LruCache;
+import com.gliwka.hyperscan.wrapper.Database;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+/**
+ * Loads and caches, per feature, the {@link Database} and
+ * {@link TermExpressionMetadata} the Lexicon Compile Service writes together
+ * in a single {@code <feature>.zip} bundle on GCS — one instance per Spark
+ * partition, lazy-loading and LRU-caching both together.
+ *
+ * <p>This class downloads and unzips the bundle EXACTLY ONCE per feature per
+ * partition, since {@code FeatureScanOrchestrator} always needs both the
+ * database and the metadata together for any feature it scans — caching them
+ * as one {@link LexiconBundle} entry in one bounded {@link LruCache} avoids
+ * downloading and unzipping the same file twice.
+ *
+ * <h2>Usage pattern</h2>
+ * <p>Construct exactly ONE instance per Spark partition — inside a
+ * {@code mapPartitions} closure, not a {@code map} closure — so the cache is
+ * genuinely reused across every message in that partition. See
+ * {@code PartitionProcessor}.
+ *
+ * <h2>Concurrent prefetch (JDK 21 virtual threads) — safe despite a non-thread-safe cache</h2>
+ * <p>{@link #load}/{@link #loadDatabase}/{@link #loadMetadata} are NOT
+ * thread-safe (backed by {@link LruCache}, which documents the same
+ * constraint) — matching this class's own single-threaded, one-per-partition
+ * usage contract. {@link #prefetch} still safely warms the cache
+ * CONCURRENTLY for a batch of distinct features, via a two-phase design that
+ * never lets more than one thread touch the cache itself:
+ * <ol>
+ *   <li>The expensive, cache-INDEPENDENT part — {@link #loadFresh} (GCS
+ *       download, zip extraction, {@code Database.load},
+ *       {@code TermExpressionMetadata.parse}) — runs concurrently, one
+ *       virtual thread per feature, via {@link Executors#newVirtualThreadPerTaskExecutor()}.
+ *       Virtual threads are the right tool here specifically because this
+ *       work is I/O-BOUND (waiting on GCS network reads): many concurrent
+ *       virtual threads blocked on I/O consume no executor CPU while
+ *       waiting, so this does not compete for the Spark task's allocated
+ *       CPU core(s) — a real consideration on a SHARED Dataproc cluster,
+ *       where grabbing extra CPU beyond what YARN allocated this job would
+ *       be poor multi-tenant behaviour. (CPU-bound Hyperscan scanning
+ *       itself is deliberately NOT parallelised this way — see
+ *       {@code FeatureScanOrchestrator} class Javadoc.)</li>
+ *   <li>Once every concurrent load has completed (or failed) and every
+ *       virtual thread has been joined, inserting the results into
+ *       {@link #cache} happens SEQUENTIALLY, entirely on the calling
+ *       thread — the only code path that ever touches the cache is this
+ *       single-threaded loop, so {@link LruCache}'s own non-thread-safety
+ *       is never actually exercised concurrently.</li>
+ * </ol>
+ */
+public final class HyperscanBundleLoader implements AutoCloseable {
+
+    private static final Logger log = LoggerFactory.getLogger(HyperscanBundleLoader.class);
+
+    /**
+     * Streams a GCS object's bytes — injected so this class's caching/
+     * extraction/error-handling logic can be tested independently of a live
+     * GCS client. A real implementation is a thin wrapper over
+     * {@code Storage.reader(BlobId)} exposed as a {@code Channels.newInputStream}.
+     */
+    @FunctionalInterface
+    public interface GcsByteStreamer {
+        InputStream openStream(String gcsPath) throws IOException;
+    }
+
+    /**
+     * One feature's loaded database AND term metadata, extracted from the same zip bundle.
+     */
+    public record LexiconBundle(Database database, TermExpressionMetadata metadata) {
+    }
+
+    private final Map<String, String> featureToZipPath;
+    private final GcsByteStreamer streamer;
+    private final LruCache<String, Held> cache;
+    /** Executor-wide shared cache, or null to load privately per partition (the pre-v3.28 behaviour). */
+    private final SharedBundleCache shared;
+
+    /**
+     * A bundle this partition holds, plus how to give it back: close the native database (private load) or release
+     * the lease (shared load). {@code release} runs exactly once — on LRU eviction, prefetch-race loss or close().
+     */
+    private record Held(LexiconBundle bundle, Runnable release) {
+    }
+
+    /**
+     * @param featureToZipPath resolved feature → {@code .zip} GCS path — the small,
+     *                         broadcast-from-driver map (see {@code HyperscanPathResolver#buildZipPath})
+     * @param streamer         opens a byte stream for a GCS path
+     * @param maxCachedBundles bounds this partition's cumulative cached-bundle count — a single
+     *                         bound now covers both the native database and its metadata together,
+     *                         since they are always loaded/evicted as one unit
+     */
+    public HyperscanBundleLoader(Map<String, String> featureToZipPath, GcsByteStreamer streamer,
+                                 int maxCachedBundles) {
+        this(featureToZipPath, streamer, maxCachedBundles, null, "");
+    }
+
+    /**
+     * @param shared   executor-wide cache to lease bundles from (see {@link SharedBundleCache}); null = load privately
+     * @param cacheKeyPrefix prepended to the zip path to form the shared-cache key — a per-job run id, so two jobs
+     *                 (e.g. tests) in one JVM never share a bundle that merely has the same path
+     */
+    public HyperscanBundleLoader(Map<String, String> featureToZipPath, GcsByteStreamer streamer,
+                                 int maxCachedBundles, SharedBundleCache shared, String cacheKeyPrefix) {
+        this.featureToZipPath = featureToZipPath;
+        this.streamer = streamer;
+        this.shared = shared;
+        this.cacheKeyPrefix = cacheKeyPrefix == null ? "" : cacheKeyPrefix;
+        // Evicted bundles are given back immediately (database closed, or shared lease released). Safe: scanRow
+        // loads a bundle and finishes with its Database before the next load can evict it (single-threaded per
+        // partition), and match objects hold Expressions, not the native database pointer. A shared bundle is
+        // only closed once NO task holds a lease on it.
+        this.cache = new LruCache<>(maxCachedBundles, held -> held.release().run());
+    }
+
+    private final String cacheKeyPrefix;
+
+    /** Max concurrent bundle loads during prefetch — each load/recompile peaks in native memory. */
+    private static final int MAX_CONCURRENT_PREFETCH_LOADS = 4;
+
+    static void closeBundleQuietly(LexiconBundle bundle) {
+        if (bundle == null) {
+            return;
+        }
+        try {
+            bundle.database().close();
+        } catch (RuntimeException e) {
+            log.warn("Failed to close Hyperscan database: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Returns the loaded {@link LexiconBundle} for {@code feature}, downloading and extracting
+     * its zip bundle on first request within this partition.
+     *
+     * @throws HyperscanPathResolver.HyperscanFileNotFoundException if {@code feature} has no resolved path
+     * @throws HyperscanFileLoadException                           if the GCS stream, zip extraction, {@link Database#load},
+     *                                                              or {@link TermExpressionMetadata#parse} call fails
+     */
+    public LexiconBundle load(String feature) {
+        return cache.computeIfAbsent(feature, this::acquire).bundle();
+    }
+
+    /** Loads {@code feature} privately, or leases it from the executor-wide cache when one is configured. */
+    private Held acquire(String feature) {
+        if (shared == null) {
+            LexiconBundle bundle = loadFresh(feature);
+            return new Held(bundle, () -> closeBundleQuietly(bundle));
+        }
+        String key = cacheKeyPrefix + "|" + resolveZipPath(feature);
+        SharedBundleCache.Lease lease = shared.acquire(key, () -> loadFresh(feature));
+        return new Held(lease.bundle(), lease::close);
+    }
+
+    /**
+     * Convenience for callers that only need the database — see {@link #load}.
+     */
+    public Database loadDatabase(String feature) {
+        return load(feature).database();
+    }
+
+    /**
+     * Convenience for callers that only need the term metadata — see {@link #load}.
+     */
+    public TermExpressionMetadata loadMetadata(String feature) {
+        return load(feature).metadata();
+    }
+
+    /**
+     * Concurrently warms the cache for up to {@code cache.maxSize()} distinct
+     * features (first-seen order, i.e. {@code features}' own iteration
+     * order — callers should pass features in roughly the order they'll
+     * actually be needed, e.g. first-encountered-row order within a
+     * partition) — see class Javadoc "Concurrent prefetch" for the
+     * concurrency design and why it's safe. Capped at the cache's own bound
+     * so this never does concurrent work for entries that would just be
+     * evicted before ever being consulted.
+     *
+     * <p>Best-effort only: a feature that fails to prefetch (bad path,
+     * corrupt zip, transient GCS error) is silently skipped here and simply
+     * loads synchronously — with its real exception surfacing normally —
+     * the first time {@link #load} actually needs it. Prefetching must never
+     * be why a partition fails that would otherwise have succeeded.
+     *
+     * @param features candidate features to warm — duplicates and features already
+     *                 cached are harmless (deduplicated / naturally re-verified here)
+     */
+    public void prefetch(Collection<String> features) {
+        if (features == null || features.isEmpty()) {
+            return;
+        }
+        // Already-cached features are skipped: re-loading them would only be thrown away again.
+        List<String> distinct = features.stream().distinct().filter(f -> !cache.containsKey(f))
+                .limit((long) cache.maxSize() - cache.size()).toList();
+        if (distinct.isEmpty()) {
+            return;
+        }
+
+        Map<String, Future<Held>> futures = loadConcurrently(distinct);
+
+        // The executor is closed, so every task has ended. Collect EVERY successful load — including ones that
+        // finished after an interrupt (killed/speculative task) cut the wait loop short — so each native Database
+        // either enters the cache or is closed below, never dropped.
+        Map<String, Held> loaded = new LinkedHashMap<>();
+        for (Map.Entry<String, Future<Held>> entry : futures.entrySet()) {
+            if (entry.getValue().state() == Future.State.SUCCESS) {
+                loaded.put(entry.getKey(), entry.getValue().resultNow());
+            }
+        }
+
+        // Sequential insertion, entirely on the calling thread — see class Javadoc for why this
+        // is the only place this method ever touches the (deliberately non-thread-safe) cache.
+        for (Map.Entry<String, Held> entry : loaded.entrySet()) {
+            insertOrClose(entry.getKey(), entry.getValue());
+        }
+        log.info("Prefetched {}/{} distinct feature bundle(s) concurrently for this partition",
+                loaded.size(), distinct.size());
+    }
+
+    /** Caches {@code held}, or gives it back if the feature was already cached (never leak a native database). */
+    private void insertOrClose(String feature, Held held) {
+        boolean[] used = {false};
+        cache.computeIfAbsent(feature, unusedFeature -> {
+            used[0] = true;
+            return held;
+        });
+        if (!used[0]) {
+            held.release().run();
+        }
+    }
+
+    /**
+     * Runs {@link #loadFresh} for every feature on virtual threads (at most
+     * {@link #MAX_CONCURRENT_PREFETCH_LOADS} at once) and returns once ALL tasks have ended — also after an
+     * interrupt, since closing the executor waits for them. Touches no cache.
+     */
+    private Map<String, Future<Held>> loadConcurrently(List<String> features) {
+        Map<String, Future<Held>> futures = new LinkedHashMap<>();
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            Semaphore permits = new Semaphore(MAX_CONCURRENT_PREFETCH_LOADS);
+            for (String feature : features) {
+                futures.put(feature, executor.submit(() -> {
+                    permits.acquire();
+                    try {
+                        return acquire(feature);
+                    } finally {
+                        permits.release();
+                    }
+                }));
+            }
+            awaitAll(futures);
+        }
+        return futures;
+    }
+
+    /** Waits for each future (results are collected later); stops early, re-flagging the interrupt, if interrupted. */
+    private void awaitAll(Map<String, Future<Held>> futures) {
+        for (Map.Entry<String, Future<Held>> entry : futures.entrySet()) {
+            try {
+                entry.getValue().get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.debug("Prefetch interrupted — will load synchronously when actually needed");
+                return;
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                log.debug("Prefetch failed for feature '{}' — will retry synchronously when actually needed: {}",
+                        entry.getKey(), cause.getMessage());
+            }
+        }
+    }
+
+    private LexiconBundle loadFresh(String feature) {
+        String path = resolveZipPath(feature);
+        log.info("Loading Hyperscan zip bundle for feature '{}' from {}", feature, path);
+        Instant loadStart = Instant.now();
+        ZipEntryBytes zipEntryBytes = extractZipEntries(feature, path);
+        LexiconBundle bundle = buildBundle(feature, path, zipEntryBytes);
+        log.info("Loaded Hyperscan zip bundle for feature '{}' from {} in {}ms",
+                feature, path, Duration.between(loadStart, Instant.now()).toMillis());
+        return bundle;
+    }
+
+    private String resolveZipPath(String feature) {
+        String path = featureToZipPath.get(feature);
+        if (path == null) {
+            throw new HyperscanPathResolver.HyperscanFileNotFoundException(
+                    "No resolved zip bundle path for feature '" + feature + "' — it was not present in the "
+                            + "driver-resolved feature-to-path map. This indicates the view returned a feature "
+                            + "this job's path resolution never saw, which should not happen if both derive from "
+                            + "the same view query result.");
+        }
+        return path;
+    }
+
+    /**
+     * The two entries a feature's zip bundle must contain — raw bytes, not yet parsed.
+     */
+    private record ZipEntryBytes(byte[] hdbBytes, String metadataJson) {
+    }
+
+    private ZipEntryBytes extractZipEntries(String feature, String path) {
+        byte[] hdbBytes = null;
+        String metadataJson = null;
+        List<String> entryNames = new ArrayList<>();
+        try (InputStream in = streamer.openStream(path);
+             ZipInputStream zip = new ZipInputStream(in)) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                String entryName = baseName(entry.getName());
+                entryNames.add(entryName);
+                if (entryName.equals(TermIdBuilder.hdbFileName(feature))) {
+                    hdbBytes = readAllBytes(zip);
+                } else if (entryName.equals(TermIdBuilder.termMetadataFileName(feature))) {
+                    metadataJson = new String(readAllBytes(zip), StandardCharsets.UTF_8);
+                }
+                zip.closeEntry();
+            }
+        } catch (IOException | RuntimeException e) {
+            throw new HyperscanFileLoadException(
+                    "Failed to read zip bundle for feature '" + feature + "' from " + path
+                            + ": " + e.getMessage(), e);
+        }
+
+        if (hdbBytes == null) {
+            throw new HyperscanFileLoadException(
+                    "Zip bundle for feature '" + feature + "' at " + path + " has no entry named '"
+                            + TermIdBuilder.hdbFileName(feature) + "' — entries found: " + entryNames);
+        }
+        if (metadataJson == null) {
+            throw new HyperscanFileLoadException(
+                    "Zip bundle for feature '" + feature + "' at " + path + " has no entry named '"
+                            + TermIdBuilder.termMetadataFileName(feature) + "' — entries found: " + entryNames);
+        }
+        return new ZipEntryBytes(hdbBytes, metadataJson);
+    }
+
+    private LexiconBundle buildBundle(String feature, String path, ZipEntryBytes zipEntryBytes) {
+        Database database = null;
+        try {
+            try (InputStream hdbIn = new ByteArrayInputStream(zipEntryBytes.hdbBytes())) {
+                database = Database.load(hdbIn);
+            }
+            // terms ending in ".*" are recompiled without it; CollapsingScanner re-extends each match to
+            // the end of its line (one bounded match per occurrence, no per-offset match explosion)
+            database = com.gliwka.hyperscan.wrapper.TrailingDotStarRewriter.apply(database, zipEntryBytes.hdbBytes());
+            TermExpressionMetadata metadata = TermExpressionMetadata.parse(feature, zipEntryBytes.metadataJson());
+            return new LexiconBundle(database, metadata);
+        } catch (IOException | RuntimeException e) {
+            if (database != null) {
+                try {
+                    database.close(); // metadata parse failed after a successful native load — free it
+                } catch (RuntimeException ignored) {
+                    // best effort
+                }
+            }
+            throw new HyperscanFileLoadException(
+                    "Failed to load Hyperscan database or term metadata for feature '" + feature
+                            + "' extracted from " + path + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Strips any directory prefix a zip entry name might carry, e.g. {@code "sub/dir/x.hdb"} -> {@code "x.hdb"}.
+     */
+    private static String baseName(String entryName) {
+        int slash = Math.max(entryName.lastIndexOf('/'), entryName.lastIndexOf('\\'));
+        return slash < 0 ? entryName : entryName.substring(slash + 1);
+    }
+
+    private static byte[] readAllBytes(ZipInputStream zip) throws IOException {
+        return zip.readAllBytes(); // reads the current entry only; no intermediate copy
+    }
+
+    /**
+     * @return how many bundles are currently cached in this partition's loader.
+     */
+    public int cachedCount() {
+        return cache.size();
+    }
+
+    @Override
+    public void close() {
+        // Called at partition end, after the orchestrator (and its Scanner) is done: free every cached
+        // native database now rather than waiting for GC, which does not see off-heap pressure.
+        cache.clear();
+    }
+}
