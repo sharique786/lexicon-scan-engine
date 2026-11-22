@@ -7,11 +7,9 @@ import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.Pointer;
 
 import java.io.Closeable;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,7 +34,10 @@ import static com.gliwka.hyperscan.jni.hyperscan.hs_scan;
  * <ul>
  *   <li>The native callback keeps only the LONGEST end per {@code (expressionId, start)} — O(distinct
  *       starts) memory instead of O(match callbacks). {@code SOM_LEFTMOST} is untouched, so start
- *       positions are exactly what Hyperscan reports.</li>
+ *       positions are exactly what Hyperscan reports. The bookkeeping is a primitive open-addressing table
+ *       ({@link MatchCollector}), so a callback allocates nothing (no boxed key per match).</li>
+ *   <li>A {@link PreparedText}'s native copy is reused across scans: scanning one area text against many
+ *       feature databases copies it into native memory once, not once per database.</li>
  *   <li>Substrings are built once per surviving match, not per callback.</li>
  *   <li>Because {@code .*} is greedy and Hyperscan reports leftmost starts, for a given expression the
  *       first disclaimer's start owns the whole tail of the text; later disclaimers of the SAME
@@ -82,8 +83,8 @@ public class CollapsingScanner implements Closeable {
     // leaks nothing (as field initialisers they ran first and were never freed when the check threw).
     private NativeScratch scratch;
 
-    /** key = (expressionId << 32 | startByteOffset) -> {id, fromByte, toByte (max)}; insertion-ordered. */
-    private final Map<Long, long[]> collapsed = new LinkedHashMap<>();
+    /** (expressionId, startByteOffset) -> longest end byte offset, in first-seen order. */
+    private final MatchCollector collapsed = new MatchCollector();
 
     private final match_event_handler handler;
 
@@ -94,13 +95,7 @@ public class CollapsingScanner implements Closeable {
         return new match_event_handler() {
             @Override
             public int call(int id, long from, long to, int flags, Pointer context) {
-                long key = ((long) id << 32) | (from & 0xFFFFFFFFL);
-                long[] entry = collapsed.get(key);
-                if (entry == null) {
-                    collapsed.put(key, new long[]{id, from, to});
-                } else if (to > entry[2]) {
-                    entry[2] = to;
-                }
+                collapsed.add(id, from, to);
                 return 0; // keep scanning
             }
         };
@@ -170,55 +165,56 @@ public class CollapsingScanner implements Closeable {
     /** The last database {@link #allocScratch} succeeded for — lets repeat calls for it be skipped. */
     private Database lastScratchDb;
 
+    /** One-off scan: the text's native copy is freed as soon as the scan is done. */
     public List<Match> scan(Database db, String input) {
-        return scan(db, new PreparedText(input));
+        try (PreparedText prepared = new PreparedText(input)) {
+            return scan(db, prepared);
+        }
     }
 
-    /** Same as {@link #scan(Database, String)} but reuses already-encoded text — see {@link PreparedText}. */
+    /**
+     * Same as {@link #scan(Database, String)} but reuses already-encoded text — and its native copy — across
+     * scans; see {@link PreparedText}. The caller owns {@code prepared} and must {@link PreparedText#close()} it.
+     */
     public List<Match> scan(Database db, PreparedText prepared) {
         if (scratch == null) {
             throw new IllegalStateException("Scratch space has already been deallocated");
         }
         collapsed.clear();
         try {
-            runNativeScan(db, prepared.bytes());
+            runNativeScan(db, prepared);
             if (collapsed.isEmpty()) {
                 return List.of();
             }
             return buildMatches(db, prepared);
         } finally {
-            collapsed.clear(); // never retain a large map between scans
+            collapsed.clear(); // never retain a large table between scans
         }
     }
 
-    private void runNativeScan(Database db, byte[] bytes) {
+    private void runNativeScan(Database db, PreparedText prepared) {
         hs_database_t database = db.getDatabase();
-        // Wrapping a heap array makes JavaCPP copy it into a fresh NATIVE allocation. Free it as soon as the scan
-        // is done instead of leaving it to GC, which cannot see off-heap pressure.
-        BytePointer bytePointer = new BytePointer(ByteBuffer.wrap(bytes));
-        try {
-            int hsError = hs_scan(database, bytePointer, bytes.length, 0, scratch, handler, null);
-            if (hsError != 0) {
-                throw HyperscanException.hsErrorToException(hsError);
-            }
-        } finally {
-            bytePointer.close();
+        BytePointer bytePointer = prepared.nativeBytes();
+        int hsError = hs_scan(database, bytePointer, prepared.byteLength(), 0, scratch, handler, null);
+        if (hsError != 0) {
+            throw HyperscanException.hsErrorToException(hsError);
         }
     }
 
     private List<Match> buildMatches(Database db, PreparedText prepared) {
         String input = prepared.text();
-        boolean emptyInput = prepared.bytes().length == 0;
+        boolean emptyInput = prepared.byteLength() == 0;
         IntUnaryOperator toCharIndex = toCharIndex(prepared);
         Set<Integer> tailIds = tailIdsFor(db);
         Map<Integer, int[]> startsById = sortedStartsByTailId(tailIds, toCharIndex);
 
-        List<Match> matches = new ArrayList<>(collapsed.size());
-        for (long[] t : collapsed.values()) {
-            int id = (int) t[0];
-            long to = Math.max(t[2], 1);
+        int count = collapsed.size();
+        List<Match> matches = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            int id = collapsed.id(i);
+            long to = Math.max(collapsed.to(i), 1);
             Expression expression = db.getExpression(id);
-            int startIndex = toCharIndex.applyAsInt((int) t[1]);
+            int startIndex = toCharIndex.applyAsInt((int) collapsed.from(i));
             int endIndex = toCharIndex.applyAsInt((int) to - 1);
             if (tailIds.contains(id)) {
                 endIndex = extendToSentenceEnd(input, endIndex, startsById.get(id));
@@ -246,10 +242,11 @@ public class CollapsingScanner implements Closeable {
             return Map.of();
         }
         Map<Integer, List<Integer>> grouped = new HashMap<>();
-        for (long[] t : collapsed.values()) {
-            if (tailIds.contains((int) t[0])) {
-                grouped.computeIfAbsent((int) t[0], k -> new ArrayList<>())
-                        .add(toCharIndex.applyAsInt((int) t[1]));
+        for (int i = 0, n = collapsed.size(); i < n; i++) {
+            int id = collapsed.id(i);
+            if (tailIds.contains(id)) {
+                grouped.computeIfAbsent(id, k -> new ArrayList<>())
+                        .add(toCharIndex.applyAsInt((int) collapsed.from(i)));
             }
         }
         Map<Integer, int[]> result = new HashMap<>();
@@ -309,6 +306,116 @@ public class CollapsingScanner implements Closeable {
             end = i;
         }
         return end;
+    }
+
+    /**
+     * Keeps, per {@code (expressionId, startByteOffset)}, the longest end offset Hyperscan reported — in first-seen
+     * order — with primitive arrays only: open addressing (linear probing) over {@code long} keys, entries in
+     * parallel arrays. Called from the native match callback, so {@link #add} allocates nothing unless it grows.
+     * {@link #clear} drops oversized arrays so one match-heavy text doesn't pin memory for the scanner's lifetime.
+     */
+    static final class MatchCollector {
+        private static final int INITIAL_TABLE = 64;   // power of two
+        private static final int INITIAL_ENTRIES = 32;
+        private static final int RETAIN_MAX_TABLE = 1 << 14;
+
+        private long[] keys = new long[INITIAL_TABLE];
+        private int[] slots = new int[INITIAL_TABLE];  // entry index + 1; 0 = empty
+        private int[] ids = new int[INITIAL_ENTRIES];
+        private long[] froms = new long[INITIAL_ENTRIES];
+        private long[] tos = new long[INITIAL_ENTRIES];
+        private int size;
+
+        void add(int id, long from, long to) {
+            long key = ((long) id << 32) | (from & 0xFFFFFFFFL);
+            int mask = slots.length - 1;
+            int h = mix(key) & mask;
+            while (true) {
+                int slot = slots[h];
+                if (slot == 0) {
+                    break;
+                }
+                if (keys[h] == key) {
+                    int e = slot - 1;
+                    if (to > tos[e]) {
+                        tos[e] = to;
+                    }
+                    return;
+                }
+                h = (h + 1) & mask;
+            }
+            if (size == ids.length) {
+                int n = size * 2;
+                ids = Arrays.copyOf(ids, n);
+                froms = Arrays.copyOf(froms, n);
+                tos = Arrays.copyOf(tos, n);
+            }
+            ids[size] = id;
+            froms[size] = from;
+            tos[size] = to;
+            size++;
+            keys[h] = key;
+            slots[h] = size;
+            if (size * 2 > slots.length) { // load factor 0.5
+                rehash(slots.length * 2);
+            }
+        }
+
+        private void rehash(int capacity) {
+            long[] newKeys = new long[capacity];
+            int[] newSlots = new int[capacity];
+            int mask = capacity - 1;
+            for (int i = 0; i < slots.length; i++) {
+                if (slots[i] != 0) {
+                    int h = mix(keys[i]) & mask;
+                    while (newSlots[h] != 0) {
+                        h = (h + 1) & mask;
+                    }
+                    newKeys[h] = keys[i];
+                    newSlots[h] = slots[i];
+                }
+            }
+            keys = newKeys;
+            slots = newSlots;
+        }
+
+        private static int mix(long key) {
+            long h = key * 0x9E3779B97F4A7C15L;
+            return (int) (h ^ (h >>> 32));
+        }
+
+        int size() {
+            return size;
+        }
+
+        boolean isEmpty() {
+            return size == 0;
+        }
+
+        int id(int i) {
+            return ids[i];
+        }
+
+        long from(int i) {
+            return froms[i];
+        }
+
+        long to(int i) {
+            return tos[i];
+        }
+
+        void clear() {
+            if (slots.length > RETAIN_MAX_TABLE) {
+                keys = new long[INITIAL_TABLE];
+                slots = new int[INITIAL_TABLE];
+                ids = new int[INITIAL_ENTRIES];
+                froms = new long[INITIAL_ENTRIES];
+                tos = new long[INITIAL_ENTRIES];
+            } else if (size > 0) {
+                Arrays.fill(slots, 0); // keys need no reset: slot 0 marks a free bucket
+            }
+            size = 0;
+        }
     }
 
     @Override

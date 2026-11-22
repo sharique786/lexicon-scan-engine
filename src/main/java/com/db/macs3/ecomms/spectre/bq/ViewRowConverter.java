@@ -33,6 +33,16 @@ public final class ViewRowConverter implements Serializable {
     }
 
     public static FeatureDecisionRow fromRow(Row row) {
+        return fromRow(row, null);
+    }
+
+    /**
+     * @param definitionsByKey key -> {@code feature_definition} JSON for rows that carry
+     *                         {@code feature_definition_key} instead of the JSON (see {@code FeatureSetLayout});
+     *                         null reads the JSON column directly
+     * @throws IllegalStateException when a row's key is not in {@code definitionsByKey}
+     */
+    public static FeatureDecisionRow fromRow(Row row, java.util.Map<Integer, String> definitionsByKey) {
         return new FeatureDecisionRow(
                 RowReaders.getStringOrNull(row, BqColumns.View.PROCESS_ID),
                 RowReaders.getStringOrNull(row, BqColumns.View.MESSAGE_ID),
@@ -46,9 +56,21 @@ public final class ViewRowConverter implements Serializable {
                 RowReaders.getLongOrNull(row, BqColumns.View.FEATURES_TO_APPLY_ID),
                 RowReaders.getBooleanOrDefault(row, BqColumns.View.IS_NOISE_REDUCTION),
                 RowReaders.getStringOrNull(row, BqColumns.View.OPERATOR),
-                RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION),
+                featureDefinition(row, definitionsByKey),
                 RowReaders.getDateOrNull(row, BqColumns.View.FEATURE_PARTITION_VALUE),
                 RowReaders.getLongAsStringOrNull(row, BqColumns.View.POLICY_ENGINE_ID)
         );
+    }
+
+    private static String featureDefinition(Row row, java.util.Map<Integer, String> definitionsByKey) {
+        if (definitionsByKey != null && RowReaders.hasNonNullField(row, BqColumns.View.FEATURE_DEFINITION_KEY)) {
+            Integer key = row.getAs(BqColumns.View.FEATURE_DEFINITION_KEY);
+            String definition = definitionsByKey.get(key);
+            if (definition == null) {
+                throw new IllegalStateException("Unknown " + BqColumns.View.FEATURE_DEFINITION_KEY + " " + key);
+            }
+            return definition; // the broadcast map's own instance: shared by every row of this definition
+        }
+        return RowReaders.getStringOrNull(row, BqColumns.View.FEATURE_DEFINITION);
     }
 }

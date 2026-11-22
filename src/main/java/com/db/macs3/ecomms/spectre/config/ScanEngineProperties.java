@@ -39,6 +39,21 @@ public class ScanEngineProperties {
     private boolean sortPartitionsByFeatureSet = true;
 
     /**
+     * Range-partition messages by their feature set (with {@code message_id} as tie-breaker) before scanning, so
+     * each partition/executor needs far fewer Hyperscan bundles. Costs one extra shuffle of the joined messages
+     * (attachments included) — off by default; see {@code FeatureSetLayout}. Pure layout — no effect on results.
+     */
+    private boolean partitionByFeatureSet = false;
+
+    public boolean isPartitionByFeatureSet() {
+        return partitionByFeatureSet;
+    }
+
+    public void setPartitionByFeatureSet(boolean partitionByFeatureSet) {
+        this.partitionByFeatureSet = partitionByFeatureSet;
+    }
+
+    /**
      * Share loaded Hyperscan bundles between all tasks of one executor (see {@code SharedBundleCache}) instead of
      * every task loading its own copy. False restores per-partition private loading.
      */

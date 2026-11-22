@@ -62,4 +62,61 @@ class PreparedTextTest {
         assertThat(prepared.positionMap()).isSameAs(prepared.positionMap());
         assertThat(prepared.positionMap()).containsExactly(0, 1, 2, 3, 3);
     }
+
+    @Test
+    @DisplayName("the native copy is made once and reused; the heap copy is dropped but bytes() still re-encodes")
+    void nativeCopyIsReusedAndHeapCopyDropped() {
+        String text = "café 日本";
+        byte[] jdkBytes = text.getBytes(StandardCharsets.UTF_8);
+        try (PreparedText prepared = new PreparedText(text)) {
+            assertThat(prepared.hasNativeCopy()).isFalse();
+            org.bytedeco.javacpp.BytePointer first = prepared.nativeBytes();
+            assertThat(prepared.nativeBytes()).isSameAs(first);
+            assertThat(prepared.hasNativeCopy()).isTrue();
+
+            byte[] copied = new byte[jdkBytes.length];
+            first.get(copied);
+            assertThat(copied).isEqualTo(jdkBytes);
+            assertThat(prepared.bytes()).isEqualTo(jdkBytes);       // re-encoded on demand
+            assertThat(prepared.byteLength()).isEqualTo(jdkBytes.length);
+        }
+    }
+
+    @Test
+    @DisplayName("close() frees the native copy, is idempotent, and a later use makes a fresh copy")
+    void closeIsIdempotentAndRecoverable() {
+        PreparedText prepared = new PreparedText("hello");
+        prepared.nativeBytes();
+        prepared.close();
+        prepared.close();
+        assertThat(prepared.hasNativeCopy()).isFalse();
+        byte[] again = new byte[5];
+        prepared.nativeBytes().get(again);
+        assertThat(again).isEqualTo("hello".getBytes(StandardCharsets.UTF_8));
+        prepared.close();
+    }
+
+    @Test
+    @DisplayName("scanning one PreparedText against several databases keeps ONE native copy with identical results")
+    void scanReusesNativeCopyAcrossDatabases() {
+        java.util.EnumSet<ExpressionFlag> flags = java.util.EnumSet.of(ExpressionFlag.SOM_LEFTMOST, ExpressionFlag.UTF8);
+        String text = "é日本 start B here and again B here";
+        try (Database db1 = Database.compile(java.util.List.of(new Expression("B here", flags, 1)));
+             Database db2 = Database.compile(java.util.List.of(new Expression("start", flags, 1)));
+             CollapsingScanner scanner = new CollapsingScanner();
+             PreparedText prepared = new PreparedText(text)) {
+            scanner.allocScratch(db1);
+            java.util.List<Match> first = scanner.scan(db1, prepared);
+            org.bytedeco.javacpp.BytePointer nativeCopy = prepared.nativeBytes();
+            scanner.allocScratch(db2);
+            java.util.List<Match> second = scanner.scan(db2, prepared);
+            assertThat(prepared.nativeBytes()).isSameAs(nativeCopy);  // not re-copied for the second database
+
+            assertThat(first).extracting(Match::getMatchedString).containsExactly("B here", "B here");
+            assertThat(first.getFirst().getStartPosition()).isEqualTo(text.indexOf("B here"));
+            assertThat(second).extracting(Match::getMatchedString).containsExactly("start");
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
 }

@@ -76,8 +76,23 @@ public final class FeatureDecisionViewReader {
                 .option("filter", filter)
                 .load();
 
-        log.info("Read {} rows from {}.{} with filter: {}", raw.count(), tableConfig.bqDataset(), tableConfig.bqViewName(), filter);
-        return raw;
+        // Only the columns ViewRowConverter reads (projection is pushed down to BigQuery). A column the view
+        // lacks is skipped rather than failing the job — ViewRowConverter already tolerates an absent field.
+        java.util.Set<String> available = new java.util.HashSet<>(java.util.Arrays.asList(raw.columns()));
+        org.apache.spark.sql.Column[] selected = BqColumns.View.READ_COLUMNS.stream()
+                .filter(available::contains)
+                .map(functions::col)
+                .toArray(org.apache.spark.sql.Column[]::new);
+        Dataset<Row> projected = raw.select(selected);
+
+        // A row count is a full extra read of the view (the caller caches and counts it anyway) — debug only.
+        if (log.isDebugEnabled()) {
+            log.debug("Read {} rows from {}.{} with filter: {}", projected.count(), tableConfig.bqDataset(),
+                    tableConfig.bqViewName(), filter);
+        } else {
+            log.info("Reading {}.{} with filter: {}", tableConfig.bqDataset(), tableConfig.bqViewName(), filter);
+        }
+        return projected;
     }
 
     /** Single-quoted SQL string literal with backslashes and single quotes escaped. */

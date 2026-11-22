@@ -1,5 +1,8 @@
 package com.gliwka.hyperscan.wrapper;
 
+import org.bytedeco.javacpp.BytePointer;
+
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
@@ -8,36 +11,78 @@ import java.util.Arrays;
  * once. A message's area text is scanned once per applicable feature (often dozens); without this the same
  * O(n) encode and position-map build was redone on every scan. Builds its own position map instead of the
  * library's {@code Utf8}/{@code Utf8Encoder}, which differ between hyperscan-java 5.4.0-2.0.0 and 5.4.11-3.1.0.
- * Not thread-safe — one instance per message, used by one thread.
+ *
+ * <h2>Native copy, shared across scans</h2>
+ * {@code hs_scan} needs the text in NATIVE memory. {@link #nativeBytes()} makes that copy once and every later
+ * scan of this text (one per feature) reuses it, instead of copying a possibly multi-MB attachment again for
+ * every feature. Once the native copy exists the heap {@code byte[]} is dropped, so the text is held in
+ * UTF-8 form only once. The OWNER must call {@link #close()} when the text will not be scanned again (for an
+ * area text: when its message is done) — off-heap memory is invisible to GC pressure. {@code close()} is
+ * idempotent and NOT final: a later scan just makes a new native copy, so an early close can never cause a
+ * use-after-free, only an extra copy.
+ *
+ * <p>Not thread-safe — one instance per message, used by one thread.
  */
-public final class PreparedText {
+public final class PreparedText implements AutoCloseable {
 
     private final String text;
-    private final byte[] bytes;
-    private int[] positionMap; // lazily built, only when the text is not pure ASCII
+    private final int byteLength;
+    private byte[] bytes;              // heap UTF-8; null while a native copy exists (re-encoded if needed again)
+    private BytePointer nativeBytes;   // lazily created, released by close()
+    private int[] positionMap;         // lazily built, only when the text is not pure ASCII
 
     public PreparedText(String text) {
         this.text = text;
         this.bytes = text.getBytes(StandardCharsets.UTF_8);
+        this.byteLength = bytes.length;
     }
 
     public String text() {
         return text;
     }
 
+    /** UTF-8 bytes of the text (re-encoded if the heap copy was dropped for a native one). */
     byte[] bytes() {
-        return bytes;
+        return bytes != null ? bytes : text.getBytes(StandardCharsets.UTF_8);
+    }
+
+    int byteLength() {
+        return byteLength;
     }
 
     boolean isAscii() {
-        return bytes.length == text.length();
+        return byteLength == text.length();
     }
 
     int[] positionMap() {
         if (positionMap == null) {
-            positionMap = byteToCharMap(text, bytes.length);
+            positionMap = byteToCharMap(text, byteLength);
         }
         return positionMap;
+    }
+
+    /** The text's UTF-8 bytes in native memory, copied on first use and reused until {@link #close()}. */
+    BytePointer nativeBytes() {
+        if (nativeBytes == null) {
+            // Wrapping a heap array makes JavaCPP copy it into a fresh NATIVE allocation.
+            nativeBytes = new BytePointer(ByteBuffer.wrap(bytes()));
+            bytes = null; // the native copy now holds the bytes; don't keep a second (heap) copy for the message
+        }
+        return nativeBytes;
+    }
+
+    /** True while a native copy is held (diagnostics/tests). */
+    boolean hasNativeCopy() {
+        return nativeBytes != null;
+    }
+
+    /** Frees the native copy, if any. Idempotent; a later scan simply makes a new copy. */
+    @Override
+    public void close() {
+        if (nativeBytes != null) {
+            nativeBytes.close();
+            nativeBytes = null;
+        }
     }
 
     /**

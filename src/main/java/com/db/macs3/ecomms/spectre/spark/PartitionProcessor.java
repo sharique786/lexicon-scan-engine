@@ -99,6 +99,8 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     private final String runId;
     /** Cap on a trailing-{@code .*} term's tail, passed to the partition's {@code CollapsingScanner}. */
     private final int maxTailChars;
+    /** key -> feature_definition JSON (see {@code FeatureSetLayout}); null when rows carry the JSON itself. */
+    private final org.apache.spark.broadcast.Broadcast<Map<Integer, String>> featureDefinitionsByKey;
 
     /**
      * @param featureToZipPathBroadcast a Spark {@link org.apache.spark.broadcast.Broadcast} of the
@@ -129,6 +131,20 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
                               Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition,
                               int maxSharedIdleBundles, String runId, int maxTailChars) {
+        this(featureToZipPathBroadcast, maxAttachmentSizeBytes, maxCachedDatabasesPerPartition, maxSharedIdleBundles,
+                runId, maxTailChars, null);
+    }
+
+    /**
+     * @param featureDefinitionsByKey broadcast key -> {@code feature_definition} JSON, for joined rows whose
+     *                                {@code features} carry {@code feature_definition_key} instead of the JSON
+     *                                (see {@code FeatureSetLayout}); null when they carry the JSON
+     */
+    public PartitionProcessor(org.apache.spark.broadcast.Broadcast<Map<String, String>> featureToZipPathBroadcast,
+                              Long maxAttachmentSizeBytes, int maxCachedDatabasesPerPartition,
+                              int maxSharedIdleBundles, String runId, int maxTailChars,
+                              org.apache.spark.broadcast.Broadcast<Map<Integer, String>> featureDefinitionsByKey) {
+        this.featureDefinitionsByKey = featureDefinitionsByKey;
         this.featureToZipPathBroadcast = featureToZipPathBroadcast;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
         this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
@@ -176,7 +192,7 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
             while (partitionRows.hasNext() && lookaheadBuffer.size() < PREFETCH_LOOKAHEAD_ROWS) {
                 Row row = partitionRows.next();
                 lookaheadBuffer.add(row);
-                collectDistinctFeatures(row, distinctFeatures);
+                collectDistinctFeatures(row, definitionsByKey(), distinctFeatures);
             }
             bundleLoader.prefetch(distinctFeatures);
 
@@ -285,11 +301,13 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
      * it will surface properly, with full per-message error isolation, when
      * this row is actually processed by {@link #processOneRow} below.
      */
-    private static void collectDistinctFeatures(Row row, Set<String> distinctFeaturesOut) {
+    private static void collectDistinctFeatures(Row row, Map<Integer, String> definitionsByKey,
+                                                Set<String> distinctFeaturesOut) {
         List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
         for (Row featureRow : featureRows) {
             try {
-                String featureDefinitionJson = ViewRowConverter.fromRow(featureRow).getFeatureDefinitionJson();
+                String featureDefinitionJson =
+                        ViewRowConverter.fromRow(featureRow, definitionsByKey).getFeatureDefinitionJson();
                 distinctFeaturesOut.add(FeatureDefinition.parseCached(featureDefinitionJson).getBody().getLexiconName());
             } catch (RuntimeException e) {
                 log.debug("Could not parse a feature definition during prefetch lookahead — "
@@ -332,7 +350,7 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                 + message.getMessageId());
         LocalDate datasetPartitionValueDate = parseDatasetPartitionValueDate(datasetPartitionValue, message.getMessageId());
 
-        List<FeatureDecisionRow> viewRows = readViewRows(row);
+        List<FeatureDecisionRow> viewRows = readViewRows(row, definitionsByKey());
 
         String processId = viewRows.getFirst().getProcessId();
         // pipelineExecId/createdBy are not view columns — carried through as extra columns
@@ -367,13 +385,18 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
         }
     }
 
-    private static List<FeatureDecisionRow> readViewRows(Row row) {
+    private static List<FeatureDecisionRow> readViewRows(Row row, Map<Integer, String> definitionsByKey) {
         List<Row> featureRows = row.getList(row.fieldIndex(JoinedRowColumns.FEATURES));
         List<FeatureDecisionRow> viewRows = new ArrayList<>(featureRows.size());
         for (Row featureRow : featureRows) {
-            viewRows.add(ViewRowConverter.fromRow(featureRow));
+            viewRows.add(ViewRowConverter.fromRow(featureRow, definitionsByKey));
         }
         return viewRows;
+    }
+
+    /** Executor-local broadcast value (no fetch per call), or null when rows carry the JSON. */
+    private Map<Integer, String> definitionsByKey() {
+        return featureDefinitionsByKey == null ? null : featureDefinitionsByKey.value();
     }
 
     private static MessageEvaluationResult evaluateMessage(ScanMessage message, FeatureScanOrchestrator orchestrator,

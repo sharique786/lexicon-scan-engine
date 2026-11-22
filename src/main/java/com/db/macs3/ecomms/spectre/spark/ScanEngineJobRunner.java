@@ -93,7 +93,6 @@ public class ScanEngineJobRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ScanEngineJobRunner.class);
 
-    private static final String FEATURES_COLUMN_NAME = "features"; // FeatureDecisionViewReader's grouped column
     private final GcsClient gcsClient;
     private final ScanEngineProperties properties;
     private final SparkSession sparkSession;
@@ -215,7 +214,8 @@ public class ScanEngineJobRunner {
 
         // Resolve every DISTINCT feature the (non-empty) view referenced to its .zip bundle path.
         // collectAsList is the stage's real Spark action.
-        Map<String, String> featureToZipPath = runStage("read view + resolve distinct features", () -> {
+        // Each distinct definition also gets a short INT key that replaces the JSON in the shuffles (FeatureSetLayout).
+        FeatureResolution featureResolution = runStage("read view + resolve distinct features", () -> {
             List<String> distinctFeatureDefJson = viewRows.select(BqColumns.View.FEATURE_DEFINITION)
                     .distinct().as(Encoders.STRING()).collectAsList();
             Set<String> distinctFeatures = distinctFeatureDefJson.stream()
@@ -229,8 +229,11 @@ public class ScanEngineJobRunner {
                 zipPaths.put(feature, HyperscanPathResolver.buildZipPath(hyperscanBasePath, feature));
             }
             log.info("Resolved Hyperscan zip bundle path(s) for this run: {}", zipPaths);
-            return zipPaths;
+            return new FeatureResolution(zipPaths, FeatureSetLayout.assignKeys(distinctFeatureDefJson));
         });
+        Map<String, String> featureToZipPath = featureResolution.zipPaths();
+        Broadcast<Map<Integer, String>> broadcastFeatureDefinitionsByKey =
+                javaSparkContext.broadcast(FeatureSetLayout.invert(featureResolution.definitionKeys()));
 
         // One broadcast: the Compile Service writes one zip per feature (the .hdb and the term-metadata
         // JSON together), so HyperscanBundleLoader needs a single feature -> path map. Broadcast via
@@ -265,7 +268,8 @@ public class ScanEngineJobRunner {
                         avroDistinctMessageCount);
             }
 
-            Dataset<Row> groupedView = FeatureDecisionViewReader.groupByMessageId(viewRows);
+            Dataset<Row> groupedView = FeatureDecisionViewReader.groupByMessageId(
+                    FeatureSetLayout.withDefinitionKeys(spark, viewRows, featureResolution.definitionKeys()));
             Dataset<Row> joinedRows = messages.join(groupedView, BqColumns.View.MESSAGE_ID)
                     .withColumn(JoinedRowColumns.PIPELINE_EXEC_ID_FOR_OUTPUT, functions.lit(runtimeArgs.pipelineExecId()))
                     .withColumn(JoinedRowColumns.CREATED_BY_FOR_OUTPUT, functions.lit(properties.getCreatedBy()))
@@ -278,17 +282,16 @@ public class ScanEngineJobRunner {
 
         // mapPartitions — the only place Hyperscan bundles are loaded. Still lazy: scanning happens
         // when .count() below (or, failing that, the writes in step 7) trigger it.
-        // Optional, ordering-only: group messages that need the same Hyperscan bundles so each partition
-        // loads a bundle about once instead of thrashing its bounded LRU. No shuffle (within partition).
-        Dataset<Row> toScan = properties.isSortPartitionsByFeatureSet()
-                ? joined.sortWithinPartitions(functions.expr(
-                        "hash(sort_array(transform(" + FEATURES_COLUMN_NAME + ", f -> f." + BqColumns.View.FEATURE_DEFINITION + ")))"))
-                : joined;
+        // Optional: group messages that need the same Hyperscan bundles — sort within each partition (no
+        // shuffle) and/or range-partition by feature set (one extra shuffle). See FeatureSetLayout. No effect on results.
+        Dataset<Row> toScan = FeatureSetLayout.layout(joined,
+                properties.isPartitionByFeatureSet(), properties.isSortPartitionsByFeatureSet());
         Dataset<MessageProcessingResult> results = toScan.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
                         messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition(),
                         properties.isSharedBundleCacheEnabled() ? properties.getMaxSharedIdleBundlesPerExecutor() : -1,
-                        java.util.UUID.randomUUID().toString(), properties.getMaxTailChars()),
+                        java.util.UUID.randomUUID().toString(), properties.getMaxTailChars(),
+                        broadcastFeatureDefinitionsByKey),
                 Encoders.kryo(MessageProcessingResult.class)
         ).persist(StorageLevel.MEMORY_AND_DISK_SER());
 
@@ -316,7 +319,12 @@ public class ScanEngineJobRunner {
             viewRows.unpersist(false);
             // Free the broadcast copy on every executor too; nothing reads it after the writes.
             broadcastFeatureToZipPath.destroy();
+            broadcastFeatureDefinitionsByKey.destroy();
         }
+    }
+
+    /** Result of the distinct-feature stage: feature -> zip path, and definition JSON -> short key. */
+    private record FeatureResolution(Map<String, String> zipPaths, Map<String, Integer> definitionKeys) {
     }
 
     /**

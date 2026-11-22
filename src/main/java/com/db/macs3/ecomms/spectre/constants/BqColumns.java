@@ -36,6 +36,22 @@ public final class BqColumns {
         public static final String POLICY_ENGINE_ID = "policy_engine_id";
 
         /**
+         * Every view column the engine reads (see {@code ViewRowConverter}) — the only ones selected, so the
+         * BigQuery read, the cache and the shuffles carry nothing else.
+         */
+        public static final java.util.List<String> READ_COLUMNS = java.util.List.of(
+                PROCESS_ID, MESSAGE_ID, DATASET_PARTITION, FEATURE_TAGGING_TYPE, FEATURE_TYPE, FEATURE_ID,
+                FEATURE_NAME, SUB_FEATURE_TYPE, FEATURES_TO_APPLY, FEATURES_TO_APPLY_ID, IS_NOISE_REDUCTION,
+                OPERATOR, FEATURE_DEFINITION, FEATURE_PARTITION_VALUE, POLICY_ENGINE_ID);
+
+        /**
+         * NOT a view column: a small INT the job assigns to each distinct {@link #FEATURE_DEFINITION} and carries
+         * through the group-by/join shuffles INSTEAD of the JSON; executors resolve it back through a broadcast
+         * key -> JSON map (see {@code ScanEngineJobRunner}).
+         */
+        public static final String FEATURE_DEFINITION_KEY = "feature_definition_key";
+
+        /**
          * Query parameter names the view accepts — see class Javadoc on {@code FeatureDecisionViewReader}.
          */
         public static final String PARAM_DATASET_PARTITION_VALUE = "dataset_partition_value";

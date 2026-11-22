@@ -164,8 +164,23 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      * makes for this same message (one per applicable feature).
      */
     public DecisionTreeEvaluator.FeatureRowScanner scannerFor(ScanMessage message) {
+        // A partition handles one message at a time: starting the next one ends the previous one, so free the
+        // previous message's native text copies now (see MessageAreaText#prepared). Safe even if a caller still
+        // used an older scanner afterwards — PreparedText just makes a new native copy on its next scan.
+        releaseNativeTexts();
         List<MessageAreaText> areaTexts = precomputeAreaTexts(message);
+        currentMessageAreaTexts = areaTexts;
         return row -> scanRow(row, areaTexts);
+    }
+
+    /** Area texts of the message most recently passed to {@link #scannerFor}; their native copies are freed next. */
+    private List<MessageAreaText> currentMessageAreaTexts = List.of();
+
+    private void releaseNativeTexts() {
+        for (MessageAreaText areaText : currentMessageAreaTexts) {
+            areaText.releaseNative();
+        }
+        currentMessageAreaTexts = List.of();
     }
 
     /**
@@ -200,12 +215,22 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
             return evaluatorText;
         }
 
-        /** UTF-8 encoding of the stripped text, computed once and reused for every feature scanned. */
+        /**
+         * UTF-8 encoding of the stripped text, computed once and reused for every feature scanned — including its
+         * NATIVE copy, so a large attachment is copied off-heap once per message, not once per feature. Freed by
+         * {@link #releaseNative()} when the message is done.
+         */
         com.gliwka.hyperscan.wrapper.PreparedText prepared() {
             if (prepared == null) {
                 prepared = new com.gliwka.hyperscan.wrapper.PreparedText(stripResult.strippedText());
             }
             return prepared;
+        }
+
+        void releaseNative() {
+            if (prepared != null) {
+                prepared.close();
+            }
         }
     }
 
@@ -355,6 +380,7 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      */
     @Override
     public void close() {
+        releaseNativeTexts();
         scanner.close();
     }
 
