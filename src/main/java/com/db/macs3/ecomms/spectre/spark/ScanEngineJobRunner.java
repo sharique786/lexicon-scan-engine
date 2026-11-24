@@ -121,6 +121,7 @@ public class ScanEngineJobRunner {
      */
     public void run(String[] args) throws IOException {
         log.info("Stage [parse arguments/config]: starting");
+        log.info("scan-engine properties in effect: {}", properties);
         Instant stageStart = Instant.now();
         RuntimeArgs runtimeArgs;
         DataprocConfig dataprocConfig;
@@ -309,17 +310,24 @@ public class ScanEngineJobRunner {
 
         // Split and write — each write triggers its own Spark action, executing step 6 above
         // (already materialized/cached by the .count() call, so these reuse it rather than rescanning).
+        boolean writesSucceeded = false;
         try {
             runStageVoid("scan messages + write outputs",
                     () -> writeOutputs(tableConfig, runtimeArgs, dataprocConfig.csv(), dataprocConfig.stageName(), results, stats));
+            writesSucceeded = true;
         } finally {
             // Release cached/persisted data deterministically instead of leaving it to application exit.
             results.unpersist(false);
             relevantMessageIds.unpersist(false);
             viewRows.unpersist(false);
-            // Free the broadcast copy on every executor too; nothing reads it after the writes.
-            broadcastFeatureToZipPath.destroy();
-            broadcastFeatureDefinitionsByKey.destroy();
+            // Free the broadcast copy on every executor — but ONLY after the writes succeeded. After a failure, task
+            // attempts of the aborted stage can still be running or retrying; destroying the broadcast under them
+            // turns the real failure into misleading "Failed to get broadcast_N_piece0" errors. The application is
+            // about to fail anyway, so the copies go away with the executors.
+            if (writesSucceeded) {
+                broadcastFeatureToZipPath.destroy();
+                broadcastFeatureDefinitionsByKey.destroy();
+            }
         }
     }
 

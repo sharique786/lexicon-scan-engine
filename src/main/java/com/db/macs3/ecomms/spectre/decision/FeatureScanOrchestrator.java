@@ -3,6 +3,7 @@ package com.db.macs3.ecomms.spectre.decision;
 import com.db.macs3.ecomms.spectre.constants.BqColumns;
 import com.db.macs3.ecomms.spectre.html.ChatVoiceMessageTextExtractor;
 import com.db.macs3.ecomms.spectre.html.HtmlStrippingService;
+import com.db.macs3.ecomms.spectre.hyperscan.CollapsingScannerPool;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanBundleLoader;
 import com.db.macs3.ecomms.spectre.hyperscan.HyperscanScanService;
 import com.db.macs3.ecomms.spectre.hyperscan.TermIdBuilder;
@@ -152,10 +153,26 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      *                     prefix; the tail otherwise stops at the end of the line — see {@link CollapsingScanner}
      */
     public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes, int maxTailChars) {
+        this(bundleLoader, maxAttachmentSizeBytes, maxTailChars, null);
+    }
+
+    /**
+     * @param scannerPool when non-null, the scanner is BORROWED from this executor-wide pool and given back on
+     *                    {@link #close()} instead of being created and closed here — production must use the pool,
+     *                    see {@link CollapsingScannerPool} for the JVM crash per-task scanners caused
+     */
+    public FeatureScanOrchestrator(HyperscanBundleLoader bundleLoader, Long maxAttachmentSizeBytes, int maxTailChars,
+                                   CollapsingScannerPool scannerPool) {
         this.bundleLoader = bundleLoader;
         this.maxAttachmentSizeBytes = maxAttachmentSizeBytes;
-        this.scanner = new CollapsingScanner(maxTailChars);
+        this.scannerPool = scannerPool;
+        this.scanner = scannerPool != null ? scannerPool.borrow(maxTailChars) : new CollapsingScanner(maxTailChars);
     }
+
+    /** Pool the scanner was borrowed from, or null when this instance owns (and closes) it. */
+    private final CollapsingScannerPool scannerPool;
+    /** close() runs twice in production (iterator end + task-completion listener); a pooled scanner must be returned once. */
+    private final java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
 
     /**
      * A {@link DecisionTreeEvaluator.FeatureRowScanner} bound to one message —
@@ -380,8 +397,15 @@ public final class FeatureScanOrchestrator implements AutoCloseable {
      */
     @Override
     public void close() {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
         releaseNativeTexts();
-        scanner.close();
+        if (scannerPool != null) {
+            scannerPool.release(scanner); // stays open for the next task — never close a pooled scanner
+        } else {
+            scanner.close();
+        }
     }
 
     private boolean withinSizeLimit(MessageAttachment attachment) {

@@ -1,82 +1,71 @@
 package com.db.macs3.ecomms.spectre.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.gliwka.hyperscan.wrapper.CollapsingScanner;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Spring-bound job-infrastructure configuration — everything NOT supplied per invocation by
- * {@link RuntimeArgs} or the {@link DataprocConfig} YAML. Bound from {@code application.yml} in
- * production and {@code application-test.yml} for tests.
+ * {@link RuntimeArgs} or the {@link DataprocConfig} YAML. Bound from the {@code scan-engine:} block of
+ * {@code application.yml} in production and {@code application-test.yml} for tests.
  *
- * <p>{@code maxAttachmentSizeBytes} and {@code stageName} used to live here (bound via
- * {@code SPECTRE_MAX_ATTACHMENT_SIZE_BYTES} and {@code stage-name} respectively) but are now
- * sourced from the {@link DataprocConfig} YAML instead — {@code spectre.engine.messages.max-attachment-limit}
+ * <p>Every property is bound the same way: JavaBean binding through its setter, with Spring's relaxed names
+ * ({@code max-tail-chars} -> {@link #setMaxTailChars}). The field initialisers are the defaults used when a key
+ * is absent. Do NOT add {@code @Value} to these fields: {@code @Value} ignores the {@code scan-engine} prefix
+ * (so {@code ${max-tail-chars}} looks up a top-level key that does not exist) and only ever produced the default.
+ * {@code ScanEnginePropertiesTest} binds the real {@code application.yml} and checks every key.
+ *
+ * <p>{@code maxAttachmentSizeBytes} and {@code stageName} used to live here but are now sourced from the
+ * {@link DataprocConfig} YAML instead — {@code spectre.engine.messages.max-attachment-limit}
  * ({@link DataprocConfig.MessagesGcsConfig#maxAttachmentLimit()}) and {@code spectre.engine.stage-name}
- * ({@link DataprocConfig#stageName()}) — since both are per-pipeline-execution values, not
- * job-infrastructure config. {@code null}/absent still means "no limit" for the attachment size, same as
- * before.
+ * ({@link DataprocConfig#stageName()}) — since both are per-pipeline-execution values.
  */
 @ConfigurationProperties(prefix = "scan-engine")
 public class ScanEngineProperties {
 
-    /**
-     * Bounds each Spark partition's cached-bundle count (database + term metadata together) — see {@code HyperscanBundleLoader}.
-     */
-    @Value("${max-cached-databases-per-partition:20}")
-    private int maxCachedDatabasesPerPartition;
+    /** {@code max-cached-databases-per-partition}: bundles each partition's own LRU holds — see {@code HyperscanBundleLoader}. */
+    private int maxCachedDatabasesPerPartition = 20;
 
     /**
-     * The identity written to every output/audit row's {@code created_by} column.
-     */
-    @Value("${created-by: SPECTRE-COMPOSER-SA}")
-    private String createdBy;
-
-    /**
-     * Sort each partition's messages by their feature set before scanning, so messages needing the same
-     * Hyperscan bundles run back to back (see {@code ScanEngineJobRunner}). Pure ordering — no effect on results.
-     */
-    @Value("${sort-partitions-by-feature-set:true}")
-    private boolean sortPartitionsByFeatureSet = true;
-
-    /**
-     * Range-partition messages by their feature set (with {@code message_id} as tie-breaker) before scanning, so
-     * each partition/executor needs far fewer Hyperscan bundles. Costs one extra shuffle of the joined messages
-     * (attachments included) — off by default; see {@code FeatureSetLayout}. Pure layout — no effect on results.
-     */
-    private boolean partitionByFeatureSet = false;
-
-    public boolean isPartitionByFeatureSet() {
-        return partitionByFeatureSet;
-    }
-
-    public void setPartitionByFeatureSet(boolean partitionByFeatureSet) {
-        this.partitionByFeatureSet = partitionByFeatureSet;
-    }
-
-    /**
-     * Share loaded Hyperscan bundles between all tasks of one executor (see {@code SharedBundleCache}) instead of
-     * every task loading its own copy. False restores per-partition private loading.
+     * {@code shared-bundle-cache-enabled}: share loaded Hyperscan bundles between all tasks of one executor (see
+     * {@code SharedBundleCache}) instead of every task loading its own copy. False restores per-partition loading.
      */
     private boolean sharedBundleCacheEnabled = true;
 
     /**
-     * How many bundles NO running task currently uses an executor keeps open for the next task. Each costs native
-     * (off-heap) memory — budget it in {@code spark.executor.memoryOverhead}. Only used when the shared cache is on.
+     * {@code max-shared-idle-bundles-per-executor}: bundles NO running task uses that an executor keeps open for the
+     * next task. Each costs native (off-heap) memory — budget it in {@code spark.executor.memoryOverhead}. Only used
+     * when the shared cache is on.
      */
     private int maxSharedIdleBundlesPerExecutor = 32;
 
     /**
-     * Maximum number of characters a disclaimer-style term ending in {@code .*} is extended by after its matched
-     * prefix (the tail otherwise runs to the end of the line) — see {@code CollapsingScanner}.
+     * {@code sort-partitions-by-feature-set}: sort each partition's messages by their feature set before scanning, so
+     * messages needing the same bundles run back to back. Pure ordering — no effect on results.
      */
-    private int maxTailChars = com.gliwka.hyperscan.wrapper.CollapsingScanner.DEFAULT_MAX_TAIL_CHARS;
+    private boolean sortPartitionsByFeatureSet = true;
 
-    public int getMaxTailChars() {
-        return maxTailChars;
+    /**
+     * {@code partition-by-feature-set}: range-partition messages by feature set (with {@code message_id} as
+     * tie-breaker) before scanning. Costs one extra shuffle of the joined messages — off by default; see
+     * {@code FeatureSetLayout}. Pure layout — no effect on results.
+     */
+    private boolean partitionByFeatureSet = false;
+
+    /**
+     * {@code max-tail-chars}: max characters a term ending in {@code .*} (e.g. a disclaimer) is extended by after its
+     * matched prefix; the tail otherwise stops at the end of the line — see {@code CollapsingScanner}.
+     */
+    private int maxTailChars = CollapsingScanner.DEFAULT_MAX_TAIL_CHARS;
+
+    /** {@code created-by}: the identity written to every output/audit row's {@code created_by} column. */
+    private String createdBy = "SPECTRE-COMPOSER-SA";
+
+    public int getMaxCachedDatabasesPerPartition() {
+        return maxCachedDatabasesPerPartition;
     }
 
-    public void setMaxTailChars(int maxTailChars) {
-        this.maxTailChars = maxTailChars;
+    public void setMaxCachedDatabasesPerPartition(int maxCachedDatabasesPerPartition) {
+        this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
     }
 
     public boolean isSharedBundleCacheEnabled() {
@@ -103,12 +92,20 @@ public class ScanEngineProperties {
         this.sortPartitionsByFeatureSet = sortPartitionsByFeatureSet;
     }
 
-    public int getMaxCachedDatabasesPerPartition() {
-        return maxCachedDatabasesPerPartition;
+    public boolean isPartitionByFeatureSet() {
+        return partitionByFeatureSet;
     }
 
-    public void setMaxCachedDatabasesPerPartition(int maxCachedDatabasesPerPartition) {
-        this.maxCachedDatabasesPerPartition = maxCachedDatabasesPerPartition;
+    public void setPartitionByFeatureSet(boolean partitionByFeatureSet) {
+        this.partitionByFeatureSet = partitionByFeatureSet;
+    }
+
+    public int getMaxTailChars() {
+        return maxTailChars;
+    }
+
+    public void setMaxTailChars(int maxTailChars) {
+        this.maxTailChars = maxTailChars;
     }
 
     public String getCreatedBy() {
@@ -117,5 +114,16 @@ public class ScanEngineProperties {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
+    }
+
+    @Override
+    public String toString() {
+        return "ScanEngineProperties{maxCachedDatabasesPerPartition=" + maxCachedDatabasesPerPartition
+                + ", sharedBundleCacheEnabled=" + sharedBundleCacheEnabled
+                + ", maxSharedIdleBundlesPerExecutor=" + maxSharedIdleBundlesPerExecutor
+                + ", sortPartitionsByFeatureSet=" + sortPartitionsByFeatureSet
+                + ", partitionByFeatureSet=" + partitionByFeatureSet
+                + ", maxTailChars=" + maxTailChars
+                + ", createdBy='" + createdBy + "'}";
     }
 }

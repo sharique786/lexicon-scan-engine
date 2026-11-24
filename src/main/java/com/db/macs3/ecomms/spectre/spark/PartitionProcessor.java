@@ -169,7 +169,9 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
                     ? SharedBundleCache.forExecutor(maxSharedIdleBundles) : null;
             bundleLoader = new HyperscanBundleLoader(featureToZipPathBroadcast.value(), gcsClient::openStream,
                     maxCachedDatabasesPerPartition, sharedCache, runId);
-            orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes, maxTailChars);
+            // Scanner borrowed from the executor-wide pool, never created/closed per task: see CollapsingScannerPool.
+            orchestrator = new FeatureScanOrchestrator(bundleLoader, maxAttachmentSizeBytes, maxTailChars,
+                    com.db.macs3.ecomms.spectre.hyperscan.CollapsingScannerPool.forExecutor());
 
             // Safety net: StreamingResults only closes on exhaustion or an exception thrown from next().
             // If Spark stops consuming early (task killed/interrupted, downstream failure, speculative

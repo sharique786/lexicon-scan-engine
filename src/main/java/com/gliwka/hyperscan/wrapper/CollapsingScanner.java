@@ -91,12 +91,27 @@ public class CollapsingScanner implements Closeable {
     /** Upper bound on how far a rewritten trailing {@code .*} extends a match — see {@link #extendToSentenceEnd}. */
     private final int maxTailChars;
 
+    /**
+     * First Throwable raised inside the native match callback during the current scan, or null. A Java exception
+     * must never escape a JavaCPP callback: JavaCPP rethrows it as a C++ exception through Hyperscan's C frames,
+     * which cannot unwind them, and the whole JVM dies. The callback records it, stops the scan, and
+     * {@link #runNativeScan} rethrows it on the Java side.
+     */
+    private Throwable callbackFailure;
+
     private match_event_handler newHandler() {
         return new match_event_handler() {
             @Override
             public int call(int id, long from, long to, int flags, Pointer context) {
-                collapsed.add(id, from, to);
-                return 0; // keep scanning
+                try {
+                    collapsed.add(id, from, to);
+                    return 0; // keep scanning
+                } catch (Throwable t) { // NOSONAR must not cross the native boundary, see callbackFailure
+                    if (callbackFailure == null) {
+                        callbackFailure = t;
+                    }
+                    return 1; // non-zero stops the scan (HS_SCAN_TERMINATED)
+                }
             }
         };
     }
@@ -162,6 +177,17 @@ public class CollapsingScanner implements Closeable {
         lastScratchDb = db;
     }
 
+    /**
+     * Drops this scanner's references to the databases it last scanned (scratch and tail-id shortcuts), keeping its
+     * native scratch and callback. Called when a pooled scanner is handed back, so it never pins a database that the
+     * finished task released; the next {@link #allocScratch} simply re-checks the scratch (cheap).
+     */
+    public void forgetDatabases() {
+        lastScratchDb = null;
+        lastTailDb = null;
+        lastTailIds = Set.of();
+    }
+
     /** The last database {@link #allocScratch} succeeded for — lets repeat calls for it be skipped. */
     private Database lastScratchDb;
 
@@ -195,7 +221,13 @@ public class CollapsingScanner implements Closeable {
     private void runNativeScan(Database db, PreparedText prepared) {
         hs_database_t database = db.getDatabase();
         BytePointer bytePointer = prepared.nativeBytes();
+        callbackFailure = null;
         int hsError = hs_scan(database, bytePointer, prepared.byteLength(), 0, scratch, handler, null);
+        Throwable failure = callbackFailure;
+        callbackFailure = null;
+        if (failure != null) {
+            throw new IllegalStateException("Hyperscan match callback failed: " + failure, failure);
+        }
         if (hsError != 0) {
             throw HyperscanException.hsErrorToException(hsError);
         }
