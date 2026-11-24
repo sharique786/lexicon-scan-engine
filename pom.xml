@@ -383,6 +383,65 @@
             <properties>
                 <hyperscan.version>5.4.11-3.1.0</hyperscan.version>
             </properties>
+            <build>
+                <resources>
+                    <!-- the two src/main/resources entries mirror spring-boot-starter-parent's (a profile's list
+                         replaces the inherited one): application*.yml filtered, everything else copied as is -->
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <filtering>true</filtering>
+                        <includes>
+                            <include>**/application*.yml</include>
+                            <include>**/application*.yaml</include>
+                            <include>**/application*.properties</include>
+                        </includes>
+                    </resource>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <excludes>
+                            <exclude>**/application*.yml</exclude>
+                            <exclude>**/application*.yaml</exclude>
+                            <exclude>**/application*.properties</exclude>
+                        </excludes>
+                    </resource>
+                    <!-- Patched Vectorscan libhs.so/libhs_runtime.so: the jar's originals overflow a stack buffer in
+                         rvermicelliDoubleExec and kill the executor JVM (SIGSEGV libhs_runtime.so+0x4a6c91). Same
+                         resource path, so these shadow the originals on the classpath; the shade plugin keeps the
+                         first copy it sees, which is this project's. VectorscanNativeCheck fails fast if not. -->
+                    <resource><directory>src/main/native-patched</directory></resource>
+                </resources>
+            </build>
+        </profile>
+        <!-- Same patched libraries when 5.4.11 is forced from Windows: -Dhyperscan.version=5.4.11-3.1.0 -->
+        <profile>
+            <id>hyperscan-latest-forced</id>
+            <activation>
+                <property><name>hyperscan.version</name><value>5.4.11-3.1.0</value></property>
+            </activation>
+            <build>
+                <resources>
+                    <!-- the two src/main/resources entries mirror spring-boot-starter-parent's (a profile's list
+                         replaces the inherited one): application*.yml filtered, everything else copied as is -->
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <filtering>true</filtering>
+                        <includes>
+                            <include>**/application*.yml</include>
+                            <include>**/application*.yaml</include>
+                            <include>**/application*.properties</include>
+                        </includes>
+                    </resource>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <excludes>
+                            <exclude>**/application*.yml</exclude>
+                            <exclude>**/application*.yaml</exclude>
+                            <exclude>**/application*.properties</exclude>
+                        </excludes>
+                    </resource>
+                    <resource><directory>src/main/native-patched</directory></resource>
+                </resources>
+            </build>
         </profile>
     </profiles>
 

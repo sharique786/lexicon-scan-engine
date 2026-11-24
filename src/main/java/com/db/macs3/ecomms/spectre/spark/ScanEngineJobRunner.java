@@ -122,6 +122,8 @@ public class ScanEngineJobRunner {
     public void run(String[] args) throws IOException {
         log.info("Stage [parse arguments/config]: starting");
         log.info("scan-engine properties in effect: {}", properties);
+        // Same jar as the executors: refuse to start (before any read) on the crashing Vectorscan build.
+        com.db.macs3.ecomms.spectre.hyperscan.VectorscanNativeCheck.verifyOnce();
         Instant stageStart = Instant.now();
         RuntimeArgs runtimeArgs;
         DataprocConfig dataprocConfig;

@@ -13,7 +13,10 @@ import java.util.Map;
  * Executor-wide (one per JVM) pool of long-lived {@link CollapsingScanner}s. Spark tasks borrow one at partition
  * start and give it back at partition end; scanners are NEVER closed.
  *
- * <h2>Why — the executor SIGSEGV / SIGABRT</h2>
+ * <h2>Why — JavaCPP callback-slot recursion (reproduced on Windows/5.4.0)</h2>
+ * Note: the production Linux SIGSEGV in {@code libhs_runtime.so} turned out to be a separate Vectorscan bug — see
+ * {@link VectorscanNativeCheck}. This pool still removes the churn below, which crashed a JVM in local stress runs.
+ *
  * Each scanner owns a JavaCPP {@code match_event_handler} callback. JavaCPP gives that callback type a fixed table of
  * 10 native slots per JVM, each mapped to one live Java handler. Creating and closing a scanner per Spark task (the
  * pre-pool design: thousands of times per executor, on several task threads at once) was reproduced to end, under

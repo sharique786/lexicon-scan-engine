@@ -157,6 +157,8 @@ public final class PartitionProcessor implements MapPartitionsFunction<Row, Mess
     public Iterator<MessageProcessingResult> call(Iterator<Row> partitionRows) {
         int partitionId = TaskContext.getPartitionId();
         log.info("Partition {}: processing starting", partitionId);
+        // Fails the task (not the JVM) if the crashing Vectorscan build is on this executor's classpath.
+        com.db.macs3.ecomms.spectre.hyperscan.VectorscanNativeCheck.verifyOnce();
         Instant partitionStart = Instant.now();
         // Constructed ONCE per partition — see class Javadoc. The broadcast .value() call reads
         // the executor-local copy Spark already delivered via its broadcast mechanism — this does
