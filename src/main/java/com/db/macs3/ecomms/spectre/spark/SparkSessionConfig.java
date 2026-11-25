@@ -87,7 +87,7 @@ public class SparkSessionConfig {
         // message-size distributions.
         conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_SKEWED_PARTITION_FACTOR, "3");
         conf.set(SparkConfigKeys.ADAPTIVE_SKEW_JOIN_SKEWED_PARTITION_THRESHOLD_BYTES, "128m");
-        conf.set(SparkConfigKeys.ADAPTIVE_ADVISORY_PARTITION_SIZE_BYTES, "64m");
+        conf.set(SparkConfigKeys.ADAPTIVE_ADVISORY_PARTITION_SIZE_BYTES, "128m");
 
         // spark.sql.shuffle.partitions: Spark's own hardcoded default (200) has no relationship
         // to how many executor cores THIS run actually has on a shared, dynamically-allocated
@@ -112,5 +112,8 @@ public class SparkSessionConfig {
         // dominates the whole stage's wall-clock time before AQE's post-shuffle rebalancing
         // even has a chance to help.
         conf.set(SparkConfigKeys.FILES_MAX_PARTITION_BYTES, "67108864"); // 64MB
+        // Executor environment variables (spark.executorEnv.*, e.g. MALLOC_ARENA_MAX) are launch-time settings: set
+        // them with --properties at submit time. Setting them here, on the runtime conf after getOrCreate(), only
+        // stores them in this session's SQL conf - executors never see them.
     }
 }

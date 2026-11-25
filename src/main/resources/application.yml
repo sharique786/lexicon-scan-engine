@@ -12,12 +12,12 @@
 # --properties spark.driver.extraJavaOptions=-Dscan-engine.created-by=...)
 # via Spring Boot's standard property-source precedence.
 scan-engine:
-  max-cached-databases-per-partition: 20
+  max-cached-databases-per-partition: 50
   # One copy of each Hyperscan bundle per executor, shared by its tasks (SharedBundleCache).
   shared-bundle-cache-enabled: true
   # Bundles no task is using that an executor keeps open (native memory - size memoryOverhead for it).
   max-shared-idle-bundles-per-executor: 32
-  sort-partitions-by-feature-set: true
+  sort-partitions-by-feature-set: false
   # Range-partition messages by feature set so each partition needs fewer bundles. One extra shuffle of the
   # full messages (attachments included) - measure before enabling (FeatureSetLayout).
   partition-by-feature-set: false
@@ -25,6 +25,16 @@ scan-engine:
   # otherwise stops at the end of the line (CollapsingScanner).
   max-tail-chars: 1000
   created-by: SPECTRE-COMPOSER-SA
+  # Raise the two bundle caches above to the run's largest per-message feature count when that is larger. A cache
+  # smaller than one message's feature set reloads every bundle for every message (BundleCacheSizing).
+  auto-size-bundle-cache: true
+  # BigQuery writes are sized from each table's row count (BqWritePlan): rows per written partition, i.e. per staged
+  # Avro file (indirect) or per Storage Write API stream (pipeline_record_audit).
+  bq-summary-rows-per-write-partition: 50000
+  bq-detail-rows-per-write-partition: 20000
+  bq-audit-rows-per-write-partition: 250000
+  # > 0 splits a message-scale table into several load jobs above this many rows. 0 = one atomic load job per table.
+  bq-max-rows-per-load-job: 0
 
 # Logging levels are NOT configured here — see src/main/resources/log4j2.properties
 # instead. A Spring Boot `logging.level.*` block only ever reaches the DRIVER

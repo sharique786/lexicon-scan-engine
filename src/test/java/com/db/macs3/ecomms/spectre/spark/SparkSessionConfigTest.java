@@ -70,7 +70,7 @@ class SparkSessionConfigTest {
     void tightensSkewJoinThresholds() {
         assertThat(spark.conf().get("spark.sql.adaptive.skewJoin.skewedPartitionFactor")).isEqualTo("3");
         assertThat(spark.conf().get("spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes")).isEqualTo("128m");
-        assertThat(spark.conf().get("spark.sql.adaptive.advisoryPartitionSizeInBytes")).isEqualTo("64m");
+        assertThat(spark.conf().get("spark.sql.adaptive.advisoryPartitionSizeInBytes")).isEqualTo("128m");
     }
 
     @Test

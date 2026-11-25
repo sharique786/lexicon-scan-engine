@@ -9,11 +9,13 @@ import com.db.macs3.ecomms.spectre.model.output.ModelConfigDtls;
 import com.db.macs3.ecomms.spectre.model.output.PipelineRecordAuditRow;
 import com.db.macs3.ecomms.spectre.model.output.PipelineStageAuditRow;
 import com.db.macs3.ecomms.spectre.model.output.RuleDtlType;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SaveMode;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.functions;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -97,6 +99,11 @@ public final class OutputTableWriter {
         writeAppend(rows, config.bqOutputHitSummary());
     }
 
+    /** Sized/batched by {@code plan} — see {@link BqWritePlan}. */
+    public static void writeLexiconHitSummary(BqTableConfig config, Dataset<Row> rows, BqWritePlan plan) {
+        writePlanned(rows, config.bqOutputHitSummary(), plan, BqColumns.LexiconHitSummary.MESSAGE_ID, false);
+    }
+
     // ── lexicon-hit-restricted / lexicon-hit-unrestricted (shared schema) ───
 
     private static final StructType TERM_DTL_DETAIL_TYPE = DataTypes.createStructType(new StructField[]{
@@ -129,6 +136,13 @@ public final class OutputTableWriter {
     public static void writeLexiconHitDetail(BqTableConfig config, Dataset<Row> rows, boolean restricted) {
         String fullyQualifiedTable = restricted ? config.bqOutputHitRestricted() : config.bqOutputHitUnrestricted();
         writeAppend(rows, fullyQualifiedTable);
+    }
+
+    /** Sized/batched by {@code plan} — see {@link BqWritePlan}. */
+    public static void writeLexiconHitDetail(BqTableConfig config, Dataset<Row> rows, boolean restricted,
+                                             BqWritePlan plan) {
+        String fullyQualifiedTable = restricted ? config.bqOutputHitRestricted() : config.bqOutputHitUnrestricted();
+        writePlanned(rows, fullyQualifiedTable, plan, BqColumns.LexiconHitDetail.MESSAGE_ID, false);
     }
 
     // ── feature-hit-summary ──────────────────────────────────────────────────
@@ -165,6 +179,11 @@ public final class OutputTableWriter {
 
     public static void writeFeatureHitSummary(BqTableConfig config, Dataset<Row> rows) {
         writeAppend(rows, config.bqOutputFeatureHitSummary());
+    }
+
+    /** Sized/batched by {@code plan} — see {@link BqWritePlan}. */
+    public static void writeFeatureHitSummary(BqTableConfig config, Dataset<Row> rows, BqWritePlan plan) {
+        writePlanned(rows, config.bqOutputFeatureHitSummary(), plan, BqColumns.FeatureHitSummary.MESSAGE_ID, false);
     }
 
     // ── pipeline_stage_audit ─────────────────────────────────────────────────
@@ -346,7 +365,51 @@ public final class OutputTableWriter {
         writeAppendDirect(rows, config.bqOutputRecordAudit());
     }
 
+    /**
+     * Sized by {@code plan}: each partition is one Storage Write API stream, so coalescing turns the dedup
+     * shuffle's 1000+ partitions into a handful of streams. Never split into several writes — {@code plan.loadJobs}
+     * is ignored here, a direct write already commits all its streams together.
+     */
+    public static void writePipelineRecordAudit(BqTableConfig config, Dataset<Row> rows, BqWritePlan plan) {
+        writePlanned(rows, config.bqOutputRecordAudit(),
+                new BqWritePlan(plan.rows(), plan.partitions(), 1), BqColumns.PipelineRecordAudit.RECORD_ID, true);
+    }
+
     // ── shared write path ────────────────────────────────────────────────────
+
+    /**
+     * Writes {@code dataset} as {@code plan} says: skipped when it has no rows; coalesced to {@code plan.partitions}
+     * (no shuffle — each partition is one staged file / one write stream); and, when {@code plan.loadJobs > 1},
+     * split by {@code pmod(hash(keyColumn), loadJobs)} into that many separate writes, each committed on its own.
+     */
+    static void writePlanned(Dataset<Row> dataset, String fullyQualifiedTable, BqWritePlan plan,
+                             String keyColumn, boolean direct) {
+        if (plan.isEmpty()) {
+            log.info("No rows for BigQuery table {} — write skipped", fullyQualifiedTable);
+            return;
+        }
+        int jobs = Math.max(1, plan.loadJobs());
+        int partitionsPerJob = Math.max(1, (int) Math.ceil(plan.partitions() / (double) jobs));
+        log.info("Writing ~{} row(s) to BigQuery table {} in {} write(s) of up to {} partition(s) each",
+                plan.rows(), fullyQualifiedTable, jobs, partitionsPerJob);
+        for (int job = 0; job < jobs; job++) {
+            Dataset<Row> batch = jobs == 1 ? dataset : dataset.filter(batchFilter(keyColumn, jobs, job));
+            Dataset<Row> sized = batch.coalesce(partitionsPerJob);
+            if (jobs > 1) {
+                log.info("BigQuery table {}: write {}/{}", fullyQualifiedTable, job + 1, jobs);
+            }
+            if (direct) {
+                writeAppendDirect(sized, fullyQualifiedTable);
+            } else {
+                writeAppend(sized, fullyQualifiedTable);
+            }
+        }
+    }
+
+    /** Rows of batch {@code index} of {@code batches}: deterministic per key, so every row lands in exactly one batch. */
+    static Column batchFilter(String keyColumn, int batches, int index) {
+        return functions.pmod(functions.hash(functions.col(keyColumn)), functions.lit(batches)).equalTo(index);
+    }
 
     // intermediateFormat=avro: the connector's indirect write defaults to Parquet, whose
     // 3-level LIST encoding for a REPEATED RECORD (evaluated_lexicons[]/features[]) sitting

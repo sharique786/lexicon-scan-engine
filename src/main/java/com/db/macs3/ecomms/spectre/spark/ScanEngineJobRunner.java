@@ -2,6 +2,7 @@ package com.db.macs3.ecomms.spectre.spark;
 
 import com.db.macs3.ecomms.spectre.LexiconScanEngineApplication;
 import com.db.macs3.ecomms.spectre.avro.MessageAvroReader;
+import com.db.macs3.ecomms.spectre.bq.BqWritePlan;
 import com.db.macs3.ecomms.spectre.bq.FeatureDecisionViewReader;
 import com.db.macs3.ecomms.spectre.bq.OutputTableWriter;
 import com.db.macs3.ecomms.spectre.config.BqTableConfig;
@@ -235,6 +236,7 @@ public class ScanEngineJobRunner {
             return new FeatureResolution(zipPaths, FeatureSetLayout.assignKeys(distinctFeatureDefJson));
         });
         Map<String, String> featureToZipPath = featureResolution.zipPaths();
+        BundleCacheSizing cacheSizing = runStage("size Hyperscan bundle caches", () -> resolveCacheSizing(viewRows));
         Broadcast<Map<Integer, String>> broadcastFeatureDefinitionsByKey =
                 javaSparkContext.broadcast(FeatureSetLayout.invert(featureResolution.definitionKeys()));
 
@@ -291,8 +293,7 @@ public class ScanEngineJobRunner {
                 properties.isPartitionByFeatureSet(), properties.isSortPartitionsByFeatureSet());
         Dataset<MessageProcessingResult> results = toScan.mapPartitions(
                 new PartitionProcessor(broadcastFeatureToZipPath,
-                        messagesConfig.maxAttachmentLimit(), properties.getMaxCachedDatabasesPerPartition(),
-                        properties.isSharedBundleCacheEnabled() ? properties.getMaxSharedIdleBundlesPerExecutor() : -1,
+                        messagesConfig.maxAttachmentLimit(), cacheSizing.perPartition(), cacheSizing.sharedIdle(),
                         java.util.UUID.randomUUID().toString(), properties.getMaxTailChars(),
                         broadcastFeatureDefinitionsByKey),
                 Encoders.kryo(MessageProcessingResult.class)
@@ -331,6 +332,35 @@ public class ScanEngineJobRunner {
                 broadcastFeatureDefinitionsByKey.destroy();
             }
         }
+    }
+
+    /**
+     * Sizes the bundle caches from the largest per-message feature count (one aggregation over the cached view).
+     * A message whose features do not all fit in the per-partition LRU reloads EVERY one of them for every message
+     * - see {@link BundleCacheSizing}.
+     */
+    private BundleCacheSizing resolveCacheSizing(Dataset<Row> viewRows) {
+        Row maxRow = viewRows.groupBy(BqColumns.View.MESSAGE_ID).count()
+                .agg(functions.max("count")).first();
+        long maxFeaturesPerMessage = maxRow.isNullAt(0) ? 0L : maxRow.getLong(0);
+        BundleCacheSizing sizing = BundleCacheSizing.resolve(
+                properties.getMaxCachedDatabasesPerPartition(), properties.getMaxSharedIdleBundlesPerExecutor(),
+                properties.isSharedBundleCacheEnabled(), properties.isAutoSizeBundleCache(), maxFeaturesPerMessage);
+        log.info("Largest per-message feature count: {}; bundle cache per partition: {} (configured {}), shared idle "
+                        + "per executor: {} (configured {})", maxFeaturesPerMessage, sizing.perPartition(),
+                properties.getMaxCachedDatabasesPerPartition(), sizing.sharedIdle(),
+                properties.getMaxSharedIdleBundlesPerExecutor());
+        if (BundleCacheSizing.thrashes(sizing.perPartition(), maxFeaturesPerMessage)) {
+            log.warn("A message needs {} bundles but the per-partition cache holds {}: every such message reloads ALL "
+                            + "its bundles (GCS download + native load each time). Enable auto-size-bundle-cache or raise "
+                            + "max-cached-databases-per-partition.", maxFeaturesPerMessage, sizing.perPartition());
+        } else if (sizing.perPartition() > properties.getMaxCachedDatabasesPerPartition()) {
+            log.warn("Bundle caches raised to {} to fit one message's features. Native memory per executor grows with it "
+                            + "({}): size spark.executor.memoryOverhead for that many bundles.", sizing.perPartition(),
+                    properties.isSharedBundleCacheEnabled() ? "one copy of each bundle, shared by the executor's tasks"
+                            : "shared cache is disabled, so each concurrent task holds its own copies - enable it");
+        }
+        return sizing;
     }
 
     /** Result of the distinct-feature stage: feature -> zip path, and definition JSON -> short key. */
@@ -414,27 +444,38 @@ public class ScanEngineJobRunner {
     private void writeOutputs(BqTableConfig tableConfig, RuntimeArgs runtimeArgs,
                               DataprocConfig.CsvConfig csvConfig, String stageName,
                               Dataset<MessageProcessingResult> results, RunStats stats) {
-        Dataset<Row> summaryRows = results.mapPartitions(
-                new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA)).cache();
-        OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows);
+        // ONE pass over the results: runs the scan (persisting it) and counts every table's rows, so each write
+        // below is sized from its real volume and a scan failure is reported here, not inside a BigQuery write.
+        OutputRowCounts counts = runStage("scan messages + count output rows", () -> results.javaRDD()
+                .map(OutputRowCounts::of)
+                .fold(OutputRowCounts.ZERO, OutputRowCounts::plus));
+        log.info("Output rows: {} result(s), {} failed; summary/feature-hit rows {}, restricted detail {}, "
+                        + "unrestricted detail {}", counts.results(), counts.errors(), counts.summary(),
+                counts.restrictedDetail(), counts.unrestrictedDetail());
+        long maxRowsPerLoadJob = properties.getBqMaxRowsPerLoadJob();
+        BqWritePlan summaryPlan = BqWritePlan.forRows(
+                counts.summary(), properties.getBqSummaryRowsPerWritePartition(), maxRowsPerLoadJob);
 
-        long outputRecordCount = summaryRows.count();
-        summaryRows.unpersist(false); // only needed for the write + this count
-        stats.outputRecordCount = (int) outputRecordCount;
-        log.info("Total message count saved to lexicon-hit-summary: {}", outputRecordCount);
+        Dataset<Row> summaryRows = results.mapPartitions(
+                new SummaryRowMapper(), Encoders.row(OutputTableWriter.LEXICON_HIT_SUMMARY_SCHEMA));
+        OutputTableWriter.writeLexiconHitSummary(tableConfig, summaryRows, summaryPlan);
+        stats.outputRecordCount = (int) counts.summary();
+        log.info("Total message count saved to lexicon-hit-summary: {}", counts.summary());
 
         Dataset<Row> restrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(true), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
-        OutputTableWriter.writeLexiconHitDetail(tableConfig, restrictedDetailRows, true);
+        OutputTableWriter.writeLexiconHitDetail(tableConfig, restrictedDetailRows, true, BqWritePlan.forRows(
+                counts.restrictedDetail(), properties.getBqDetailRowsPerWritePartition(), maxRowsPerLoadJob));
         writeRestrictedCsvMirror(runtimeArgs, csvConfig, restrictedDetailRows);
 
         Dataset<Row> unrestrictedDetailRows = results.mapPartitions(
                 new DetailRowMapper(false), Encoders.row(OutputTableWriter.LEXICON_HIT_DETAIL_SCHEMA));
-        OutputTableWriter.writeLexiconHitDetail(tableConfig, unrestrictedDetailRows, false);
+        OutputTableWriter.writeLexiconHitDetail(tableConfig, unrestrictedDetailRows, false, BqWritePlan.forRows(
+                counts.unrestrictedDetail(), properties.getBqDetailRowsPerWritePartition(), maxRowsPerLoadJob));
 
         Dataset<Row> featureHitRows = results.mapPartitions(
                 new FeatureHitSummaryRowMapper(), Encoders.row(OutputTableWriter.FEATURE_HIT_SUMMARY_SCHEMA));
-        OutputTableWriter.writeFeatureHitSummary(tableConfig, featureHitRows);
+        OutputTableWriter.writeFeatureHitSummary(tableConfig, featureHitRows, summaryPlan);
 
         // Every record — success and failure alike — gets a row here, each with its own SUCCESS/FAILED
         // status. Only the identity/status/error columns plus sentDate/runDate/sourceName (copied from the
@@ -450,15 +491,10 @@ public class ScanEngineJobRunner {
         Dataset<Row> dedupedRecordAuditRows = recordAuditRows.dropDuplicates(
                 BqColumns.PipelineRecordAudit.RECORD_ID, BqColumns.PipelineRecordAudit.STAGE_NAME,
                 BqColumns.PipelineRecordAudit.EXECUTION_DATE, BqColumns.PipelineRecordAudit.PIPELINE_EXEC_ID);
-        // Persisted: isEmpty() and the write would otherwise each run the dropDuplicates shuffle over every record.
-        dedupedRecordAuditRows.persist(StorageLevel.MEMORY_AND_DISK());
-        try {
-            if (!dedupedRecordAuditRows.isEmpty()) {
-                OutputTableWriter.writePipelineRecordAudit(tableConfig, dedupedRecordAuditRows);
-            }
-        } finally {
-            dedupedRecordAuditRows.unpersist(false);
-        }
+        // Row count known from the counting pass (an upper bound before dedup), so no isEmpty() pass and no persist
+        // are needed: the dropDuplicates shuffle runs once, inside the write, coalesced to a few write streams.
+        OutputTableWriter.writePipelineRecordAudit(tableConfig, dedupedRecordAuditRows, BqWritePlan.forRows(
+                counts.recordAudit(), properties.getBqAuditRowsPerWritePartition(), 0));
     }
 
     static final String RESTRICTED_CSV_FILE_NAME = "lexicon-hit-restricted.csv";

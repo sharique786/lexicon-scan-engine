@@ -60,6 +60,68 @@ public class ScanEngineProperties {
     /** {@code created-by}: the identity written to every output/audit row's {@code created_by} column. */
     private String createdBy = "SPECTRE-COMPOSER-SA";
 
+    /**
+     * {@code auto-size-bundle-cache}: raise {@code max-cached-databases-per-partition} and
+     * {@code max-shared-idle-bundles-per-executor} to the run's largest per-message feature count when that is
+     * larger, so a message's bundles never evict each other (see {@code BundleCacheSizing}).
+     */
+    private boolean autoSizeBundleCache = true;
+
+    /** Target rows per written partition (one staged Avro file) for lexicon-hit-summary and feature-hit-summary. */
+    private int bqSummaryRowsPerWritePartition = 50_000;
+
+    /** Target rows per written partition for lexicon-hit-restricted/-unrestricted (larger rows: matched text). */
+    private int bqDetailRowsPerWritePartition = 20_000;
+
+    /** Target rows per written partition (one Storage Write API stream) for pipeline_record_audit. */
+    private int bqAuditRowsPerWritePartition = 250_000;
+
+    /**
+     * Rows above which a message-scale table is written as several load jobs; 0 = always one load job (atomic per
+     * table). See {@code BqWritePlan} for the partial-commit trade-off.
+     */
+    private long bqMaxRowsPerLoadJob = 0;
+
+    public boolean isAutoSizeBundleCache() {
+        return autoSizeBundleCache;
+    }
+
+    public void setAutoSizeBundleCache(boolean autoSizeBundleCache) {
+        this.autoSizeBundleCache = autoSizeBundleCache;
+    }
+
+    public int getBqSummaryRowsPerWritePartition() {
+        return bqSummaryRowsPerWritePartition;
+    }
+
+    public void setBqSummaryRowsPerWritePartition(int bqSummaryRowsPerWritePartition) {
+        this.bqSummaryRowsPerWritePartition = bqSummaryRowsPerWritePartition;
+    }
+
+    public int getBqDetailRowsPerWritePartition() {
+        return bqDetailRowsPerWritePartition;
+    }
+
+    public void setBqDetailRowsPerWritePartition(int bqDetailRowsPerWritePartition) {
+        this.bqDetailRowsPerWritePartition = bqDetailRowsPerWritePartition;
+    }
+
+    public int getBqAuditRowsPerWritePartition() {
+        return bqAuditRowsPerWritePartition;
+    }
+
+    public void setBqAuditRowsPerWritePartition(int bqAuditRowsPerWritePartition) {
+        this.bqAuditRowsPerWritePartition = bqAuditRowsPerWritePartition;
+    }
+
+    public long getBqMaxRowsPerLoadJob() {
+        return bqMaxRowsPerLoadJob;
+    }
+
+    public void setBqMaxRowsPerLoadJob(long bqMaxRowsPerLoadJob) {
+        this.bqMaxRowsPerLoadJob = bqMaxRowsPerLoadJob;
+    }
+
     public int getMaxCachedDatabasesPerPartition() {
         return maxCachedDatabasesPerPartition;
     }
@@ -124,6 +186,11 @@ public class ScanEngineProperties {
                 + ", sortPartitionsByFeatureSet=" + sortPartitionsByFeatureSet
                 + ", partitionByFeatureSet=" + partitionByFeatureSet
                 + ", maxTailChars=" + maxTailChars
-                + ", createdBy='" + createdBy + "'}";
+                + ", createdBy='" + createdBy + "'"
+                + ", autoSizeBundleCache=" + autoSizeBundleCache
+                + ", bqSummaryRowsPerWritePartition=" + bqSummaryRowsPerWritePartition
+                + ", bqDetailRowsPerWritePartition=" + bqDetailRowsPerWritePartition
+                + ", bqAuditRowsPerWritePartition=" + bqAuditRowsPerWritePartition
+                + ", bqMaxRowsPerLoadJob=" + bqMaxRowsPerLoadJob + "}";
     }
 }

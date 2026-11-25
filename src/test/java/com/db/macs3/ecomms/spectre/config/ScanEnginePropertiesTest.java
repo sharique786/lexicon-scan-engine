@@ -39,6 +39,11 @@ class ScanEnginePropertiesTest {
         assertThat(p.isPartitionByFeatureSet()).isTrue();
         assertThat(p.getMaxTailChars()).isEqualTo(250);
         assertThat(p.getCreatedBy()).isEqualTo("someone");
+        assertThat(p.isAutoSizeBundleCache()).isFalse();
+        assertThat(p.getBqSummaryRowsPerWritePartition()).isEqualTo(11);
+        assertThat(p.getBqDetailRowsPerWritePartition()).isEqualTo(12);
+        assertThat(p.getBqAuditRowsPerWritePartition()).isEqualTo(13);
+        assertThat(p.getBqMaxRowsPerLoadJob()).isEqualTo(14L);
     }
 
     private static @NonNull Map<String, Object> createStringObjectMap() {
@@ -50,6 +55,11 @@ class ScanEnginePropertiesTest {
         yml.put("scan-engine.partition-by-feature-set", "true");
         yml.put("scan-engine.max-tail-chars", "250");
         yml.put("scan-engine.created-by", "someone");
+        yml.put("scan-engine.auto-size-bundle-cache", "false");
+        yml.put("scan-engine.bq-summary-rows-per-write-partition", "11");
+        yml.put("scan-engine.bq-detail-rows-per-write-partition", "12");
+        yml.put("scan-engine.bq-audit-rows-per-write-partition", "13");
+        yml.put("scan-engine.bq-max-rows-per-load-job", "14");
         return yml;
     }
 
@@ -65,6 +75,11 @@ class ScanEnginePropertiesTest {
         assertThat(p.isPartitionByFeatureSet()).isFalse();
         assertThat(p.getMaxTailChars()).isEqualTo(CollapsingScanner.DEFAULT_MAX_TAIL_CHARS);
         assertThat(p.getCreatedBy()).isEqualTo("SPECTRE-COMPOSER-SA");
+        assertThat(p.isAutoSizeBundleCache()).isTrue();
+        assertThat(p.getBqSummaryRowsPerWritePartition()).isEqualTo(50_000);
+        assertThat(p.getBqDetailRowsPerWritePartition()).isEqualTo(20_000);
+        assertThat(p.getBqAuditRowsPerWritePartition()).isEqualTo(250_000);
+        assertThat(p.getBqMaxRowsPerLoadJob()).isZero();
     }
 
     @Test
@@ -99,6 +114,11 @@ class ScanEnginePropertiesTest {
             case "partition-by-feature-set" -> p.isPartitionByFeatureSet();
             case "max-tail-chars" -> p.getMaxTailChars();
             case "created-by" -> p.getCreatedBy();
+            case "auto-size-bundle-cache" -> p.isAutoSizeBundleCache();
+            case "bq-summary-rows-per-write-partition" -> p.getBqSummaryRowsPerWritePartition();
+            case "bq-detail-rows-per-write-partition" -> p.getBqDetailRowsPerWritePartition();
+            case "bq-audit-rows-per-write-partition" -> p.getBqAuditRowsPerWritePartition();
+            case "bq-max-rows-per-load-job" -> p.getBqMaxRowsPerLoadJob();
             default -> throw new AssertionError("application.yml key scan-engine." + key
                     + " has no ScanEngineProperties property");
         };

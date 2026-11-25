@@ -65,7 +65,11 @@ public final class PreparedText implements AutoCloseable {
     BytePointer nativeBytes() {
         if (nativeBytes == null) {
             // Wrapping a heap array makes JavaCPP copy it into a fresh NATIVE allocation.
-            nativeBytes = new BytePointer(ByteBuffer.wrap(bytes()));
+            //nativeBytes = new BytePointer(ByteBuffer.wrap(bytes()));
+            BytePointer buffer = new BytePointer(byteLength + 64L);
+            buffer.put(bytes(), 0, byteLength);
+            buffer.position(byteLength).put(new byte[64], 0, 64).position(0);
+            nativeBytes = buffer;
             bytes = null; // the native copy now holds the bytes; don't keep a second (heap) copy for the message
         }
         return nativeBytes;
