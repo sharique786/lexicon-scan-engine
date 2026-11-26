@@ -485,4 +485,57 @@ class HyperscanBundleLoaderTest {
                 .as("8 features x 150ms would take ~1200ms serially — concurrent execution should stay well under that")
                 .isLessThan(perFeatureDelayMs * featureCount / 2);
     }
+
+    @Test
+    @DisplayName("concurrent loads are capped per EXECUTOR (all tasks together), not per task")
+    void loadsAreCappedPerExecutor() throws Exception {
+        byte[] dbBytes = realDbBytes();
+        int tasks = 4;
+        int featuresPerTask = 8;
+        java.util.concurrent.atomic.AtomicInteger inFlight = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger peak = new java.util.concurrent.atomic.AtomicInteger();
+        Map<String, byte[]> zips = new ConcurrentHashMap<>();
+        HyperscanBundleLoader.GcsByteStreamer streamer = path -> {
+            peak.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+            try {
+                Thread.sleep(60);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                inFlight.decrementAndGet();
+            }
+            for (Map.Entry<String, byte[]> zip : zips.entrySet()) {
+                if (path.endsWith("/" + zip.getKey() + ".zip")) return new ByteArrayInputStream(zip.getValue());
+            }
+            throw new IOException("no fixture for " + path);
+        };
+
+        List<Thread> taskThreads = new ArrayList<>();
+        List<HyperscanBundleLoader> loaders = new ArrayList<>();
+        for (int t = 0; t < tasks; t++) {
+            Map<String, String> pathMap = new HashMap<>();
+            List<String> features = new ArrayList<>();
+            for (int f = 0; f < featuresPerTask; f++) {
+                String feature = "cap-t" + t + "-f" + f;
+                zips.put(feature, zipOf(feature, dbBytes, simpleMetadataJson(feature)));
+                pathMap.put(feature, "gs://bucket/" + feature + ".zip");
+                features.add(feature);
+            }
+            HyperscanBundleLoader loader = new HyperscanBundleLoader(pathMap, streamer, featuresPerTask);
+            loaders.add(loader);
+            taskThreads.add(new Thread(() -> loader.prefetch(features)));
+        }
+        taskThreads.forEach(Thread::start);
+        for (Thread thread : taskThreads) {
+            thread.join();
+        }
+
+        assertThat(loaders).allSatisfy(l -> assertThat(l.cachedCount()).isEqualTo(featuresPerTask));
+        assertThat(peak.get())
+                .as("4 tasks x 4 prefetch permits would allow 16; the executor-wide cap allows %d",
+                        HyperscanBundleLoader.MAX_CONCURRENT_LOADS_PER_EXECUTOR)
+                .isLessThanOrEqualTo(HyperscanBundleLoader.MAX_CONCURRENT_LOADS_PER_EXECUTOR)
+                .isGreaterThan(1);
+        loaders.forEach(HyperscanBundleLoader::close);
+    }
 }

@@ -143,6 +143,16 @@ public final class HyperscanBundleLoader implements AutoCloseable {
     /** Max concurrent bundle loads during prefetch — each load/recompile peaks in native memory. */
     private static final int MAX_CONCURRENT_PREFETCH_LOADS = 4;
 
+    /**
+     * Max concurrent bundle loads per EXECUTOR JVM, across all its tasks (prefetch and on-demand alike). The
+     * per-task prefetch cap alone allowed tasks x 4 loads at once — 16-32 simultaneous downloads + native loads +
+     * recompiles on a fresh executor, each with its own temporary native peak, exactly when the executor holds
+     * nothing else yet. A load takes ~20ms in production, so even 500 bundles warm up in ~2.5s at 4 at a time.
+     * Fair, so a task waiting for its first bundle is not starved by another task's prefetch.
+     */
+    static final int MAX_CONCURRENT_LOADS_PER_EXECUTOR = 4;
+    private static final Semaphore EXECUTOR_LOAD_PERMITS = new Semaphore(MAX_CONCURRENT_LOADS_PER_EXECUTOR, true);
+
     static void closeBundleQuietly(LexiconBundle bundle) {
         if (bundle == null) {
             return;
@@ -297,13 +307,25 @@ public final class HyperscanBundleLoader implements AutoCloseable {
 
     private LexiconBundle loadFresh(String feature) {
         String path = resolveZipPath(feature);
-        log.info("Loading Hyperscan zip bundle for feature '{}' from {}", feature, path);
-        Instant loadStart = Instant.now();
-        ZipEntryBytes zipEntryBytes = extractZipEntries(feature, path);
-        LexiconBundle bundle = buildBundle(feature, path, zipEntryBytes);
-        log.info("Loaded Hyperscan zip bundle for feature '{}' from {} in {}ms",
-                feature, path, Duration.between(loadStart, Instant.now()).toMillis());
-        return bundle;
+        try {
+            EXECUTOR_LOAD_PERMITS.acquire();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // killed task: fail this load (never cached), do not wait on
+            throw new HyperscanFileLoadException("Interrupted while waiting to load the zip bundle for feature '"
+                    + feature + "' from " + path, e);
+        }
+        try {
+            log.info("Loading Hyperscan zip bundle for feature '{}' from {}", feature, path);
+            Instant loadStart = Instant.now();
+            ZipEntryBytes zipEntryBytes = extractZipEntries(feature, path);
+            LexiconBundle bundle = buildBundle(feature, path, zipEntryBytes);
+            log.info("Loaded Hyperscan zip bundle for feature '{}' from {} in {}ms (.hdb {} bytes)",
+                    feature, path, Duration.between(loadStart, Instant.now()).toMillis(),
+                    zipEntryBytes.hdbBytes().length);
+            return bundle;
+        } finally {
+            EXECUTOR_LOAD_PERMITS.release();
+        }
     }
 
     private String resolveZipPath(String feature) {

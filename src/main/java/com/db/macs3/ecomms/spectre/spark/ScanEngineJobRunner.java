@@ -236,7 +236,8 @@ public class ScanEngineJobRunner {
             return new FeatureResolution(zipPaths, FeatureSetLayout.assignKeys(distinctFeatureDefJson));
         });
         Map<String, String> featureToZipPath = featureResolution.zipPaths();
-        BundleCacheSizing cacheSizing = runStage("size Hyperscan bundle caches", () -> resolveCacheSizing(viewRows));
+        BundleCacheSizing cacheSizing = runStage("size Hyperscan bundle caches",
+                () -> resolveCacheSizing(viewRows, featureToZipPath.size()));
         Broadcast<Map<Integer, String>> broadcastFeatureDefinitionsByKey =
                 javaSparkContext.broadcast(FeatureSetLayout.invert(featureResolution.definitionKeys()));
 
@@ -339,26 +340,34 @@ public class ScanEngineJobRunner {
      * A message whose features do not all fit in the per-partition LRU reloads EVERY one of them for every message
      * - see {@link BundleCacheSizing}.
      */
-    private BundleCacheSizing resolveCacheSizing(Dataset<Row> viewRows) {
+    private BundleCacheSizing resolveCacheSizing(Dataset<Row> viewRows, int distinctFeatures) {
         Row maxRow = viewRows.groupBy(BqColumns.View.MESSAGE_ID).count()
                 .agg(functions.max("count")).first();
         long maxFeaturesPerMessage = maxRow.isNullAt(0) ? 0L : maxRow.getLong(0);
         BundleCacheSizing sizing = BundleCacheSizing.resolve(
                 properties.getMaxCachedDatabasesPerPartition(), properties.getMaxSharedIdleBundlesPerExecutor(),
-                properties.isSharedBundleCacheEnabled(), properties.isAutoSizeBundleCache(), maxFeaturesPerMessage);
-        log.info("Largest per-message feature count: {}; bundle cache per partition: {} (configured {}), shared idle "
-                        + "per executor: {} (configured {})", maxFeaturesPerMessage, sizing.perPartition(),
-                properties.getMaxCachedDatabasesPerPartition(), sizing.sharedIdle(),
-                properties.getMaxSharedIdleBundlesPerExecutor());
+                properties.isSharedBundleCacheEnabled(), properties.isAutoSizeBundleCache(), maxFeaturesPerMessage,
+                distinctFeatures);
+        log.info("Bundles: {} distinct, largest per-message feature count {}; bundle cache per partition: {} "
+                        + "(configured {}), shared idle per executor: {} (configured {})", distinctFeatures,
+                maxFeaturesPerMessage, sizing.perPartition(), properties.getMaxCachedDatabasesPerPartition(),
+                sizing.sharedIdle(), properties.getMaxSharedIdleBundlesPerExecutor());
         if (BundleCacheSizing.thrashes(sizing.perPartition(), maxFeaturesPerMessage)) {
             log.warn("A message needs {} bundles but the per-partition cache holds {}: every such message reloads ALL "
                             + "its bundles (GCS download + native load each time). Enable auto-size-bundle-cache or raise "
                             + "max-cached-databases-per-partition.", maxFeaturesPerMessage, sizing.perPartition());
+        } else if (BundleCacheSizing.churns(sizing.sharedIdle(), distinctFeatures)) {
+            log.warn("The run has {} distinct bundles but each executor keeps only {} idle: tasks will reload bundles "
+                            + "earlier tasks released. Enable auto-size-bundle-cache or raise "
+                            + "max-shared-idle-bundles-per-executor.", distinctFeatures, sizing.sharedIdle());
+        }
+        if (properties.isSharedBundleCacheEnabled()) {
+            log.info("Each executor will hold up to {} bundle(s), one copy each, for the run: size "
+                    + "spark.executor.memoryOverhead for the sum of their .hdb sizes (see the 'Loaded' log lines).",
+                    Math.max(sizing.sharedIdle(), Math.min(distinctFeatures, sizing.perPartition())));
         } else if (sizing.perPartition() > properties.getMaxCachedDatabasesPerPartition()) {
-            log.warn("Bundle caches raised to {} to fit one message's features. Native memory per executor grows with it "
-                            + "({}): size spark.executor.memoryOverhead for that many bundles.", sizing.perPartition(),
-                    properties.isSharedBundleCacheEnabled() ? "one copy of each bundle, shared by the executor's tasks"
-                            : "shared cache is disabled, so each concurrent task holds its own copies - enable it");
+            log.warn("Bundle cache raised to {} per partition and the shared cache is disabled, so each concurrent task "
+                    + "holds its own copies: enable shared-bundle-cache-enabled.", sizing.perPartition());
         }
         return sizing;
     }

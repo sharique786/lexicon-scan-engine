@@ -25,8 +25,9 @@ scan-engine:
   # otherwise stops at the end of the line (CollapsingScanner).
   max-tail-chars: 1000
   created-by: SPECTRE-COMPOSER-SA
-  # Raise the two bundle caches above to the run's largest per-message feature count when that is larger. A cache
-  # smaller than one message's feature set reloads every bundle for every message (BundleCacheSizing).
+  # Raise the two bundle caches above when the run needs more (BundleCacheSizing). Shared cache on: both are raised to
+  # the run's DISTINCT bundle count, so each executor loads every bundle once and keeps it for the run (no extra peak
+  # memory: one copy per bundle either way). Shared cache off: per-partition raised to one message's feature count.
   auto-size-bundle-cache: true
   # BigQuery writes are sized from each table's row count (BqWritePlan): rows per written partition, i.e. per staged
   # Avro file (indirect) or per Storage Write API stream (pipeline_record_audit).

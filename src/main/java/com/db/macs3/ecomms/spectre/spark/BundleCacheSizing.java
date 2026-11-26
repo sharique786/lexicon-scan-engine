@@ -13,30 +13,55 @@ package com.db.macs3.ecomms.spectre.spark;
  * features per message) survived only because 50 >= its working set.
  *
  * <p>So the per-partition cache must hold at least one message's whole feature set, and the executor-wide idle
- * cache must too, or a new task reloads what the previous task just released. With the shared cache on, raising
- * the per-partition cap costs no extra native memory (its entries are leases on the ONE executor copy).
+ * cache must too, or a new task reloads what the previous task just released.
+ *
+ * <h2>Shared cache on: size both to the run's DISTINCT bundle count</h2>
+ * Different messages need different feature sets, so an executor's tasks together touch (almost) every distinct
+ * bundle of the run. An idle cap below that count closes bundles that the next task reloads (download, native load,
+ * recompile) — the reload churn seen on the 20M-record run (163 distinct bundles, ~110 per message, idle cap ~110).
+ * The shared cache never holds more than one copy per distinct bundle, so sizing it to the distinct count costs NO
+ * extra peak native memory: each executor loads every bundle at most once and keeps it for the run. The
+ * per-partition cache holds only leases on those shared copies, so it is sized the same way. Native memory per
+ * executor is then (sum of the run's .hdb sizes) — size {@code spark.executor.memoryOverhead} for it.
+ *
+ * <p>Shared cache off: each task holds PRIVATE copies, so the per-partition cache is sized to one message's feature
+ * set only (sizing it to the distinct count would multiply native memory by the task count).
  */
 public record BundleCacheSizing(int perPartition, int sharedIdle) {
 
     /**
      * @param maxFeaturesPerMessage largest number of view rows (features) of any one message in this run
+     * @param distinctFeatures      number of distinct features (bundles) in this run
      * @param sharedEnabled         {@code scan-engine.shared-bundle-cache-enabled}
      * @param autoSize              {@code scan-engine.auto-size-bundle-cache}; false keeps the configured values
      * @return {@code sharedIdle} is negative when the shared cache is disabled (PartitionProcessor's convention)
      */
     public static BundleCacheSizing resolve(int configuredPerPartition, int configuredSharedIdle,
-                                            boolean sharedEnabled, boolean autoSize, long maxFeaturesPerMessage) {
-        int workingSet = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, maxFeaturesPerMessage));
-        int perPartition = autoSize ? Math.max(configuredPerPartition, workingSet) : configuredPerPartition;
+                                            boolean sharedEnabled, boolean autoSize, long maxFeaturesPerMessage,
+                                            long distinctFeatures) {
+        int perMessage = clamp(maxFeaturesPerMessage);
         if (!sharedEnabled) {
-            return new BundleCacheSizing(perPartition, -1);
+            return new BundleCacheSizing(autoSize ? Math.max(configuredPerPartition, perMessage)
+                    : configuredPerPartition, -1);
         }
-        int sharedIdle = autoSize ? Math.max(configuredSharedIdle, workingSet) : configuredSharedIdle;
-        return new BundleCacheSizing(perPartition, sharedIdle);
+        if (!autoSize) {
+            return new BundleCacheSizing(configuredPerPartition, configuredSharedIdle);
+        }
+        int all = Math.max(perMessage, clamp(distinctFeatures));
+        return new BundleCacheSizing(Math.max(configuredPerPartition, all), Math.max(configuredSharedIdle, all));
+    }
+
+    private static int clamp(long value) {
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0L, value));
     }
 
     /** True when a message needs more bundles than the per-partition cache holds — every message reloads them. */
     public static boolean thrashes(int perPartition, long maxFeaturesPerMessage) {
         return maxFeaturesPerMessage > perPartition;
+    }
+
+    /** True when the shared idle cache cannot keep every distinct bundle — tasks reload what earlier tasks released. */
+    public static boolean churns(int sharedIdle, long distinctFeatures) {
+        return sharedIdle >= 0 && distinctFeatures > sharedIdle;
     }
 }
