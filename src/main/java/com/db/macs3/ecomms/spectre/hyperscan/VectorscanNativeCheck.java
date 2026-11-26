@@ -12,22 +12,23 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * Refuses to run on the UNPATCHED Linux Vectorscan 5.4.11 native libraries, which crash the JVM.
+ * Refuses to run on the Linux x86_64 Vectorscan 5.4.11 / 5.4.12 native libraries, which crash the JVM.
  *
  * <h2>The bug (root cause of the executor {@code SIGSEGV ... C [libhs_runtime.so+0x4a6c91]})</h2>
- * {@code com.gliwka.hyperscan:native:5.4.11-2.0.2:linux-x86_64} (pulled in by hyperscan-java 5.4.11-3.1.0, the
- * newest release) ships Vectorscan with leftover debug code in {@code rvermicelliDoubleExecReal}:
+ * Vectorscan 5.4.11 and 5.4.12 (hyperscan-java 5.4.11-3.x, natives {@code 5.4.11-2.0.x}/{@code 5.4.12-2.0.4}) shipped
+ * leftover debug code in {@code rvermicelliDoubleExecReal} ({@code src/nfa/vermicelli_simd.cpp}):
  * {@code char s[255]; snprintf(s, buf_end - buf + 1, "%s", buf);}. Any scan that runs this reverse double-byte
  * search over more than ~255 bytes of text overflows the stack buffer with message text, and the function's
- * {@code ret} jumps to "8 bytes of text": the JVM dies. It depends only on the lexicon patterns and the text, not on
- * caching or threading — more lexicons per message / more messages simply make it likelier. Reproduced on Linux with
- * the stock hyperscan-java {@code Scanner} (same crash offset); see {@code tools/vectorscan-patch/}.
+ * {@code ret} jumps to "8 bytes of text": the JVM dies. It depends only on the lexicon patterns and the text.
  *
- * <p>The build ships patched copies (each such {@code call snprintf} replaced by a NOP — its result was never used)
- * from {@code src/main/native-patched}, which shadow the jar's originals on the classpath and in the shaded jar. This
- * check hashes the libraries actually on the classpath once per JVM and fails fast with a clear message if the
- * original, crashing build is the one that would be loaded — e.g. a jar built without the {@code hyperscan-latest}
- * profile's resources. Other platforms/versions (no such resource, or an unknown hash) are only logged.
+ * <p>Fixed upstream in Vectorscan 5.4.13 (VectorCamp/vectorscan#392, commit {@code fe94004}), which hyperscan-java
+ * {@code 5.4.13-3.1.1} (natives {@code 5.4.13-2.0.5}) bundles — the version the {@code hyperscan-latest} profile uses.
+ * Its libraries have exactly four fewer {@code call snprintf@plt} sites than 5.4.11/5.4.12 (one per CPU variant of the
+ * fat runtime). Until v3.34 this project shipped binary-patched 5.4.11 copies instead.
+ *
+ * <p>This check hashes the libraries actually on the classpath once per JVM and fails fast with a clear message if a
+ * known crashing build would be loaded — e.g. someone forcing {@code -Dhyperscan.version=5.4.11-3.1.0}. Other
+ * platforms (no such resource) are skipped; an unknown hash is only logged.
  */
 public final class VectorscanNativeCheck {
 
@@ -35,22 +36,27 @@ public final class VectorscanNativeCheck {
 
     static final String RESOURCE_DIR = "/com/gliwka/hyperscan/jni/linux-x86_64/";
 
-    /** sha256 of the ORIGINAL (crashing) libraries in native-5.4.11-2.0.2-linux-x86_64.jar. */
-    static final Map<String, String> BUGGY = Map.of(
-            "libhs_runtime.so", "29c340449f77fef4359e6a5b121f81fcaa3dd81a3e7bb4ee14ebb5908b24c5a7",
-            "libhs.so", "4f7763cdc55c884da1aa4d822ddf3eab4e17c0e990bd760f9a8268b5165f80f2");
+    static final String RUNTIME = "libhs_runtime.so";
+    static final String COMPILER = "libhs.so";
 
-    /** sha256 of the patched libraries produced by tools/vectorscan-patch/patch_vectorscan.py. */
-    static final Map<String, String> PATCHED = Map.of(
-            "libhs_runtime.so", "fa1d1179fc4396514bdeedbdff9b413d299c24984a67fb7e3e3f4f29fae66541",
-            "libhs.so", "077b4e00eed6782260c95f26b1c714d368b3d65c397b5cbd9755dbae8de3b19e");
+    /** sha256 -> build, of the crashing linux-x86_64 libraries (native jars 5.4.11-2.0.2 and 5.4.12-2.0.4). */
+    static final Map<String, String> BUGGY = Map.of(
+            "29c340449f77fef4359e6a5b121f81fcaa3dd81a3e7bb4ee14ebb5908b24c5a7", "5.4.11-2.0.2 " + RUNTIME,
+            "4f7763cdc55c884da1aa4d822ddf3eab4e17c0e990bd760f9a8268b5165f80f2", "5.4.11-2.0.2 " + COMPILER,
+            "7f839f7b0749e20861abf11d0b680990e656c821278df256a85c3f9bf4608a28", "5.4.12-2.0.4 " + RUNTIME,
+            "5736eb1f3c056a86d0185f8d9d92bb419f8ea702410dd97b075590e480914ccf", "5.4.12-2.0.4 " + COMPILER);
+
+    /** sha256 -> build, of the fixed linux-x86_64 libraries in native-5.4.13-2.0.5-linux-x86_64.jar. */
+    static final Map<String, String> FIXED = Map.of(
+            "42b5dbfe71505e34086a58dfdfbe7a361ae0ec7e9920a7ea5ab2838ca44d0416", "5.4.13-2.0.5 " + RUNTIME,
+            "c7f88f836c8912faee827436ca16814992fcd4e8d1bae9ea59b4481bccce1d17", "5.4.13-2.0.5 " + COMPILER);
 
     private static volatile boolean verified;
 
     private VectorscanNativeCheck() {
     }
 
-    /** Thrown when the crashing native build would be loaded. */
+    /** Thrown when a crashing native build would be loaded. */
     public static final class UnpatchedVectorscanException extends IllegalStateException {
         public UnpatchedVectorscanException(String message) {
             super(message);
@@ -72,7 +78,7 @@ public final class VectorscanNativeCheck {
 
     /** @param open opens a library by file name, or returns null when the classpath has none */
     static void verify(Function<String, InputStream> open) {
-        for (String lib : BUGGY.keySet()) {
+        for (String lib : new String[]{RUNTIME, COMPILER}) {
             String hash;
             try (InputStream in = open.apply(lib)) {
                 if (in == null) {
@@ -83,17 +89,19 @@ public final class VectorscanNativeCheck {
             } catch (IOException e) {
                 throw new IllegalStateException("Could not read " + RESOURCE_DIR + lib + ": " + e.getMessage(), e);
             }
-            if (BUGGY.get(lib).equals(hash)) {
-                throw new UnpatchedVectorscanException("The classpath carries the ORIGINAL Vectorscan 5.4.11 " + lib
-                        + " (sha256 " + hash + "), whose rvermicelliDoubleExec overflows its stack and kills the JVM "
-                        + "(SIGSEGV in libhs_runtime.so). Build the jar with the hyperscan-latest profile so the "
-                        + "patched copies in src/main/native-patched are packaged — see VectorscanNativeCheck.");
+            String buggy = BUGGY.get(hash);
+            if (buggy != null) {
+                throw new UnpatchedVectorscanException("The classpath carries Vectorscan " + buggy + " (sha256 "
+                        + hash + "), whose rvermicelliDoubleExec overflows its stack and kills the JVM (SIGSEGV in "
+                        + "libhs_runtime.so). Use hyperscan-java 5.4.13-3.1.1 or later (the hyperscan-latest "
+                        + "profile) — see VectorscanNativeCheck.");
             }
-            if (PATCHED.get(lib).equals(hash)) {
-                log.info("Vectorscan {}: patched build verified (sha256 {})", lib, hash);
+            String fixed = FIXED.get(hash);
+            if (fixed != null) {
+                log.info("Vectorscan {}: fixed build verified (sha256 {})", fixed, hash);
             } else {
-                log.warn("Vectorscan {}: unrecognised build (sha256 {}) — not the known crashing 5.4.11 build, "
-                        + "but not verified as patched either", lib, hash);
+                log.warn("Vectorscan {}: unrecognised build (sha256 {}) — not a known crashing 5.4.11/5.4.12 build, "
+                        + "but not verified as 5.4.13 either", lib, hash);
             }
         }
     }

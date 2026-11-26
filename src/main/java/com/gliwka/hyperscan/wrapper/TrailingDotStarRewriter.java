@@ -138,7 +138,7 @@ public final class TrailingDotStarRewriter {
     /**
      * Parses the expression header {@link Database#save} writes first: count, then per expression
      * {@code id (-1 = none), UTF pattern, flag count, flag bitmasks}. The format is identical in hyperscan-java
-     * 5.4.0-2.0.0 and 5.4.11-3.1.0, and - unlike {@code Database.getExpression(int)}/{@code getExpressionCount()} -
+     * 5.4.0-2.0.0 and 5.4.13-3.1.1, and - unlike {@code Database.getExpression(int)}/{@code getExpressionCount()} -
      * it needs no package-private member that exists in only one of them.
      */
     static List<Expression> readExpressions(InputStream in) throws IOException {

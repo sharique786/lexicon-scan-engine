@@ -155,7 +155,7 @@ class LexiconTermCsvIntegrationTest {
 
         if (error != null && error.contains("built for a different version of Hyperscan")) {
             // A serialised .hdb only loads on the Hyperscan version that compiled it. The committed fixtures
-            // were compiled with 5.4.0; the Linux/macOS build runs 5.4.11. Re-export them from the Compile
+            // were compiled with 5.4.0; the Linux/macOS build runs 5.4.13. Re-export them from the Compile
             // Service (built against the runtime's Hyperscan) to run this suite there.
             Assumptions.abort("fixture .hdb was serialised by a different Hyperscan version than the runtime: " + error);
         }

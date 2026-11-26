@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Guards the wrapper-package classes against differences between hyperscan-java 5.4.0-2.0.0 (Windows) and
- * 5.4.11-3.1.0 (Linux/macOS) — see the {@code hyperscan-legacy}/{@code hyperscan-latest} profiles in the pom.
+ * 5.4.13-3.1.1 (Linux/macOS) — see the {@code hyperscan-legacy}/{@code hyperscan-latest} profiles in the pom.
  * Everything here goes through public API or the classes under test, so it must pass on both.
  */
 class HyperscanVersionCompatTest {

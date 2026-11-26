@@ -10,7 +10,7 @@ import java.util.Arrays;
  * One scanned text's UTF-8 bytes and (for non-ASCII text) its byte-to-char position map, computed at most
  * once. A message's area text is scanned once per applicable feature (often dozens); without this the same
  * O(n) encode and position-map build was redone on every scan. Builds its own position map instead of the
- * library's {@code Utf8}/{@code Utf8Encoder}, which differ between hyperscan-java 5.4.0-2.0.0 and 5.4.11-3.1.0.
+ * library's {@code Utf8}/{@code Utf8Encoder}, which differ between hyperscan-java 5.4.0-2.0.0 and 5.4.13-3.1.1.
  *
  * <h2>Native copy, shared across scans</h2>
  * {@code hs_scan} needs the text in NATIVE memory. {@link #nativeBytes()} makes that copy once and every later

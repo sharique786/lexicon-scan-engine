@@ -5,7 +5,7 @@ Hyperscan-compiled lexicon databases, applies the NoiseReduction → Disclaimer 
 hit details and audit records to BigQuery.
 
 **Stack:** JDK 21, Spring Boot 4.0.6 (driver only), Apache Spark 4.1.2 (Scala 2.13), Hyperscan 5.4
-(`com.gliwka.hyperscan:hyperscan` 5.4.0-2.0.0 on Windows, 5.4.11-3.1.0 on Linux/macOS — chosen by a Maven profile, see below), Google Cloud Dataproc, GCS (AVRO messages, lexicon zip bundles) and
+(`com.gliwka.hyperscan:hyperscan` 5.4.0-2.0.0 on Windows, 5.4.13-3.1.1 on Linux/macOS — chosen by a Maven profile, see below), Google Cloud Dataproc, GCS (AVRO messages, lexicon zip bundles) and
 BigQuery (decision view, output tables). Entry point: `com.db.macs3.ecomms.spectre.LexiconScanEngineApplication`.
 
 It is one of three services in the platform, and the furthest downstream:
@@ -656,18 +656,19 @@ gcloud dataproc jobs submit spark \
 
 ## Hyperscan library version (Windows vs. Linux/macOS)
 
-`hyperscan-java` 5.4.11-3.1.0 no longer ships Windows natives, so `pom.xml` selects the version by OS:
+`hyperscan-java` 5.4.11+ no longer ships Windows natives, so `pom.xml` selects the version by OS:
 
 | OS | Profile | `com.gliwka.hyperscan:hyperscan` |
 |---|---|---|
 | Windows | `hyperscan-legacy` (auto) | 5.4.0-2.0.0 |
-| Linux / macOS | `hyperscan-latest` (auto) | 5.4.11-3.1.0 |
+| Linux / macOS | `hyperscan-latest` (auto) | 5.4.13-3.1.1 |
 
-Force either with `-Dhyperscan.version=...`. The source compiles and passes against both.
+Force either with `-Dhyperscan.version=...`. The source compiles and passes against both. Do not force 5.4.11 or
+5.4.12 on Linux: their Vectorscan natives overflow a stack buffer and kill the JVM; `VectorscanNativeCheck` refuses them.
 
 - **A serialised `.hdb` only loads on the Hyperscan version that compiled it** ("The given database was built for a
   different version of Hyperscan"). The bundles the Compile Service writes must come from the same Hyperscan version
   the executors run — i.e. whichever profile the *deployed jar* was built with, not the OS the cluster runs on.
-  A jar built on a Windows laptop carries 5.4.0 (with all three OS natives); one built on Linux CI carries 5.4.11.
+  A jar built on a Windows laptop carries 5.4.0 (with all three OS natives); one built on Linux CI carries 5.4.13.
 - The committed `.hdb` fixtures under `src/test/resources/lexicon-integration` were built with 5.4.0, so
-  `LexiconTermCsvIntegrationTest` is *skipped* (not failed) on the 5.4.11 profile until they are re-exported.
+  `LexiconTermCsvIntegrationTest` is *skipped* (not failed) on the 5.4.13 profile until they are re-exported.

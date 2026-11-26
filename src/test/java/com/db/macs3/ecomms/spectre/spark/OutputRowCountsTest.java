@@ -1,14 +1,19 @@
 package com.db.macs3.ecomms.spectre.spark;
 
 import com.db.macs3.ecomms.spectre.model.output.LexiconHitDetailRow;
+import org.apache.spark.SparkConf;
+import org.apache.spark.serializer.KryoSerializer;
+import org.apache.spark.serializer.SerializerInstance;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.nio.ByteBuffer;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 @DisplayName("OutputRowCounts — matches what the row mappers emit")
 class OutputRowCountsTest {
@@ -37,5 +42,25 @@ class OutputRowCountsTest {
         assertThat(c.restrictedDetail()).isEqualTo(1);
         assertThat(c.unrestrictedDetail()).isEqualTo(2);
         assertThat(c.recordAudit()).isEqualTo(5);
+    }
+
+    /**
+     * The per-partition fold result is a Spark TASK RESULT, serialized with the job's serializer (Kryo — see
+     * SparkSessionConfig). Kryo 4's FieldSerializer cannot handle a Java record (Unsafe.objectFieldOffset throws
+     * "can't get field offset on a record class"), which failed every scan on the cluster.
+     */
+    @Test
+    @DisplayName("round-trips through Spark's KryoSerializer (it is a task result)")
+    void kryoRoundTrip() {
+        SerializerInstance kryo = new KryoSerializer(new SparkConf()).newInstance();
+        OutputRowCounts counts = new OutputRowCounts(7, 2, 3, 1);
+        scala.reflect.ClassTag<OutputRowCounts> tag = scala.reflect.ClassTag$.MODULE$.apply(OutputRowCounts.class);
+
+        assertThatCode(() -> kryo.serialize(counts, tag)).doesNotThrowAnyException();
+        ByteBuffer bytes = kryo.serialize(counts, tag);
+        OutputRowCounts back = kryo.deserialize(bytes, tag);
+
+        assertThat(back).isEqualTo(counts);
+        assertThat(back.summary()).isEqualTo(5);
     }
 }
