@@ -1,0 +1,11 @@
+"spark.executor.cores"               = "8"
+"spark.executor.memory"              = "28G"
+"spark.executor.memoryOverhead"      = "12G"   # raise if the summed .hdb sizes for 500 bundles exceed ~6G
+"spark.executor.instances"           = "10"    # same 80 cores as 20 x 4; raise to add throughput
+"spark.dynamicAllocation.enabled"    = "false"
+"spark.executorEnv.MALLOC_ARENA_MAX" = "2"
+"spark.executor.extraJavaOptions"    = "-XX:+ExitOnOutOfMemoryError -XX:ErrorFile=/tmp/hs_err_%p.log"
+"spark.driver.memory"                = "24G"
+"spark.submit.deployMode"            = "cluster"
+"spark.yarn.maxAppAttempts"          = "1"
+"spark.speculation"                  = "false"
